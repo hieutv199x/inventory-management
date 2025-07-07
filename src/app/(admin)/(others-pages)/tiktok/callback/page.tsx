@@ -21,7 +21,6 @@ const TikTokCallbackHandler: React.FC = () => {
             if (error) {
                 console.error(`Error from TikTok redirect: ${error}`);
                 // Redirect with an error message
-                router.push(`/shops?error=tiktok_auth_failed&message=${error}`);
                 return;
             }
 
