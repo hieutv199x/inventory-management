@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 
 export async function POST(req: Request) {
     try {
+        debugger;
         // In the App Router, we get the JSON body directly from the request object.
         const { code } = await req.json();
 

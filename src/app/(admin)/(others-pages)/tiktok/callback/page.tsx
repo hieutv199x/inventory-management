@@ -40,7 +40,7 @@ const TikTokCallbackHandler: React.FC = () => {
 
                     const data = await response.json();
 
-                    console.log(`Token ${data}`)
+                    console.log('Token data:', data);
                 } catch (apiError: any) {
                     console.error("Failed to process TikTok auth:", apiError);
                     router.push(`/shops?error=tiktok_processing_failed&message=${apiError.message}`);
