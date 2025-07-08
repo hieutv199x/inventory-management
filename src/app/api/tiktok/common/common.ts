@@ -1,13 +1,34 @@
 import crypto from "crypto";  
-import localVarRequest from "request";  
+
 const excludeKeys = ["access_token", "sign"] as const;  
+
 export const generateSign = (  
-  requestOption: localVarRequest.Options,  
-  app_secret: string  
+  baseUrl: string,
+  urlPath: string,
+  appKey: string,
+  ts: number,
+  app_secret: string,
+  method: "GET" | "POST" | "PUT" | "DELETE",
+  body: Record<string, any> | null = null
 ) => {  
   let signString = "";  
+
+  // Auto-create requestOption to avoid duplicating outside
+  const requestOption = {
+    uri: `${baseUrl}${urlPath}`,
+    qs: {
+      app_key: appKey,
+      timestamp: ts,
+    },
+    headers: {
+      "content-type": "application/json",
+    },
+    method,
+    body,
+  };
+
   // step1: Extract all query parameters excluding sign and access_token. Reorder the parameter keys in alphabetical order:  
-  const params = requestOption.qs || {};  
+  const params: Record<string, any> = requestOption.qs || {};  
   const sortedParams = Object.keys(params)  
     .filter((key) => !excludeKeys.includes(key as any))  
     .sort()  

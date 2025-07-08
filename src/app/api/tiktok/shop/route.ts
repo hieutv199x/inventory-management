@@ -11,28 +11,14 @@ export async function GET() {
 
         const ts = Math.floor(new Date().getTime() / 1000);
         const urlPath = "/authorization/202309/shops";
-        const baseUrl = "https://open-api.tiktokglobalshop.com";
+        const baseUrl = process.env.TIKTOK_BASE_URL;
 
-
-        const requestOption = {
-            uri: `${baseUrl}${urlPath}`,
-            qs: {
-              app_key: appKey,
-              timestamp: ts,
-            },
-            headers: {
-              "content-type": "application/json",
-            },
-            method: "GET",
-          };
-
-
-        const sign = generateSign(requestOption, appSecret!);
-
-        if (!appKey || !appSecret || !token) {
+        if (!appKey || !appSecret || !token || !baseUrl) {
             console.error('TikTok App Key or Secret is not configured in environment variables.');
             return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
         }
+
+        const sign = generateSign(baseUrl, urlPath, appKey, ts, appSecret, "GET");
 
         // Construct the URL for the TikTok token exchange API
         const url = new URL(`${baseUrl}${urlPath}`);

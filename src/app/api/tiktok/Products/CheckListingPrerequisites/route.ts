@@ -13,28 +13,13 @@ export async function GET() {
 
         const ts = Math.floor(new Date().getTime() / 1000);
         const urlPath = "/product/202312/prerequisites";
-        const baseUrl = "https://open-api.tiktokglobalshop.com";
+        const baseUrl = process.env.TIKTOK_BASE_URL;
 
-
-        const requestOption = {
-            uri: `${baseUrl}${urlPath}`,
-            qs: {
-              app_key: appKey,
-              timestamp: ts,
-            },
-            headers: {
-              "content-type": "application/json",
-            },
-            method: "GET",
-          };
-
-
-
-        if (!appKey || !appSecret || !token || !shop_cipher) {
+        if (!appKey || !appSecret || !token || !shop_cipher || !baseUrl) {
             return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
         }
 
-        const sign = generateSign(requestOption, appSecret);
+        const sign = generateSign(baseUrl, urlPath, appKey, ts, appSecret, "GET");
 
         const url = new URL(`${baseUrl}${urlPath}`);
         url.searchParams.append("shop_cipher", shop_cipher);

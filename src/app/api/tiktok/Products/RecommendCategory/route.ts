@@ -1,3 +1,4 @@
+// Retrieve the recommended category for a candidate product based on its title, description, and images.
 import { NextResponse } from 'next/server';
 import { generateSign } from '../../common/common';
 
@@ -8,28 +9,40 @@ export async function GET() {
         const appKey = process.env.TIKTOK_APP_KEY;
         const appSecret = process.env.TIKTOK_APP_SECRET;
         const token = process.env.TIKTOK_TOKEN;
+        const shop_cipher = process.env.SHOP_CIPHER;
 
         const ts = Math.floor(new Date().getTime() / 1000);
-        const urlPath = "/seller/202309/permissions";
+        const urlPath = "/product/202309/categories/recommend";
         const baseUrl = process.env.TIKTOK_BASE_URL;
 
-        if (!appKey || !appSecret || !token || !baseUrl) {
+        if (!appKey || !appSecret || !token || !shop_cipher || !baseUrl) {
             return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
         }
 
-        const sign = generateSign(baseUrl, urlPath, appKey, ts, appSecret, "GET");
+        const bodyPayload = {
+            product_title: "Men's Running Shoes",
+            description: "Lightweight, breathable shoes perfect for daily running.",
+            images: [{ uri: "https://example.com/image.jpg" }],
+            category_version: "v1",
+            listing_platform: "TIKTOK_SHOP",
+            include_prohibited_categories: false,
+          };
+
+        const sign = generateSign(baseUrl, urlPath, appKey, ts, appSecret, "POST", bodyPayload);
 
         const url = new URL(`${baseUrl}${urlPath}`);
+        url.searchParams.append("shop_cipher", shop_cipher);
         url.searchParams.append("app_key", appKey);
         url.searchParams.append("timestamp", ts.toString());
         url.searchParams.append("sign", sign);
 
         const tiktokResponse = await fetch(url.toString(), {
-            method: 'GET', // As per your original implementation
+            method: 'POST', // As per your original implementation
             headers: {
                 'Content-Type': 'application/json',
                 'x-tts-access-token': token,
             },
+            body: JSON.stringify({bodyPayload}),
         });
        
         const data = await tiktokResponse.json();

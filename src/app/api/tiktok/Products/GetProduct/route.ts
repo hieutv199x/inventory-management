@@ -1,28 +1,54 @@
+//Retrieve all properties of a product that is in the DRAFT, PENDING, or ACTIVATE status.
 import { NextResponse } from 'next/server';
 import { generateSign } from '../../common/common';
 
 
-export async function GET() {
+export async function GET(req: Request) {
     try {
-        
+        const { searchParams } = new URL(req.url);
+        const product_id = searchParams.get('product_id');
+
+        if (!product_id) {
+            return NextResponse.json({ error: 'Missing product_id' }, { status: 400 });
+        }
+
         const appKey = process.env.TIKTOK_APP_KEY;
         const appSecret = process.env.TIKTOK_APP_SECRET;
         const token = process.env.TIKTOK_TOKEN;
+        const shop_cipher = process.env.SHOP_CIPHER;
 
         const ts = Math.floor(new Date().getTime() / 1000);
-        const urlPath = "/seller/202309/permissions";
+        const urlPath = `/product/202309/products/${product_id}`;
         const baseUrl = process.env.TIKTOK_BASE_URL;
 
-        if (!appKey || !appSecret || !token || !baseUrl) {
+
+        const requestOption = {
+            uri: `${baseUrl}${urlPath}`,
+            qs: {
+              app_key: appKey,
+              timestamp: ts,
+            },
+            headers: {
+              "content-type": "application/json",
+            },
+            method: "GET",
+          };
+
+
+
+        if (!appKey || !appSecret || !token || !shop_cipher || !baseUrl) {
             return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
         }
 
         const sign = generateSign(baseUrl, urlPath, appKey, ts, appSecret, "GET");
 
         const url = new URL(`${baseUrl}${urlPath}`);
+        url.searchParams.append("shop_cipher", shop_cipher);
         url.searchParams.append("app_key", appKey);
         url.searchParams.append("timestamp", ts.toString());
         url.searchParams.append("sign", sign);
+        //no required
+        url.searchParams.append("return_under_review_version", "false");
 
         const tiktokResponse = await fetch(url.toString(), {
             method: 'GET', // As per your original implementation
@@ -30,6 +56,7 @@ export async function GET() {
                 'Content-Type': 'application/json',
                 'x-tts-access-token': token,
             },
+           
         });
        
         const data = await tiktokResponse.json();
