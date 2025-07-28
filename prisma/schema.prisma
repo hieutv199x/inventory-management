@@ -37,6 +37,7 @@ model TikTokAppCredential {
   sellerId     String   @unique // ID người bán của bạn, đảm bảo mỗi người bán có 1 bộ appKey/appSecret duy nhất
   appKey       String // Khóa ứng dụng từ TikTok Shop
   appSecret    String // Bí mật ứng dụng từ TikTok Shop
+  country      String 
   accessToken  String? // Access Token hiện tại (có thể được refresh định kỳ)
   refreshToken String? // Refresh Token (dùng để lấy Access Token mới)
   expiresIn    Int? // Thời gian sống của Access Token (giây)

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 import { TikTokShopNodeApiClient } from '@/nodejs_sdk'
-import { getTikTokCredentialByAppKey } from '../common/common';
+import { getTikTokCredentialByAppKey } from '../../common/common';
 
 const prisma = new PrismaClient();
 
