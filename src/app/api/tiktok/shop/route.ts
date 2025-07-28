@@ -1,49 +1,73 @@
 import { NextResponse } from 'next/server';
-import { generateSign } from '../common/common';
+import { PrismaClient } from '@prisma/client';
+import { TikTokShopNodeApiClient } from '@/nodejs_sdk'
+import { getTikTokCredentialByAppKey } from '../common/common';
+
+const prisma = new PrismaClient();
 
 
-export async function GET() {
+export async function GET(req: Request) {
     try {
-        
-        const appKey = process.env.TIKTOK_APP_KEY;
-        const appSecret = process.env.TIKTOK_APP_SECRET;
-        const token = process.env.TIKTOK_TOKEN;
+        const { app_key } = await req.json();
 
-        const ts = Math.floor(new Date().getTime() / 1000);
-        const urlPath = "/authorization/202309/shops";
-        const baseUrl = process.env.TIKTOK_BASE_URL;
+        const credential = await getTikTokCredentialByAppKey(app_key);
 
-        if (!appKey || !appSecret || !token || !baseUrl) {
-            console.error('TikTok App Key or Secret is not configured in environment variables.');
-            return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
-        }
+            if (!credential) {
+                return NextResponse.json({ error: "credential is missing in database" }, { status: 400 });
+            }
+            const appSecret = credential.appSecret;
 
-        const sign = generateSign(baseUrl, urlPath, appKey, ts, appSecret, "GET");
+            if (!appSecret) {
+                return NextResponse.json({ error: 'App secret is missing in database' }, { status: 500 });
+            }
 
-        // Construct the URL for the TikTok token exchange API
-        const url = new URL(`${baseUrl}${urlPath}`);
-        url.searchParams.append("app_key", appKey);
-        url.searchParams.append("timestamp", ts.toString());
-        url.searchParams.append("sign", sign);
+            const accesstoken = credential.accessToken;
+            
+            if (!accesstoken) {
+                return NextResponse.json({ error: "Access token is missing in database" }, { status: 400 });
+            }
 
-        const tiktokResponse = await fetch(url.toString(), {
-            method: 'GET', // As per your original implementation
-            headers: {
-                'Content-Type': 'application/json',
-                'x-tts-access-token': token,
-            },
-        });
-       
-        const data = await tiktokResponse.json();
+            const baseUrl = process.env.TIKTOK_BASE_URL;
 
-        if (!tiktokResponse.ok) {
-            // Forward the error from TikTok if the request was not successful
-            console.error("TikTok API Error:", data);
-            return NextResponse.json({ error: 'Failed to info shop with TikTok', details: data }, { status: tiktokResponse.status });
-        }
+            const client = new TikTokShopNodeApiClient({
+                config: {
+                    basePath: baseUrl,
+                    app_key: app_key,
+                    app_secret: appSecret,
+                },
+            });
 
-        // Use 200 (OK) for a successful response that returns data, rather than 201 (Created).
-        return NextResponse.json(data, { status: 200 });
+            const result = await client.api.AuthorizationV202309Api.ShopsGet(accesstoken, "application/json");
+            console.log('response: ', JSON.stringify(result, null, 2));
+            const parsedResult = typeof result === 'string' ? JSON.parse(result) : result;
+            const data = parsedResult.data;
+            const shops = parsedResult.data?.shops ?? [];
+
+            for (const shop of shops) {
+                await prisma.tikTokAuthorizedShop.upsert({
+                    where: { shopCipher: shop.cipher },
+                    update: {
+                    shopId: shop.id,
+                    name: shop.name,
+                    region: shop.region,
+                    sellerType: shop.seller_type,
+                    code: shop.code,
+                    appCredentialId: credential.id,
+                    },
+                    create: {
+                    shopId: shop.id,
+                    name: shop.name,
+                    region: shop.region,
+                    sellerType: shop.seller_type,
+                    shopCipher: shop.cipher,
+                    code: shop.code,
+                    appCredentialId: credential.id,
+                    },
+                });
+            }
+
+
+        return NextResponse.json(result, { status: 200 });
 
     } catch (error) {
         console.error("Error exchanging TikTok token:", error);

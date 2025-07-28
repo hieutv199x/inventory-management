@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 import { generateSign } from '../../common/common';
 
 
-export async function GET() {
+export async function POST() {
     try {
         
         const appKey = process.env.TIKTOK_APP_KEY;

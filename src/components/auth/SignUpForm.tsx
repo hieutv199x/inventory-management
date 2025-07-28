@@ -1,7 +1,10 @@
 "use client";
 import Checkbox from "@/components/form/input/Checkbox";
+import { useRouter } from "next/navigation";
 import Input from "@/components/form/input/InputField";
 import Label from "@/components/form/Label";
+import Loading from "../../components/Loading";
+import axiosInstance from "@/utils/axiosInstance";
 import { ChevronLeftIcon, EyeCloseIcon, EyeIcon } from "@/icons";
 import Link from "next/link";
 import React, { useState } from "react";
@@ -9,6 +12,50 @@ import React, { useState } from "react";
 export default function SignUpForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [isChecked, setIsChecked] = useState(false);
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [message, setMessage] = useState("");
+  const [isError, setIsError] = useState(false);
+  const [isLoading, setIsLoading] = useState(false); // Add loading state
+  const router = useRouter();
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setMessage("");
+    setIsError(false);
+    setIsLoading(true); // Start loading
+    try {
+      const response = await axiosInstance.post("/auth/register", {
+        name,
+        email,
+        password,
+      }, {validateStatus: () => true,});
+      debugger;
+      if (response.status !== 201) {
+        const data = response.data;
+        throw new Error(data.error);
+      }
+
+      setMessage("Registration successful! Redirecting to login...");
+      setTimeout(() => {
+        router.push("/");
+      }, 2000);
+    } catch (error) {
+      setIsError(true);
+      if (error instanceof Error) {
+        setMessage(error.message);
+      } else {
+        setMessage("An unknown error occurred.");
+      }
+    } finally {
+      setIsLoading(false); // Stop loading
+    }
+  };
+
+  if (isLoading) {
+    return <Loading />; // Show loading animation during registration
+  }
   return (
     <div className="flex flex-col flex-1 lg:w-1/2 w-full overflow-y-auto no-scrollbar">
       <div className="w-full max-w-md sm:pt-10 mx-auto mb-5">
@@ -83,34 +130,30 @@ export default function SignUpForm() {
                 </span>
               </div>
             </div>
-            <form>
+            <form onSubmit={handleSubmit}>
+              {message && (
+                <p
+                  className={`text-center ${
+                    isError ? "text-red-500" : "text-green-500"
+                  }`}
+                >
+                  {message}
+                </p>
+              )}
               <div className="space-y-5">
-                <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-                  {/* <!-- First Name --> */}
-                  <div className="sm:col-span-1">
-                    <Label>
-                      First Name<span className="text-error-500">*</span>
-                    </Label>
-                    <Input
-                      type="text"
-                      id="fname"
-                      name="fname"
-                      placeholder="Enter your first name"
-                    />
-                  </div>
                   {/* <!-- Last Name --> */}
-                  <div className="sm:col-span-1">
+                  <div >
                     <Label>
-                      Last Name<span className="text-error-500">*</span>
+                      Name<span className="text-error-500">*</span>
                     </Label>
                     <Input
                       type="text"
                       id="lname"
                       name="lname"
-                      placeholder="Enter your last name"
+                      onChange={(e) => setName(e.target.value)}
+                      placeholder="Enter your name"
                     />
                   </div>
-                </div>
                 {/* <!-- Email --> */}
                 <div>
                   <Label>
@@ -120,6 +163,7 @@ export default function SignUpForm() {
                     type="email"
                     id="email"
                     name="email"
+                    onChange={(e) => setEmail(e.target.value)}
                     placeholder="Enter your email"
                   />
                 </div>
@@ -131,6 +175,7 @@ export default function SignUpForm() {
                   <div className="relative">
                     <Input
                       placeholder="Enter your password"
+                      onChange={(e) => setPassword(e.target.value)}
                       type={showPassword ? "text" : "password"}
                     />
                     <span
@@ -165,7 +210,7 @@ export default function SignUpForm() {
                 </div>
                 {/* <!-- Button --> */}
                 <div>
-                  <button className="flex items-center justify-center w-full px-4 py-3 text-sm font-medium text-white transition rounded-lg bg-brand-500 shadow-theme-xs hover:bg-brand-600">
+                  <button type="submit" className="flex items-center justify-center w-full px-4 py-3 text-sm font-medium text-white transition rounded-lg bg-brand-500 shadow-theme-xs hover:bg-brand-600">
                     Sign Up
                   </button>
                 </div>

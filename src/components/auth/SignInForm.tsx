@@ -6,10 +6,44 @@ import Button from "@/components/ui/button/Button";
 import { ChevronLeftIcon, EyeCloseIcon, EyeIcon } from "@/icons";
 import Link from "next/link";
 import React, { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useAuth } from "@/context/authContext";
+import Loading from "@/components/Loading";
 
 export default function SignInForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [isChecked, setIsChecked] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(false); 
+  const router = useRouter();
+  const { login } = useAuth();
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setIsLoading(true); 
+    debugger;
+    try {
+      await login(email, password);
+      debugger;
+      router.push("/");
+    } catch (error) {
+      if (error instanceof Error) {
+        setError("Invalid email or password.");
+      } else {
+        setError("An unknown error occurred.");
+      }
+    } finally {
+      setIsLoading(false); // Stop loading
+    }
+  };
+
+  if (isLoading) {
+    return <Loading />; // Show loading animation during login
+  }
+
   return (
     <div className="flex flex-col flex-1 lg:w-1/2 w-full">
       <div className="w-full max-w-md sm:pt-10 mx-auto mb-5">
@@ -84,13 +118,13 @@ export default function SignInForm() {
                 </span>
               </div>
             </div>
-            <form>
+            <form onSubmit={handleSubmit}>
               <div className="space-y-6">
                 <div>
                   <Label>
                     Email <span className="text-error-500">*</span>{" "}
                   </Label>
-                  <Input placeholder="info@gmail.com" type="email" />
+                  <Input placeholder="info@gmail.com" type="email" onChange={e => setEmail(e.target.value)} value={email}/>
                 </div>
                 <div>
                   <Label>
@@ -100,6 +134,8 @@ export default function SignInForm() {
                     <Input
                       type={showPassword ? "text" : "password"}
                       placeholder="Enter your password"
+                      value={password}
+                      onChange={e => setPassword(e.target.value)}
                     />
                     <span
                       onClick={() => setShowPassword(!showPassword)}
@@ -127,6 +163,10 @@ export default function SignInForm() {
                     Forgot password?
                   </Link>
                 </div>
+
+                {error && (
+                  <div className="text-error-500 text-sm">{error}</div>
+                )}
                 <div>
                   <Button className="w-full" size="sm">
                     Sign in

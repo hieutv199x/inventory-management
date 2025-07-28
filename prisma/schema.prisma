@@ -1,0 +1,67 @@
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
+}
+
+model User {
+  id        String    @id @default(auto()) @map("_id") @db.ObjectId
+  name      String
+  email     String    @unique
+  password  String
+  createdAt DateTime  @default(now())
+  sessions  Session[]
+}
+
+model Session {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId       String   @db.ObjectId
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expires      DateTime
+  sessionToken String   @unique
+}
+
+model VerificationToken {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  identifier String
+  token      String   @unique
+  expires    DateTime
+}
+
+model TikTokAppCredential {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  sellerId     String   @unique // ID người bán của bạn, đảm bảo mỗi người bán có 1 bộ appKey/appSecret duy nhất
+  appKey       String // Khóa ứng dụng từ TikTok Shop
+  appSecret    String // Bí mật ứng dụng từ TikTok Shop
+  accessToken  String? // Access Token hiện tại (có thể được refresh định kỳ)
+  refreshToken String? // Refresh Token (dùng để lấy Access Token mới)
+  expiresIn    Int? // Thời gian sống của Access Token (giây)
+  scope        String? // Phạm vi quyền hạn của Access Token
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  appName      String? // Tên ứng dụng trên TikTok Shop (để dễ quản lý)
+  status       String? // Trạng thái của credential (active, inactive)
+
+  authorizedShops TikTokAuthorizedShop[]
+}
+
+model TikTokAuthorizedShop {
+  id         String  @id @default(auto()) @map("_id") @db.ObjectId
+  shopId     String  @unique
+  name       String?
+  region     String?
+  sellerType String?
+  shopCipher String  @unique
+  code       String?
+  status     String?
+
+  appCredentialId String              @db.ObjectId
+  appCredential   TikTokAppCredential @relation(fields: [appCredentialId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

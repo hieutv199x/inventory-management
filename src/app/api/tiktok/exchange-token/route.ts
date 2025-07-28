@@ -1,54 +1,55 @@
 import { NextResponse } from 'next/server';
+import { PrismaClient } from '@prisma/client';
+import {AccessTokenTool} from '@/nodejs_sdk'
+
+const prisma = new PrismaClient();
 
 export async function POST(req: Request) {
     try {
-        debugger;
-        // In the App Router, we get the JSON body directly from the request object.
-        const { code } = await req.json();
+        const { code, app_key } = await req.json();
 
-        if (!code) {
-            return NextResponse.json({ error: 'Authorization code is missing' }, { status: 400 });
+        if (!code || !app_key) {
+            return NextResponse.json({ error: 'Authorization auth_code, app_key is missing' }, { status: 400 });
         }
 
-        const appKey = process.env.TIKTOK_APP_KEY;
-        const appSecret = process.env.TIKTOK_APP_SECRET;
-
-        if (!appKey || !appSecret) {
-            console.error('TikTok App Key or Secret is not configured in environment variables.');
-            return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
-        }
-
-        // Construct the URL for the TikTok token exchange API
-        const url = new URL('https://auth.tiktok-shops.com/api/v2/token/get');
-        url.searchParams.append('app_key', appKey);
-        url.searchParams.append('app_secret', appSecret);
-        url.searchParams.append('auth_code', code as string);
-        url.searchParams.append('grant_type', 'authorized_code');
-
-        const tiktokResponse = await fetch(url.toString(), {
-            method: 'GET', // As per your original implementation
-            headers: {
-                'Content-Type': 'application/json',
-            },
+        const credential = await prisma.tikTokAppCredential.findFirst({
+            where: { appKey: app_key },
         });
 
-        const data = await tiktokResponse.json();
-
-        if (!tiktokResponse.ok) {
-            // Forward the error from TikTok if the request was not successful
-            console.error("TikTok API Error:", data);
-            return NextResponse.json({ error: 'Failed to exchange token with TikTok', details: data }, { status: tiktokResponse.status });
+        if (!credential) {
+            return NextResponse.json({ error: 'App key not found in database' }, { status: 404 });
         }
+        const appSecret = credential.appSecret;
 
-        // Use 200 (OK) for a successful response that returns data, rather than 201 (Created).
+        if (!appSecret) {
+            return NextResponse.json({ error: 'App secret is missing in database' }, { status: 500 });
+        }
+        const { body } = await AccessTokenTool.getAccessToken(code, app_key, appSecret);  
+        console.log('getAccessToken resp data := ', JSON.stringify(body, null, 2));  
+        const parsedBody = typeof body === 'string' ? JSON.parse(body) : body;
+        const data = parsedBody.data;
+        if (!data?.access_token) {
+            throw new Error('Failed to retrieve access token from TikTok');
+        }
+        await prisma.tikTokAppCredential.update({
+            where: { id: credential.id },
+            data: {
+                accessToken: data.access_token,
+                refreshToken: data.refresh_token,
+                expiresIn: (data as any).access_token_expire_in,
+                scope: Array.isArray((data as any).granted_scopes) ? (data as any).granted_scopes.join(',') : (data as any).granted_scopes,
+                updatedAt: new Date(),
+                status: 'active',
+            },
+        });
         return NextResponse.json(data, { status: 200 });
 
     } catch (error) {
         console.error("Error exchanging TikTok token:", error);
-        // Handle cases where the request body is not valid JSON
         if (error instanceof SyntaxError) {
             return NextResponse.json({ error: 'Invalid JSON in request body' }, { status: 400 });
         }
         return NextResponse.json({ error: "An internal server error occurred" }, { status: 500 });
     }
 }
+

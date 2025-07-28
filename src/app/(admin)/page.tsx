@@ -1,42 +1,87 @@
-import type { Metadata } from "next";
-import { EcommerceMetrics } from "@/components/ecommerce/EcommerceMetrics";
-import React from "react";
-import MonthlyTarget from "@/components/ecommerce/MonthlyTarget";
-import MonthlySalesChart from "@/components/ecommerce/MonthlySalesChart";
-import StatisticsChart from "@/components/ecommerce/StatisticsChart";
-import RecentOrders from "@/components/ecommerce/RecentOrders";
-import DemographicCard from "@/components/ecommerce/DemographicCard";
+// "use client";
+// import React from "react";
+// import { useEffect } from "react";
+// import { useAuth } from "@/context/authContext";
+// import Dashboard from "./(main-pages)/dashboard/page";
+// import Loading from "@/components/Loading";
+// import { useRouter } from "next/navigation";
 
-export const metadata: Metadata = {
-  title:
-    "Next.js E-commerce Dashboard | TailAdmin - Next.js Dashboard Template",
-  description: "This is Next.js Home for TailAdmin Dashboard Template",
+// const Page: React.FC = () => {
+//   const { isLoggedIn} = useAuth();
+
+//   const router = useRouter();
+
+
+//   if (isLoggedIn) {
+//     return <Dashboard />;
+//   }
+
+//   useEffect(() => {
+//     router.replace("/signin");
+//   }, [router]);
+// };
+
+// export default Page;
+
+
+"use client";
+
+import React, { Suspense, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import Dashboard from "./(main-pages)/dashboard/page";
+import { useAuth } from "@/context/authContext";
+import Loading from "@/components/Loading";
+
+interface PageProps {
+  params: Promise<{ [key: string]: any }>;
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}
+
+const PageContent: React.FC = () => {
+  const router = useRouter();
+  const { isLoggedIn } = useAuth(); // Use isLoggedIn from useAuth
+
+  // useEffect(() => {
+  //   if (!isLoggedIn) {
+  //     router.push("/signin");
+  //   }
+  // }, [isLoggedIn, router]);
+
+  // if (isLoggedIn) {
+  //   return <Dashboard />;
+  // }
+
+  // useEffect(() => {
+  //   router.replace("/signin");
+  // }, [router]);
+  return <Dashboard />;
 };
 
-export default function Ecommerce() {
+const Page: React.FC<PageProps> = ({ params, searchParams }) => {
+  const [resolvedParams, setResolvedParams] = useState<{
+    [key: string]: any;
+  } | null>(null);
+  const [resolvedSearchParams, setResolvedSearchParams] = useState<{
+    [key: string]: string | string[] | undefined;
+  } | null>(null);
+
+  useEffect(() => {
+    const resolveParams = async () => {
+      setResolvedParams(await params);
+      setResolvedSearchParams(await searchParams);
+    };
+    resolveParams();
+  }, [params, searchParams]);
+
+  if (!resolvedParams || !resolvedSearchParams) {
+    return <Loading />;
+  }
+
   return (
-    <div className="grid grid-cols-12 gap-4 md:gap-6">
-      <div className="col-span-12 space-y-6 xl:col-span-7">
-        <EcommerceMetrics />
-
-        <MonthlySalesChart />
-      </div>
-
-      <div className="col-span-12 xl:col-span-5">
-        <MonthlyTarget />
-      </div>
-
-      <div className="col-span-12">
-        <StatisticsChart />
-      </div>
-
-      <div className="col-span-12 xl:col-span-5">
-        <DemographicCard />
-      </div>
-
-      <div className="col-span-12 xl:col-span-7">
-        <RecentOrders />
-      </div>
-    </div>
+    <Suspense fallback={<Loading />}>
+      <PageContent />
+    </Suspense>
   );
-}
+};
+
+export default Page;

@@ -1,26 +1,42 @@
 import { NextResponse } from 'next/server';
-import { generateSign } from '../../common/common';
+import { generateSign, getTikTokCredentialByAppKey } from '../../common/common';
 
 
-export async function GET() {
+export async function GET(req: Request) {
     try {
         
-        const appKey = process.env.TIKTOK_APP_KEY;
-        const appSecret = process.env.TIKTOK_APP_SECRET;
-        const token = process.env.TIKTOK_TOKEN;
+        const { app_key } = await req.json();
+
+        const credential = await getTikTokCredentialByAppKey(app_key);
 
         const ts = Math.floor(new Date().getTime() / 1000);
         const urlPath = "/seller/202309/permissions";
         const baseUrl = process.env.TIKTOK_BASE_URL;
 
-        if (!appKey || !appSecret || !token || !baseUrl) {
-            return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
+        if (!credential) {
+            return NextResponse.json({ error: "credential is missing in database" }, { status: 400 });
+        }
+        const appSecret = credential.appSecret;
+
+        if (!appSecret) {
+            return NextResponse.json({ error: 'App secret is missing in database' }, { status: 400 });
         }
 
-        const sign = generateSign(baseUrl, urlPath, appKey, ts, appSecret, "GET");
+        const accesstoken = credential.accessToken;
+        
+        if (!accesstoken) {
+            return NextResponse.json({ error: "Access token is missing in database" }, { status: 400 });
+        }
+
+        if (!baseUrl) {
+            return NextResponse.json({ error: 'baseUrl is missing ' }, { status: 400 });
+        }
+       
+
+        const sign = generateSign(baseUrl, urlPath, app_key, ts, appSecret, "GET");
 
         const url = new URL(`${baseUrl}${urlPath}`);
-        url.searchParams.append("app_key", appKey);
+        url.searchParams.append("app_key", app_key);
         url.searchParams.append("timestamp", ts.toString());
         url.searchParams.append("sign", sign);
 
@@ -28,19 +44,17 @@ export async function GET() {
             method: 'GET', // As per your original implementation
             headers: {
                 'Content-Type': 'application/json',
-                'x-tts-access-token': token,
+                'x-tts-access-token': accesstoken,
             },
         });
        
         const data = await tiktokResponse.json();
 
         if (!tiktokResponse.ok) {
-            // Forward the error from TikTok if the request was not successful
             console.error("TikTok API Error:", data);
             return NextResponse.json({ error: 'Failed to info shop with TikTok', details: data }, { status: tiktokResponse.status });
         }
-
-        // Use 200 (OK) for a successful response that returns data, rather than 201 (Created).
+        
         return NextResponse.json(data, { status: 200 });
 
     } catch (error) {

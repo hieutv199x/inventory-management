@@ -9,9 +9,11 @@ import {
   import Badge from "../ui/badge/Badge";
   import Button from "../ui/button/Button";
   import { Modal } from "../ui/modal";
-  import ShopsModal from "../shops/ShopsModal";
   import { useState } from "react";
+  import Label from "../form/Label";
+import Input from "../form/input/InputField";
   import { useModal } from "@/hooks/useModal";
+  import ComponentCard from "../common/ComponentCard";
 
 
   interface Shop {
@@ -84,6 +86,7 @@ const handleSave = () => {
 
 const handleImportShop = async () => {
     try {
+      debugger;
       const res = await fetch("/api/tiktok/shop", {
         method: "GET",
         headers: {
@@ -113,10 +116,10 @@ const handleImportShop = async () => {
           </div>
   
           <div className="flex items-center gap-3">
-            <Button onClick={handleImportShop} className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-theme-sm font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200">
+            <Button onClick={openModal} className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-theme-sm font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200">
               Import shop
             </Button>
-            <button className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-theme-sm font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200">
+            <button onClick={handleImportShop} className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-theme-sm font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200">
               Refresh
             </button>
           </div>
@@ -219,23 +222,56 @@ const handleImportShop = async () => {
             </TableBody>
           </Table>
         </div>
-        <Modal
-  isOpen={isOpen}
-  onClose={closeModal}
-  className="max-w-[584px] p-5 lg:p-10"
->
-  <form>
-    <ShopsModal />
-    <div className="flex items-center justify-end w-full gap-3 mt-6">
-      <Button size="sm" variant="outline" onClick={closeModal}>
-        Close
-      </Button>
-      <Button size="sm" onClick={handleSave}>
-        Save Changes
-      </Button>
-    </div>
-  </form>
-</Modal>
+        <ComponentCard title="Form In Modal">
+      
+      <Modal
+        isOpen={isOpen}
+        onClose={closeModal}
+        className="max-w-[584px] p-5 lg:p-10"
+      >
+        <form className="">
+          <h4 className="mb-6 text-lg font-medium text-gray-800 dark:text-white/90">
+            Personal Information
+          </h4>
+
+          <div className="grid grid-cols-1 gap-x-6 gap-y-5 sm:grid-cols-2">
+            <div className="col-span-1">
+              <Label>First Name</Label>
+              <Input type="text" placeholder="Emirhan" />
+            </div>
+
+            <div className="col-span-1">
+              <Label>Last Name</Label>
+              <Input type="text" placeholder="Boruch" />
+            </div>
+
+            <div className="col-span-1">
+              <Label>Last Name</Label>
+              <Input type="email" placeholder="emirhanboruch55@gmail.com" />
+            </div>
+
+            <div className="col-span-1">
+              <Label>Phone</Label>
+              <Input type="text" placeholder="+09 363 398 46" />
+            </div>
+
+            <div className="col-span-1 sm:col-span-2">
+              <Label>Bio</Label>
+              <Input type="text" placeholder="Team Manager" />
+            </div>
+          </div>
+
+          <div className="flex items-center justify-end w-full gap-3 mt-6">
+            <Button size="sm" variant="outline" onClick={closeModal}>
+              Close
+            </Button>
+            <Button size="sm" onClick={handleSave}>
+              Save Changes
+            </Button>
+          </div>
+        </form>
+      </Modal>
+    </ComponentCard>
       </div>
     );
   }

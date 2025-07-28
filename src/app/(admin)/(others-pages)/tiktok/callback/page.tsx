@@ -14,6 +14,7 @@ const TikTokCallbackHandler: React.FC = () => {
     useEffect(() => {
         debugger
         if (!searchParams) return;
+        const app_key = searchParams.get("app_key");
         const code = searchParams.get("code");
         const error = searchParams.get("error");
 
@@ -25,13 +26,13 @@ const TikTokCallbackHandler: React.FC = () => {
             }
 
             // Check for the essential authorization code from TikTok
-            if (code) {
+            if (code && app_key) {
                 console.log("Received TikTok authorization code, sending to backend...");
                 try {
                     const response = await fetch('/api/tiktok/exchange-token', {
                         method: 'POST',
                         headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({code}),
+                        body: JSON.stringify({code, app_key}),
                     });
 
                     if (!response.ok) {
