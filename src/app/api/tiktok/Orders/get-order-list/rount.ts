@@ -11,17 +11,15 @@ export async function POST(req: NextRequest) {
     try {
         const {
             shop_id,
-            access_token,
-            cipher,
             sort_by = "create_time",
             sort_direction = "ASC",
             page_size = 20,
             filters,
         } = await req.json();
 
-        if (!shop_id || !access_token || !cipher) {
+        if (!shop_id ) {
             return NextResponse.json(
-                { error: "Missing required fields: shop_id, access_token, cipher" },
+                { error: "Missing required fields: shop_id" },
                 { status: 400 }
             );
         }
@@ -70,12 +68,12 @@ export async function POST(req: NextRequest) {
         // Gọi API
         const result = await client.api.OrderV202309Api.OrdersSearchPost(
             page_size,
-            access_token,
+            credentials.accessToken,
             "application/json",
             sort_direction,
             "",
             sort_by,
-            cipher,
+            credentials.shopCipher,
             body
         );
 
