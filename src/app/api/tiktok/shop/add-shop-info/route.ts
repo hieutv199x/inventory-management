@@ -15,23 +15,20 @@ export async function POST(req: NextRequest) {
       );
     }
         // Kiểm tra trùng appKey
-        const result = await prisma.tikTokAppCredential.upsert({
-            where: { sellerId: serviceId }, 
+        const result = await prisma.tikTokApp.upsert({
+            where: { appKey: appKey },
             update: {
-              country,
+              appId: serviceId,
               appName,
               appKey,
               appSecret,
-              status: 'Inactive',
               updatedAt: new Date(),
             },
             create: {
-              country,
-              sellerId: serviceId,
+              appId: serviceId,
               appName,
               appKey,
               appSecret,
-              status: 'Inactive',
               createdAt: new Date(),
               updatedAt: new Date(),
             },

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
-import {AccessTokenTool} from '@/nodejs_sdk'
+import {AccessTokenTool, TikTokShopNodeApiClient} from '@/nodejs_sdk'
 
 const prisma = new PrismaClient();
 
@@ -12,7 +12,7 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: 'Authorization auth_code, app_key is missing' }, { status: 400 });
         }
 
-        const credential = await prisma.tikTokAppCredential.findFirst({
+        const credential = await prisma.tikTokApp.findUnique({
             where: { appKey: app_key },
         });
 
@@ -24,25 +24,64 @@ export async function POST(req: Request) {
         if (!appSecret) {
             return NextResponse.json({ error: 'App secret is missing in database' }, { status: 500 });
         }
-        const { body } = await AccessTokenTool.getAccessToken(code, app_key, appSecret);  
-        console.log('getAccessToken resp data := ', JSON.stringify(body, null, 2));  
+        const { body } = await AccessTokenTool.getAccessToken(code, app_key, appSecret);
+        console.log('getAccessToken resp data := ', JSON.stringify(body, null, 2));
         const parsedBody = typeof body === 'string' ? JSON.parse(body) : body;
-        const data = parsedBody.data;
-        if (!data?.access_token) {
+        const tokenData = parsedBody.data;
+        if (!tokenData?.access_token) {
             throw new Error('Failed to retrieve access token from TikTok');
         }
-        await prisma.tikTokAppCredential.update({
-            where: { id: credential.id },
-            data: {
-                accessToken: data.access_token,
-                refreshToken: data.refresh_token,
-                expiresIn: (data as any).access_token_expire_in,
-                scope: Array.isArray((data as any).granted_scopes) ? (data as any).granted_scopes.join(',') : (data as any).granted_scopes,
-                updatedAt: new Date(),
-                status: 'active',
+        const { access_token, refresh_token, access_token_expire_in, granted_scopes } = tokenData;
+
+        //shopAuthen
+        const baseUrl = process.env.TIKTOK_BASE_URL;
+
+        const client = new TikTokShopNodeApiClient({
+            config: {
+                basePath: baseUrl,
+                app_key: app_key,
+                app_secret: appSecret,
             },
         });
-        return NextResponse.json(data, { status: 200 });
+
+        const result = await client.api.AuthorizationV202309Api.ShopsGet(access_token, "application/json");
+        console.log('response: ', JSON.stringify(result, null, 2));
+
+        const parsedResult = typeof result === 'string' ? JSON.parse(result) : result;
+
+        if (parsedResult.body.code !== 0) {
+            throw new Error(`Error getting shop info: ${parsedResult.body.message}`);
+        }
+        const shops = parsedResult.body.data?.shops ?? [];
+
+        for (const shop of shops) {
+            await prisma.shopAuthorization.upsert({
+                where: { shopId: shop.id },
+                update: {
+                    accessToken: access_token,
+                    refreshToken: refresh_token,
+                    expiresIn: access_token_expire_in,
+                    scope: granted_scopes.join(','),
+                    shopName: shop.name,
+                    region: shop.region,
+                    status: 'ACTIVE',
+                },
+                create: {
+                    shopId: shop.id,
+                    shopCipher: shop.cipher,
+                    shopName: shop.name,
+                    region: shop.region,
+                    accessToken: access_token,
+                    refreshToken: refresh_token,
+                    expiresIn: access_token_expire_in,
+                    scope: granted_scopes.join(','),
+                    status: 'ACTIVE',
+                    appId: credential.id, // Liên kết với ứng dụng cha
+                },
+            });
+        }
+
+        return NextResponse.json(shops, { status: 200 });
 
     } catch (error) {
         console.error("Error exchanging TikTok token:", error);
@@ -50,6 +89,8 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: 'Invalid JSON in request body' }, { status: 400 });
         }
         return NextResponse.json({ error: "An internal server error occurred" }, { status: 500 });
+    } finally {
+        await prisma.$disconnect();
     }
 }
 

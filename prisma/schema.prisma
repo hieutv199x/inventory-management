@@ -32,37 +32,50 @@ model VerificationToken {
   expires    DateTime
 }
 
-model TikTokAppCredential {
-  id           String   @id @default(auto()) @map("_id") @db.ObjectId
-  sellerId     String   @unique // ID người bán của bạn, đảm bảo mỗi người bán có 1 bộ appKey/appSecret duy nhất
-  appKey       String // Khóa ứng dụng từ TikTok Shop
-  appSecret    String // Bí mật ứng dụng từ TikTok Shop
-  country      String 
-  accessToken  String? // Access Token hiện tại (có thể được refresh định kỳ)
-  refreshToken String? // Refresh Token (dùng để lấy Access Token mới)
-  expiresIn    Int? // Thời gian sống của Access Token (giây)
-  scope        String? // Phạm vi quyền hạn của Access Token
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  appName      String? // Tên ứng dụng trên TikTok Shop (để dễ quản lý)
-  status       String? // Trạng thái của credential (active, inactive)
-
-  authorizedShops TikTokAuthorizedShop[]
-}
-
-model TikTokAuthorizedShop {
-  id         String  @id @default(auto()) @map("_id") @db.ObjectId
-  shopId     String  @unique
-  name       String?
-  region     String?
-  sellerType String?
-  shopCipher String  @unique
-  code       String?
-  status     String?
-
-  appCredentialId String              @db.ObjectId
-  appCredential   TikTokAppCredential @relation(fields: [appCredentialId], references: [id])
+model TikTokApp {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  appName   String   // Tên gợi nhớ cho ứng dụng, ví dụ: "App Bán Hàng Chính"
+  appId     String
+  appKey    String   @unique // App Key từ TikTok, phải là duy nhất
+  appSecret String   // App Secret từ TikTok
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  // Một ứng dụng có thể có nhiều sự ủy quyền từ các shop khác nhau.
+  authorizations ShopAuthorization[]
+}
+
+model ShopAuthorization {
+  id         String  @id @default(auto()) @map("_id") @db.ObjectId
+
+  // --- Thông tin định danh của Shop từ TikTok ---
+  shopId     String  @unique // ID của shop (ví dụ: "751..."), phải là duy nhất
+  shopCipher String  @unique // Cipher của shop, dùng cho một số API
+  shopName   String? // Tên của shop
+  region     String? // Khu vực của shop (ví dụ: "VN")
+
+  // --- Dữ liệu ủy quyền (TOKEN NẰM Ở ĐÂY) ---
+  accessToken  String   // Access Token của riêng shop này
+  refreshToken String   // Refresh Token của riêng shop này
+  expiresIn    Int      // Thời gian sống của access token (tính bằng giây)
+  scope        String?  // Các quyền được cấp, ví dụ: "orders,products"
+
+  // --- Trạng thái và Mối quan hệ ---
+  status    AuthorizationStatus @default(ACTIVE) // Trạng thái của token (sử dụng Enum để an toàn hơn)
+
+  // Liên kết tới ứng dụng đã ủy quyền cho shop này
+  appId String    @db.ObjectId
+  app   TikTokApp @relation(fields: [appId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Enum giúp đảm bảo tính toàn vẹn dữ liệu cho trường status
+enum AuthorizationStatus {
+  ACTIVE    // Đang hoạt động
+  EXPIRED   // Đã hết hạn (cần refresh)
+  REVOKED   // Đã bị thu hồi
+  INACTIVE  // Không hoạt động
 }
