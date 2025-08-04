@@ -13,8 +13,22 @@ model User {
   name      String
   email     String    @unique
   password  String
+  role      UserRole  @default(SELLER)
+  isActive  Boolean   @default(true)
   createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
   sessions  Session[]
+  createdBy String?   @db.ObjectId
+  creator   User?     @relation("UserCreator", fields: [createdBy], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  createdUsers User[] @relation("UserCreator")
+}
+
+enum UserRole {
+  ADMIN
+  MANAGER
+  ACCOUNTANT
+  SELLER
+  RESOURCE
 }
 
 model Session {
@@ -94,8 +108,8 @@ model Product {
   updateTime                 Int
   shippingInsuranceRequirement String
 
-  brandId                    String? @map("brand_id")
-  auditId                    String?  @unique @map("audit_id")
+  brandId                    String? @map("brand_id") @db.ObjectId
+  auditId                    String?  @unique @map("audit_id") @db.ObjectId
 
   brand                      Brand?  @relation(fields: [brandId], references: [id])
   audit                      Audit?  @relation(fields: [auditId], references: [id])
@@ -129,7 +143,7 @@ model Audit {
 
 model PackageDimension {
   id        String   @id @default(auto()) @map("_id") @db.ObjectId
-  productId String   @unique
+  productId String   @unique @db.ObjectId
   height    String
   length    String
   width     String
@@ -139,7 +153,7 @@ model PackageDimension {
 
 model PackageWeight {
   id        String   @id @default(auto()) @map("_id") @db.ObjectId
-  productId String   @unique
+  productId String   @unique @db.ObjectId
   value     String
   unit      String
   product   Product  @relation(fields: [productId], references: [id])
@@ -147,7 +161,7 @@ model PackageWeight {
 
 model CategoryChain {
   id         String   @id @default(auto()) @map("_id") @db.ObjectId
-  productId  String
+  productId  String   @db.ObjectId
   categoryId String
   localName  String
   parentId   String
@@ -157,7 +171,7 @@ model CategoryChain {
 
 model ProductImage {
   id         String   @id @default(auto()) @map("_id") @db.ObjectId
-  productId  String
+  productId  String   @db.ObjectId
   uri        String
   width      Int
   height     Int
@@ -168,7 +182,7 @@ model ProductImage {
 
 model ProductAttribute {
   id         String   @id @default(auto()) @map("_id") @db.ObjectId
-  productId  String
+  productId  String   @db.ObjectId
   attrId     String
   name       String
   values     AttributeValue[]
@@ -177,7 +191,7 @@ model ProductAttribute {
 
 model AttributeValue {
   id                  String   @id @default(auto()) @map("_id") @db.ObjectId
-  productAttributeId  String
+  productAttributeId  String   @db.ObjectId
   valueId             String
   name                String
   productAttribute    ProductAttribute @relation(fields: [productAttributeId], references: [id])
@@ -186,7 +200,7 @@ model AttributeValue {
 model Sku {
   id           String   @id @default(auto()) @map("_id") @db.ObjectId
   skuId        String   @unique
-  productId    String
+  productId    String   @db.ObjectId
   sellerSku    String
   price        Price?
   inventory    Inventory[]
@@ -195,7 +209,7 @@ model Sku {
 
 model Price {
   id                 String   @id @default(auto()) @map("_id") @db.ObjectId
-  skuId              String   @unique
+  skuId              String   @unique @db.ObjectId
   currency           String
   salePrice          String
   taxExclusivePrice  String
@@ -204,7 +218,7 @@ model Price {
 
 model Inventory {
   id         String   @id @default(auto()) @map("_id") @db.ObjectId
-  skuId      String
+  skuId      String   @db.ObjectId
   quantity   Int
   warehouseId String
   sku        Sku     @relation(fields: [skuId], references: [id])

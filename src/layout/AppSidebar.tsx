@@ -31,6 +31,7 @@ const navItems: NavItem[] = [
     icon: <GridIcon />,
     name: "Dashboard",
     subItems: [
+      { name: "Overview", path: "/dashboard", pro: false },
       { name: "Product Management", path: "/products", pro: false },
       { name: "Order Management", path: "/", pro: false }
     ],
@@ -44,6 +45,11 @@ const navItems: NavItem[] = [
     icon: <UserCircleIcon />,
     name: "User Profile",
     path: "/profile",
+  },
+  {
+    icon: <UserCircleIcon />,
+    name: "User Management",
+    path: "/users",
   },
 
   {
