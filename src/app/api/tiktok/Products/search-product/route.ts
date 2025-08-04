@@ -131,49 +131,109 @@ export async function POST(req: NextRequest) {
 
             // Lưu hình ảnh
             if (productDetail.mainImages?.length) {
-                for (const img of productDetail.mainImages) {
-                    await prisma.productImage.create({
-                        data: {
-                            productId: productDbId,
-                            uri: img.uri!,
-                            width: img.width ?? 0,
-                            height: img.height ?? 0,
-                            urls: img.urls ?? [],
-                            thumbUrls: img.thumbUrls ?? [],
+                await prisma.productImage.deleteMany({ where: { productId: productDbId } });
+                for (const img of productDetail.mainImages ?? []) {
+                    await prisma.productImage.upsert({
+                    where: {
+                        productId_uri: {
+                        productId: productDbId,
+                        uri: img.uri!,
                         },
+                    },
+                    create: {
+                        productId: productDbId,
+                        uri: img.uri!,
+                        width: img.width ?? 0,
+                        height: img.height ?? 0,
+                        urls: img.urls ?? [],
+                        thumbUrls: img.thumbUrls ?? [],
+                    },
+                    update: {
+                        width: img.width ?? 0,
+                        height: img.height ?? 0,
+                        urls: img.urls ?? [],
+                        thumbUrls: img.thumbUrls ?? [],
+                    },
                     });
                 }
             }
 
-            if (productDetail.categoryChains?.length) {
-                for (const cat of productDetail.categoryChains) {
-                    await prisma.categoryChain.create({
-                        data: {
-                            productId: productDbId,
-                            categoryId: cat.id!,
-                            localName: cat.localName!,
-                            parentId: cat.parentId!,
-                            isLeaf: cat.isLeaf ?? false,
-                        },
-                    });
-                }
+            await prisma.categoryChain.deleteMany({ where: { productId: productDbId } });
+            for (const cat of productDetail.categoryChains ?? []) {
+                await prisma.categoryChain.upsert({
+                where: {
+                    productId_categoryId: {
+                    productId: productDbId,
+                    categoryId: cat.id!,
+                    },
+                },
+                create: {
+                    productId: productDbId,
+                    categoryId: cat.id!,
+                    localName: cat.localName!,
+                    parentId: cat.parentId!,
+                    isLeaf: cat.isLeaf ?? false,
+                },
+                update: {
+                    localName: cat.localName!,
+                    parentId: cat.parentId!,
+                    isLeaf: cat.isLeaf ?? false,
+                },
+                });
             }
             // Lưu attributes
             if (productDetail.productAttributes?.length) {
-                for (const attr of productDetail.productAttributes) {
-                    const attrRecord = await prisma.productAttribute.create({
-                        data: {
+                // Lấy tất cả id của productAttribute cần xóa
+                const productAttributes = await prisma.productAttribute.findMany({
+                    where: { productId: productDbId },
+                    select: { id: true }
+                });
+                const productAttributeIds = productAttributes.map(attr => attr.id);
+
+                // Xóa tất cả attributeValue liên quan
+                if (productAttributeIds.length > 0) {
+                    await prisma.attributeValue.deleteMany({
+                        where: {
+                            productAttributeId: { in: productAttributeIds }
+                        }
+                    });
+                }
+
+                // Sau đó xóa productAttribute
+                await prisma.productAttribute.deleteMany({ where: { productId: productDbId } });
+
+                for (const attr of productDetail.productAttributes ?? []) {
+                    const attrRecord = await prisma.productAttribute.upsert({
+                        where: {
+                            productId_attrId: {
+                                productId: productDbId,
+                                attrId: attr.id!,
+                            },
+                        },
+                        create: {
                             productId: productDbId,
                             attrId: attr.id!,
+                            name: attr.name!,
+                        },
+                        update: {
                             name: attr.name!,
                         },
                     });
 
                     for (const val of attr.values ?? []) {
-                        await prisma.attributeValue.create({
-                            data: {
+                        await prisma.attributeValue.upsert({
+                            where: {
+                                productAttributeId_valueId: {
+                                    productAttributeId: attrRecord.id,
+                                    valueId: val.id!,
+                                },
+                            },
+                            create: {
                                 productAttributeId: attrRecord.id,
                                 valueId: val.id!,
+                                name: val.name!,
+                            },
+                            update: {
                                 name: val.name!,
                             },
                         });
@@ -183,59 +243,113 @@ export async function POST(req: NextRequest) {
 
             // Lưu package dimension và weight
             if (productDetail.packageDimensions) {
-                await prisma.packageDimension.create({
-                    data: {
-                        productId: productDbId,
-                        height: productDetail.packageDimensions.height!,
-                        length: productDetail.packageDimensions.length!,
-                        width: productDetail.packageDimensions.width!,
-                        unit: productDetail.packageDimensions.unit!,
-                    },
+                await prisma.packageDimension.upsert({
+                  where: { productId: productDbId },
+                  create: {
+                    productId: productDbId,
+                    height: productDetail.packageDimensions.height!,
+                    length: productDetail.packageDimensions.length!,
+                    width: productDetail.packageDimensions.width!,
+                    unit: productDetail.packageDimensions.unit!,
+                  },
+                  update: {
+                    height: productDetail.packageDimensions.height!,
+                    length: productDetail.packageDimensions.length!,
+                    width: productDetail.packageDimensions.width!,
+                    unit: productDetail.packageDimensions.unit!,
+                  },
                 });
-            }
+              }
 
-            if (productDetail.packageWeight) {
-                await prisma.packageWeight.create({
-                    data: {
-                        productId: productDbId,
-                        value: productDetail.packageWeight.value!,
-                        unit: productDetail.packageWeight.unit!,
-                    },
+              if (productDetail.packageWeight) {
+                await prisma.packageWeight.upsert({
+                  where: { productId: productDbId },
+                  create: {
+                    productId: productDbId,
+                    value: productDetail.packageWeight.value!,
+                    unit: productDetail.packageWeight.unit!,
+                  },
+                  update: {
+                    value: productDetail.packageWeight.value!,
+                    unit: productDetail.packageWeight.unit!,
+                  },
                 });
-            }
+              }
 
             // Lưu SKU, Price, Inventory
+            // Lấy tất cả id của sku cần xóa
+            const skuRecords = await prisma.sku.findMany({
+                where: { productId: productDbId },
+                select: { id: true }
+            });
+            const skuIds = skuRecords.map(sku => sku.id);
+
+            // Xóa inventory liên quan trước
+            if (skuIds.length > 0) {
+                await prisma.inventory.deleteMany({
+                    where: {
+                        skuId: { in: skuIds }
+                    }
+                });
+                // Xóa price liên quan trước
+                await prisma.price.deleteMany({
+                    where: {
+                        skuId: { in: skuIds }
+                    }
+                });
+            }
+
+            // Sau đó xóa sku
+            await prisma.sku.deleteMany({ where: { productId: productDbId } });
             for (const sku of productDetail.skus ?? []) {
-                const skuRecord = await prisma.sku.create({
-                    data: {
-                        skuId: sku.id!,
-                        productId: productDbId,
-                        sellerSku: sku.sellerSku ?? "",
-                    },
+                const skuRecord = await prisma.sku.upsert({
+                where: { skuId: sku.id! },
+                create: {
+                    skuId: sku.id!,
+                    productId: productDbId,
+                    sellerSku: sku.sellerSku ?? "",
+                },
+                update: {
+                    productId: productDbId,
+                    sellerSku: sku.sellerSku ?? "",
+                },
                 });
 
                 if (sku.price) {
-                    await prisma.price.create({
-                        data: {
-                            skuId: skuRecord.id,
-                            currency: sku.price.currency!,
-                            salePrice: sku.price.salePrice!,
-                            taxExclusivePrice: sku.price.taxExclusivePrice!,
-                        },
-                    });
+                await prisma.price.upsert({
+                    where: { skuId: skuRecord.id },
+                    create: {
+                    skuId: skuRecord.id,
+                    currency: sku.price.currency!,
+                    salePrice: sku.price.salePrice!,
+                    taxExclusivePrice: sku.price.taxExclusivePrice!,
+                    },
+                    update: {
+                    currency: sku.price.currency!,
+                    salePrice: sku.price.salePrice!,
+                    taxExclusivePrice: sku.price.taxExclusivePrice!,
+                    },
+                });
                 }
 
                 for (const inv of sku.inventory ?? []) {
-                    await prisma.inventory.create({
-                        data: {
-                            skuId: skuRecord.id,
-                            quantity: inv.quantity!,
-                            warehouseId: inv.warehouseId!,
-                        },
-                    });
+                await prisma.inventory.upsert({
+                    where: {
+                    skuId_warehouseId: {
+                        skuId: skuRecord.id,
+                        warehouseId: inv.warehouseId!,
+                    },
+                    },
+                    create: {
+                    skuId: skuRecord.id,
+                    quantity: inv.quantity!,
+                    warehouseId: inv.warehouseId!,
+                    },
+                    update: {
+                    quantity: inv.quantity!,
+                    },
+                });
                 }
-
-
             }
 
         }
