@@ -11,6 +11,7 @@ interface SelectProps {
   onChange: (value: string) => void;
   className?: string;
   defaultValue?: string;
+  enablePlaceholder?: boolean;
 }
 
 const Select: React.FC<SelectProps> = ({
@@ -19,6 +20,8 @@ const Select: React.FC<SelectProps> = ({
   onChange,
   className = "",
   defaultValue = "",
+                                         enablePlaceholder = false
+
 }) => {
   // Manage the selected value
   const [selectedValue, setSelectedValue] = useState<string>(defaultValue);
@@ -40,13 +43,15 @@ const Select: React.FC<SelectProps> = ({
       onChange={handleChange}
     >
       {/* Placeholder option */}
-      <option
-        value=""
-        disabled
-        className="text-gray-700 dark:bg-gray-900 dark:text-gray-400"
-      >
-        {placeholder}
-      </option>
+      {enablePlaceholder && (
+          <option
+              value=""
+              disabled
+              className="text-gray-700 dark:bg-gray-900 dark:text-gray-400"
+          >
+            {placeholder}
+          </option>
+      )}
       {/* Map over options */}
       {options.map((option) => (
         <option

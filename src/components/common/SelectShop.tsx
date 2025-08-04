@@ -14,12 +14,14 @@ interface SelectShopProps {
     onChange: (shopId: string) => void; // Hàm callback khi người dùng chọn một shop khác
     className?: string; // Tùy chọn class để style từ bên ngoài
     placeholder?: string; // Tùy chọn placeholder
+    enablePlaceholder?: boolean;
 }
 
 export default function SelectShop({
                                        onChange,
                                        className = "",
                                        placeholder = "--- Select Shop ---",
+                                       enablePlaceholder = false,
                                    }: SelectShopProps) {
 
     const [shops, setShops] = useState<Shop[]>([]);
@@ -51,10 +53,15 @@ export default function SelectShop({
     }, [fetchShops]);
 
     // Chuyển đổi dữ liệu shop thành option cho Select
-    const options = shops.map((shop) => ({
-        label: shop.shopName || "Unnamed Shop",
-        value: shop.shopId,
-    }));
+    const options = [
+        ...(!enablePlaceholder
+            ? [{ label: placeholder, value: "all" }]
+            : []),
+        ...shops.map((shop) => ({
+            label: shop.shopName || "Unnamed Shop",
+            value: shop.shopId,
+        })),
+    ];
 
     const handleShopSelectChange = (value: string) => {
         onChange(value);
@@ -68,6 +75,7 @@ export default function SelectShop({
                     options={options}
                     placeholder={placeholder}
                     onChange={handleShopSelectChange}
+                    enablePlaceholder={enablePlaceholder}
                     className="dark:bg-dark-900"
                 />
                 <span className="absolute text-gray-500 -translate-y-1/2 pointer-events-none right-3 top-1/2 dark:text-gray-400">

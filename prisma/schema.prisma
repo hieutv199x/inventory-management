@@ -79,3 +79,134 @@ enum AuthorizationStatus {
   REVOKED   // Đã bị thu hồi
   INACTIVE  // Không hoạt động
 }
+
+model Product {
+  id                         String  @id @default(auto()) @map("_id") @db.ObjectId
+  productId                  String  @unique
+  shopId                     String
+  title                      String
+  description                String
+  status                     String
+  isNotForSale               Boolean
+  isCodAllowed               Boolean
+  isPreOwned                 Boolean
+  createTime                 Int
+  updateTime                 Int
+  shippingInsuranceRequirement String
+
+  brandId                    String? @map("brand_id")
+  auditId                    String?  @unique @map("audit_id")
+
+  brand                      Brand?  @relation(fields: [brandId], references: [id])
+  audit                      Audit?  @relation(fields: [auditId], references: [id])
+
+  dimensions                 PackageDimension?
+  weight                     PackageWeight?
+  skus                       Sku[]
+  categories                 CategoryChain[]
+  images                     ProductImage[]
+  attributes                 ProductAttribute[]
+
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+}
+
+model Brand {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  brandId   String   @unique
+  name      String
+  products  Product[]
+}
+
+model Audit {
+  id                 String   @id @default(auto()) @map("_id") @db.ObjectId
+  status             String
+  preApprovedReasons String[]
+  failedReasons      String[]
+  suggestions        String[]
+  product            Product?
+}
+
+model PackageDimension {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  productId String   @unique
+  height    String
+  length    String
+  width     String
+  unit      String
+  product   Product  @relation(fields: [productId], references: [id])
+}
+
+model PackageWeight {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  productId String   @unique
+  value     String
+  unit      String
+  product   Product  @relation(fields: [productId], references: [id])
+}
+
+model CategoryChain {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  productId  String
+  categoryId String
+  localName  String
+  parentId   String
+  isLeaf     Boolean
+  product    Product  @relation(fields: [productId], references: [id])
+}
+
+model ProductImage {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  productId  String
+  uri        String
+  width      Int
+  height     Int
+  urls       String[]
+  thumbUrls  String[]
+  product    Product  @relation(fields: [productId], references: [id])
+}
+
+model ProductAttribute {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  productId  String
+  attrId     String
+  name       String
+  values     AttributeValue[]
+  product    Product  @relation(fields: [productId], references: [id])
+}
+
+model AttributeValue {
+  id                  String   @id @default(auto()) @map("_id") @db.ObjectId
+  productAttributeId  String
+  valueId             String
+  name                String
+  productAttribute    ProductAttribute @relation(fields: [productAttributeId], references: [id])
+}
+
+model Sku {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  skuId        String   @unique
+  productId    String
+  sellerSku    String
+  price        Price?
+  inventory    Inventory[]
+  product      Product  @relation(fields: [productId], references: [id])
+}
+
+model Price {
+  id                 String   @id @default(auto()) @map("_id") @db.ObjectId
+  skuId              String   @unique
+  currency           String
+  salePrice          String
+  taxExclusivePrice  String
+  sku                Sku     @relation(fields: [skuId], references: [id])
+}
+
+model Inventory {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  skuId      String
+  quantity   Int
+  warehouseId String
+  sku        Sku     @relation(fields: [skuId], references: [id])
+}
+
