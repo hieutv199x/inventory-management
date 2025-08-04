@@ -153,6 +153,8 @@ model CategoryChain {
   parentId   String
   isLeaf     Boolean
   product    Product  @relation(fields: [productId], references: [id])
+
+  @@unique([productId, categoryId])
 }
 
 model ProductImage {
@@ -164,6 +166,8 @@ model ProductImage {
   urls       String[]
   thumbUrls  String[]
   product    Product  @relation(fields: [productId], references: [id])
+
+  @@unique([productId, uri])
 }
 
 model ProductAttribute {
@@ -173,6 +177,8 @@ model ProductAttribute {
   name       String
   values     AttributeValue[]
   product    Product  @relation(fields: [productId], references: [id])
+
+  @@unique([productId, attrId])
 }
 
 model AttributeValue {
@@ -181,6 +187,8 @@ model AttributeValue {
   valueId             String
   name                String
   productAttribute    ProductAttribute @relation(fields: [productAttributeId], references: [id])
+
+  @@unique([productAttributeId, valueId])
 }
 
 model Sku {
@@ -208,5 +216,6 @@ model Inventory {
   quantity   Int
   warehouseId String
   sku        Sku     @relation(fields: [skuId], references: [id])
+  @@unique([skuId, warehouseId])
 }
 
