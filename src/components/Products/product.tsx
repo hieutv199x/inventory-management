@@ -1,5 +1,5 @@
 "use client";
-import React from "react";
+import React, {useCallback, useEffect, useState} from "react";
 import Badge from "../ui/badge/Badge";
 import {ArrowDownIcon, ArrowUpIcon, BoxIconLine, ChevronDownIcon, GroupIcon} from "@/icons";
 import SelectShop from "@/components/common/SelectShop";
@@ -7,6 +7,33 @@ import ChartTab from "@/components/common/ChartTab";
 import Label from "@/components/form/Label";
 import Select from "@/components/form/Select";
 import DatePicker from "@/components/form/date-picker";
+import {Table, TableBody, TableCell, TableHeader, TableRow} from "@/components/ui/table";
+import Image from "next/image";
+
+interface Product {
+    id: string;
+    productId: string;
+    title: string;
+    description: string;
+    status: string;
+    createdAt: string;
+    shopId:string,
+    shopName:string;
+    images: {
+        uri: string;
+        urls: string[];
+    }[];
+    skus: {
+        id: string;
+        skuId: string;
+        price: {
+            originalPrice: string;
+            currency: string;
+            salePrice: string;
+        } | null;
+    }[];
+    // Thêm các trường khác nếu bạn cần hiển thị
+}
 
 export const Product = () => {
 
@@ -26,15 +53,70 @@ export const Product = () => {
         { label: "Deleted", value: "Deleted" },
     ];
 
-    const handleShopSelect = (shopId: string) => {
-        console.log("Selected shop ID:", shopId);
+    const [filters, setFilters] = useState({
+        shopId: "",
+        status: "",
+        listingQuality: "",
+        startDate: null as string | null,
+        endDate: null as string | null,
+        keyword: "",
+    });
+    const [products, setProducts] = useState<Product[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+
+
+    const handleFilterChange = (field: keyof typeof filters, value: string | null) => {
+        setFilters(prev => ({ ...prev, [field]: value }));
     };
-    const handleListingChange= (value: string)=>{
-        console.log(value);
-    }
-    const handleStatusChange= (value: string)=>{
-        console.log(value);
-    }
+
+    const fetchProducts = useCallback(async () => {
+        setIsLoading(true);
+        setError(null);
+        try {
+            // Xây dựng URL với các query parameters
+            const params = new URLSearchParams();
+            if (filters.shopId) params.append('shopId', filters.shopId);
+            if (filters.status) params.append('status', filters.status);
+            if (filters.listingQuality) params.append('listingQuality', filters.listingQuality);
+            if (filters.keyword) params.append('keyword', filters.keyword);
+            if (filters.startDate) params.append('startDate', filters.startDate);
+            if (filters.endDate) params.append('endDate', filters.endDate);
+
+            const response = await fetch(`/api/tiktok/Products/GetProduct?${params.toString()}`);
+
+            if (!response.ok) {
+                const errorResult = await response.json();
+                throw new Error(errorResult.error || 'Failed to fetch products');
+            }
+
+            const result = await response.json();
+            // API trả về một mảng trực tiếp, không có key 'data'
+            setProducts(result || []);
+        } catch (err) {
+            const message = err instanceof Error ? err.message : "An unknown fetch error occurred";
+            setError(message);
+            console.error("Fetch failed", err);
+        } finally {
+            setIsLoading(false);
+        }
+    }, [filters]);
+
+    useEffect(() => {
+        fetchProducts();
+    }, [fetchProducts]);
+
+    const formatPrice = (price: string | undefined | null) => {
+        if (!price) {
+            return 'N/A';
+        }
+        const priceNumber = parseFloat(price);
+        if (isNaN(priceNumber)) {
+            return 'N/A';
+        }
+        return priceNumber.toLocaleString('vi-VN');
+    };
+
     const handlerProduct = async () => {
         try {
             const response = await fetch('/api/tiktok/Products/search-product', {
@@ -84,6 +166,7 @@ export const Product = () => {
                         </button>
 
                         <button
+                            onClick={fetchProducts}
                             className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-theme-sm font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200"
                         >
                             Refresh
@@ -117,6 +200,8 @@ export const Product = () => {
                                 <input
                                     type="text"
                                     placeholder="Search product name, id..."
+                                    value={filters.keyword}
+                                    onChange={(e) => handleFilterChange('keyword', e.target.value)}
                                     className="dark:bg-dark-900 h-11 w-full rounded-lg border border-gray-200 bg-transparent py-2.5 pl-12 pr-14 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-800 dark:bg-gray-900 dark:bg-white/[0.03] dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800 xl:w-[430px]"
                                 />
 
@@ -130,14 +215,14 @@ export const Product = () => {
 
                 <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
                     <div className="col-span-1">
-                        <SelectShop onChange={handleShopSelect} placeholder="All Shop" enablePlaceholder={false}/>
+                        <SelectShop onChange={(val) => handleFilterChange('shopId', val)} placeholder="All Shop" enablePlaceholder={false}/>
                     </div>
                     <div className="col-span-1">
                         <Label>Status</Label>
                         <div className="relative">
                             <Select
                                 options={optionStatus}
-                                onChange={handleStatusChange}
+                                onChange={(val) => handleFilterChange('status', val)}
                                 enablePlaceholder={false}
                                 className="dark:bg-dark-900"
                             />
@@ -151,7 +236,7 @@ export const Product = () => {
                             <div className="relative">
                                 <Select
                                     options={optionsListing}
-                                    onChange={handleListingChange}
+                                    onChange={(val) => handleFilterChange('listingQuality', val)}
                                     enablePlaceholder={false}
                                     className="dark:bg-dark-900"
                                 />
@@ -167,10 +252,7 @@ export const Product = () => {
                                     id="start-date-picker"
                                     label="Start Date"
                                     placeholder="dd/MM/yyyy"
-                                    onChange={(dates, currentDateString) => {
-                                        // Handle your logic
-                                        console.log({ dates, currentDateString });
-                                    }}
+                                    onChange={(_, dateStr) => handleFilterChange('startDate', dateStr)}
                                 />
                             </div>
                             <div className="col-span-1">
@@ -178,16 +260,142 @@ export const Product = () => {
                                     id="end-date-picker"
                                     label="End Date"
                                     placeholder="dd/MM/yyyy"
-                                    onChange={(dates, currentDateString) => {
-                                        // Handle your logic
-                                        console.log({ dates, currentDateString });
-                                    }}
+                                    onChange={(_, dateStr) => handleFilterChange('endDate', dateStr)}
                                 />
                             </div>
                         </div>
                     </div>
                 </div>
+                <div className="max-w-full overflow-x-auto">
+                    <Table>
+                        {/* Table Header */}
+                        <TableHeader className="border-gray-100 dark:border-gray-800 border-y">
+                            <TableRow>
+                                <TableCell
+                                    isHeader
+                                    className="py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400"
+                                >
+                                    Products
+                                </TableCell>
+                                <TableCell
+                                    isHeader
+                                    className="py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400"
+                                >
+                                    Products Info
+                                </TableCell>
+                                <TableCell
+                                    isHeader
+                                    className="py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400"
+                                >
+                                    Price
+                                </TableCell>
+                                <TableCell
+                                    isHeader
+                                    className="py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400"
+                                >
+                                    Status
+                                </TableCell>
+                                {/*<TableCell*/}
+                                {/*    isHeader*/}
+                                {/*    className="py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400"*/}
+                                {/*>*/}
+                                {/*    Listing Quality*/}
+                                {/*</TableCell>*/}
+                                <TableCell
+                                    isHeader
+                                    className="py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400"
+                                >
+                                    Creation Date
+                                </TableCell>
+                                <TableCell
+                                    isHeader
+                                    className="py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400"
+                                >
+                                    Action
+                                </TableCell>
+                            </TableRow>
+                        </TableHeader>
 
+                        {/* Table Body */}
+
+                        <TableBody className="divide-y divide-gray-100 dark:divide-gray-800">
+                            {/* 3. THÊM LOGIC HIỂN THỊ LOADING, ERROR, EMPTY */}
+                            {isLoading ? (
+                                <TableRow><TableCell colSpan={6} className="py-5 text-center text-gray-500">Loading products...</TableCell></TableRow>
+                            ) : error ? (
+                                <TableRow><TableCell colSpan={6} className="py-5 text-center text-red-500">Error: {error}</TableCell></TableRow>
+                            ) : products.length === 0 ? (
+                                <TableRow><TableCell colSpan={6} className="py-5 text-center text-gray-500">No products found with the selected filters.</TableCell></TableRow>
+                            ) : (
+                                // 4. SỬA LẠI CÁCH RENDER DỮ LIỆU CHO ĐÚNG CẤU TRÚC
+                                products.map((product) => {
+                                    const imageUrl = product.images?.[0]?.urls?.[0];
+                                    return (
+                                        <TableRow key={product.id}>
+                                            <TableCell className="py-3">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="h-[50px] w-[50px] overflow-hidden rounded-md bg-gray-100 dark:bg-gray-800">
+                                                        <Image
+                                                            width={50}
+                                                            height={50}
+                                                            src={imageUrl} // Sử dụng URL hoặc ảnh dự phòng
+                                                            className="object-cover h-full w-full"
+                                                            alt={product.title}
+                                                            // Thêm onError để xử lý ảnh lỗi
+                                                            onError={(e) => { (e.target as HTMLImageElement).src = "/images/placeholder-product.png"; }}
+                                                        />
+                                                    </div>
+                                                    <p className="font-medium text-gray-800 text-theme-sm dark:text-white/90 max-w-[250px] truncate">{product.title}</p>
+                                                </div>
+                                            </TableCell>
+                                            <TableCell className="py-3 text-gray-500 text-theme-sm dark:text-gray-400">
+                                                <div className="flex flex-col space-y-1 max-w-[280px]">
+                                                    <span>ID: {product.productId}</span>
+                                                    <span>SKUId: {product.skus?.[0]?.id}</span>
+                                                    <span>Shop: {product.shopName}</span>
+                                                    <div
+                                                        dangerouslySetInnerHTML={{ __html: product.description || "" }}
+                                                        className="prose prose-sm max-w-none max-h-20 overflow-y-auto text-gray-500"
+                                                    ></div>
+
+
+                                                </div>
+                                            </TableCell>
+                                            <TableCell className="py-3 text-gray-500 text-theme-sm dark:text-gray-400">
+                                                {product.skus?.[0]?.price?.salePrice
+                                                    ? `${formatPrice(product.skus[0].price.salePrice)} ${product.skus[0].price.currency}`
+                                                    : 'N/A'
+                                                }
+                                            </TableCell>
+                                            <TableCell className="py-3">
+                                                <Badge
+                                                    size="sm"
+                                                    color={
+                                                        product.status === "ACTIVATE"
+                                                            ? "success"
+                                                            : product.status === "PENDING"
+                                                                ? "warning"
+                                                                : "error"
+                                                    }
+                                                >
+                                                    {product.status}
+                                                </Badge>
+                                            </TableCell>
+                                            <TableCell className="py-3 text-gray-500 text-theme-sm dark:text-gray-400">
+                                                {new Date(product.createdAt).toLocaleDateString()}
+                                            </TableCell>
+                                            <TableCell className="py-3">
+                                                <div className="flex items-center gap-2">
+                                                    <button className="text-blue-500 hover:text-blue-600">View</button>
+                                                </div>
+                                            </TableCell>
+                                        </TableRow>
+                                    );
+                                })
+                            )}
+                        </TableBody>
+                    </Table>
+                </div>
 
             </div>
         </div>

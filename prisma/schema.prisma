@@ -81,7 +81,6 @@ model ShopAuthorization {
   // Liên kết tới ứng dụng đã ủy quyền cho shop này
   appId String    @db.ObjectId
   app   TikTokApp @relation(fields: [appId], references: [id], onDelete: Cascade)
-
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }

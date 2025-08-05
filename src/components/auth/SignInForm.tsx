@@ -27,7 +27,6 @@ export default function SignInForm() {
     debugger;
     try {
       await login(email, password);
-      debugger;
       router.push("/");
     } catch (error) {
       if (error instanceof Error) {

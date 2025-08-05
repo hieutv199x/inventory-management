@@ -8,7 +8,7 @@ const LogoutPage = () => {
   const searchParams = useSearchParams();
   const [countdown, setCountdown] = useState(3);
   
-  const reason = searchParams.get('reason') || 'logged_out';
+  const reason = searchParams?.get('reason') || 'logged_out';
   
   const messages = {
     expired: 'Your session has expired',
@@ -25,7 +25,7 @@ const LogoutPage = () => {
       setCountdown((prev) => {
         if (prev <= 1) {
           clearInterval(countdownInterval);
-          router.push('/signin');
+          router.push('/login');
           return 0;
         }
         return prev - 1;
