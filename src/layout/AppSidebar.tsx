@@ -1,9 +1,10 @@
 "use client";
-import React, { useEffect, useRef, useState,useCallback } from "react";
+import React, { useEffect, useRef, useState, useCallback } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useSidebar } from "../context/SidebarContext";
+import { isTokenExpired, getToken, isAuthenticated } from "../utils/auth";
 import {
   BoxCubeIcon,
   CalenderIcon,
@@ -26,21 +27,23 @@ type NavItem = {
   subItems?: { name: string; path: string; pro?: boolean; new?: boolean }[];
 };
 
-const navItems: NavItem[] = [
+const bankManagementItems: NavItem[] = [
   {
-    icon: <GridIcon />,
-    name: "Dashboard",
+    icon: <PlugInIcon />,
+    name: "Connect Shops",
+    path: "/shops"
+  },
+  {
+    icon: <PieChartIcon />,
+    name: "Financial Reports",
     subItems: [
-      { name: "Overview", path: "/dashboard", pro: false },
-      { name: "Product Management", path: "/products", pro: false },
-      { name: "Order Management", path: "/", pro: false }
+      { name: "Revenue Reports", path: "/financial/revenue", pro: false },
+      { name: "Transaction History", path: "/financial/transactions", pro: false }
     ],
   },
-  {
-    icon: <CalenderIcon />,
-    name: "Calendar",
-    path: "/calendar",
-  },
+];
+
+const accountManagementItems: NavItem[] = [
   {
     icon: <UserCircleIcon />,
     name: "User Profile",
@@ -51,74 +54,98 @@ const navItems: NavItem[] = [
     name: "User Management",
     path: "/users",
   },
-
   {
-    name: "Forms",
-    icon: <ListIcon />,
-    subItems: [{ name: "Form Elements", path: "/form-elements", pro: false }],
-  },
-  {
-    name: "Tables",
-    icon: <TableIcon />,
-    subItems: [{ name: "Basic Tables", path: "/basic-tables", pro: false }],
-  },
-  {
-    name: "Pages",
-    icon: <PageIcon />,
+    name: "Authentication",
+    icon: <PlugInIcon />,
     subItems: [
-      { name: "Blank Page", path: "/blank", pro: false },
-      { name: "404 Error", path: "/error-404", pro: false },
+      { name: "Sign In", path: "/signin", pro: false },
+      { name: "Sign Up", path: "/signup", pro: false },
     ],
   },
 ];
 
-const accountsItems: NavItem[] = [
+const productManagementItems: NavItem[] = [
   {
-    icon: <PlugInIcon />,
-    name: "Connect Shops",
-    path: "/shops"
+    icon: <GridIcon />,
+    name: "Dashboard",
+    subItems: [
+      { name: "Overview", path: "/dashboard", pro: false },
+      { name: "Product Management", path: "/products", pro: false },
+      { name: "Order Management", path: "/", pro: false }
+    ],
   },
   {
-      name: "Forms",
-      icon: <ListIcon />,
-      subItems: [{ name: "Form Elements", path: "/form-elements", pro: false }],
-    },
-]
-
-// const othersItems: NavItem[] = [
-//   {
-//     icon: <ConnectIcon />,
-//     name: "Charts",
-//     subItems: [
-//       { name: "Line Chart", path: "/line-chart", pro: false },
-//       { name: "Bar Chart", path: "/bar-chart", pro: false },
-//     ],
-//   },
-//   {
-//     icon: <BoxCubeIcon />,
-//     name: "UI Elements",
-//     subItems: [
-//       { name: "Alerts", path: "/alerts", pro: false },
-//       { name: "Avatar", path: "/avatars", pro: false },
-//       { name: "Badge", path: "/badge", pro: false },
-//       { name: "Buttons", path: "/buttons", pro: false },
-//       { name: "Images", path: "/images", pro: false },
-//       { name: "Videos", path: "/videos", pro: false },
-//     ],
-//   },
-//   {
-//     icon: <PlugInIcon />,
-//     name: "Authentication",
-//     subItems: [
-//       { name: "Sign In", path: "/signin", pro: false },
-//       { name: "Sign Up", path: "/signup", pro: false },
-//     ],
-//   },
-// ];
+    icon: <BoxCubeIcon />,
+    name: "Inventory",
+    subItems: [
+      { name: "Stock Overview", path: "/inventory", pro: false },
+      { name: "Warehouse Management", path: "/warehouse", pro: false }
+    ],
+  },
+  {
+    icon: <CalenderIcon />,
+    name: "Calendar",
+    path: "/calendar",
+  },
+  {
+    name: "Reports",
+    icon: <TableIcon />,
+    subItems: [
+      { name: "Sales Reports", path: "/reports/sales", pro: false },
+      { name: "Product Analytics", path: "/reports/products", pro: false }
+    ],
+  },
+];
 
 const AppSidebar: React.FC = () => {
   const { isExpanded, isMobileOpen, isHovered, setIsHovered } = useSidebar();
   const pathname = usePathname();
+  const router = useRouter();
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
+  const [hasCheckedAuth, setHasCheckedAuth] = useState(false);
+
+  // Public routes that don't require authentication
+  const publicRoutes = ['/signin', '/signup', '/logout'];
+  const isPublicRoute = publicRoutes.includes(pathname);
+
+  // Token validation effect
+  useEffect(() => {
+    // Skip token validation on public routes
+    if (isPublicRoute) {
+      setIsInitialLoad(false);
+      setHasCheckedAuth(true);
+      return;
+    }
+
+    const checkTokenExpiration = () => {
+      try {
+        if (!isAuthenticated()) {
+          console.log('Token expired or missing, redirecting to logout');
+          router.push('/logout');
+        }
+      } catch (error) {
+        console.error('Error checking authentication:', error);
+        // Don't redirect on error, just log it
+      }
+    };
+
+    // Only check once during initial load
+    if (isInitialLoad && !hasCheckedAuth) {
+      const timer = setTimeout(() => {
+        setIsInitialLoad(false);
+        setHasCheckedAuth(true);
+        checkTokenExpiration();
+      }, 1000);
+
+      return () => clearTimeout(timer);
+    }
+
+    // Set up periodic check (less frequent - every 10 minutes)
+    if (!isInitialLoad && hasCheckedAuth) {
+      const tokenCheckInterval = setInterval(checkTokenExpiration, 10 * 60 * 1000);
+      return () => clearInterval(tokenCheckInterval);
+    }
+  }, [router, pathname, isPublicRoute, isInitialLoad, hasCheckedAuth]);
 
   const renderMenuItems = (
     navItems: NavItem[],
@@ -261,8 +288,10 @@ const AppSidebar: React.FC = () => {
   useEffect(() => {
     // Check if the current path matches any submenu item
     let submenuMatched = false;
-    ["main", "others"].forEach((menuType) => {
-      const items = menuType === "main" ? navItems : accountsItems;
+    ["bank", "account", "product"].forEach((menuType) => {
+      const items = menuType === "bank" ? bankManagementItems : 
+                   menuType === "account" ? accountManagementItems : 
+                   productManagementItems;
       items.forEach((nav, index) => {
         if (nav.subItems) {
           nav.subItems.forEach((subItem) => {
@@ -370,15 +399,15 @@ const AppSidebar: React.FC = () => {
                 }`}
               >
                 {isExpanded || isHovered || isMobileOpen ? (
-                  "Menu"
+                  "Bank Management"
                 ) : (
                   <HorizontaLDots />
                 )}
               </h2>
-              {renderMenuItems(navItems, "main")}
+              {renderMenuItems(bankManagementItems, "main")}
             </div>
 
-            <div className="">
+            <div>
               <h2
                 className={`mb-4 text-xs uppercase flex leading-[20px] text-gray-400 ${
                   !isExpanded && !isHovered
@@ -387,12 +416,29 @@ const AppSidebar: React.FC = () => {
                 }`}
               >
                 {isExpanded || isHovered || isMobileOpen ? (
-                  "Accounts"
+                  "Account Management"
                 ) : (
                   <HorizontaLDots />
                 )}
               </h2>
-              {renderMenuItems(accountsItems, "accounts")}
+              {renderMenuItems(accountManagementItems, "accounts")}
+            </div>
+
+            <div>
+              <h2
+                className={`mb-4 text-xs uppercase flex leading-[20px] text-gray-400 ${
+                  !isExpanded && !isHovered
+                    ? "lg:justify-center"
+                    : "justify-start"
+                }`}
+              >
+                {isExpanded || isHovered || isMobileOpen ? (
+                  "Product Management"
+                ) : (
+                  <HorizontaLDots />
+                )}
+              </h2>
+              {renderMenuItems(productManagementItems, "accounts")}
             </div>
           </div>
         </nav>
