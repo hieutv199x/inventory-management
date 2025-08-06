@@ -1,9 +1,8 @@
 "use client";
 import React, {useCallback, useEffect, useState} from "react";
 import Badge from "../ui/badge/Badge";
-import {ArrowDownIcon, ArrowUpIcon, BoxIconLine, ChevronDownIcon, GroupIcon} from "@/icons";
+import { ChevronDownIcon} from "@/icons";
 import SelectShop from "@/components/common/SelectShop";
-import ChartTab from "@/components/common/ChartTab";
 import Label from "@/components/form/Label";
 import Select from "@/components/form/Select";
 import DatePicker from "@/components/form/date-picker";

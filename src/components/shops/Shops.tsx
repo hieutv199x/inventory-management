@@ -40,8 +40,6 @@ import Input from "../form/input/InputField";
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    const [selectedApp, setSelectedApp] = useState<string | null>(null);
-
     const [selectedCountry, setSelectedCountry] = useState<{ value: string; label: string } | null>(null);
     const [showSecret, setShowSecret] = useState<{ [id: string]: boolean }>({});
     const [serviceId, setServiceId] = useState("");

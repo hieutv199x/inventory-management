@@ -49,18 +49,7 @@ export async function GET() {
                     },
                 });
 
-                const result = await client.api.FinanceV202309Api.StatementsGet(
-                    "statement_time",
-                    credentials.accessToken,
-                    "application/json",
-                    statementTimeLt,
-                    "",
-                    50,
-                    "",
-                    "ASC",
-                    statementTimeGe,
-                    credentials.shopCipher
-                );
+               const result = await client.api.FinanceV202309Api.WithdrawalsGet(["WITHDRAW"], credentials.accessToken, "application/json", statementTimeLt, 20, "", statementTimeGe, credentials.shopCipher);
                 console.log('response: ', JSON.stringify(result, null, 2));
             }
             catch (error) {

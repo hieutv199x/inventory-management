@@ -90,6 +90,8 @@ model ShopAuthorization {
   // Bank relations
   bankAccounts BankAccount[]
   
+  payments     TikTokPayment[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -288,3 +290,34 @@ enum BankStatus {
   UNUSED
 }
 
+
+model TikTokPayment {
+  id                             String   @id @default(auto()) @map("_id") @db.ObjectId
+
+  paymentId                      String   @unique
+  createTime                     Int
+  status                         String
+
+  amountValue                    String?
+  amountCurrency                 String?
+
+  settlementAmountValue          String?
+  settlementAmountCurrency       String?
+
+  reserveAmountValue             String?
+  reserveAmountCurrency          String?
+
+  paymentBeforeExchangeValue     String?
+  paymentBeforeExchangeCurrency  String?
+
+  exchangeRate                   String?
+  paidTime                       Int?
+  bankAccount                    String?
+
+  // Liên kết shop
+  shopId                         String
+  shop                           ShopAuthorization @relation(fields: [shopId], references: [shopId])
+
+  createdAt                      DateTime @default(now())
+  updatedAt                      DateTime @updatedAt
+}

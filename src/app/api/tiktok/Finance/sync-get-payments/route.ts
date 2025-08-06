@@ -49,19 +49,35 @@ export async function GET() {
                     },
                 });
 
-                const result = await client.api.FinanceV202309Api.StatementsGet(
-                    "statement_time",
-                    credentials.accessToken,
-                    "application/json",
-                    statementTimeLt,
-                    "",
-                    50,
-                    "",
-                    "ASC",
-                    statementTimeGe,
-                    credentials.shopCipher
-                );
+                const result = await client.api.FinanceV202309Api.PaymentsGet("create_time", credentials.accessToken, "application/json", statementTimeLt, 20, "", "ASC", statementTimeGe, credentials.shopCipher);
                 console.log('response: ', JSON.stringify(result, null, 2));
+                const payments = result.body?.data?.payments || [];
+
+                for (const payment of payments) {
+                    try {
+                        await prisma.tikTokPayment.create({
+                        data: {
+                            paymentId: payment.id!,
+                            createTime: payment.createTime ?? 0,
+                            status: payment.status!,
+                            amountValue: payment.amount?.value,
+                            amountCurrency: payment.amount?.currency ?? "",
+                            settlementAmountValue: payment.settlementAmount?.value,
+                            settlementAmountCurrency: payment.settlementAmount?.currency ?? "",
+                            reserveAmountValue: payment.reserveAmount?.value,
+                            reserveAmountCurrency: payment.reserveAmount?.currency ?? "",
+                            paymentBeforeExchangeValue: payment.paymentAmountBeforeExchange?.value ,
+                            paymentBeforeExchangeCurrency: payment.paymentAmountBeforeExchange?.currency ?? "",
+                            exchangeRate: payment.exchangeRate,
+                            paidTime: payment.paidTime,
+                            bankAccount: payment.bankAccount ?? null,
+                            shopId: shop.shopId,
+                        },
+                    });
+                    } catch (err) {
+                        console.error(`❌ Lỗi khi lưu payment ${payment.id} cho shop ${shop.shopId}:`, err);
+                    }
+                }
             }
             catch (error) {
                 console.error(`Error processing shop ${shop.shopId}:`, error);
