@@ -7,6 +7,7 @@ import { useEffect } from "react";
 import AppSidebar from "@/layout/AppSidebar";
 import AppHeader from "@/layout/AppHeader";
 import Loading from "@/components/Loading";
+import { useSidebar } from "@/context/SidebarContext";
 
 interface AdminLayoutProps {
   children: React.ReactNode;
@@ -14,6 +15,7 @@ interface AdminLayoutProps {
 
 export default function AdminLayout({ children }: AdminLayoutProps) {
   const { user, isLoading } = useAuth();
+  const { isExpanded, isHovered } = useSidebar();
   const router = useRouter();
 
   useEffect(() => {
@@ -30,21 +32,27 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     return null;
   }
 
-  return (
-    <div className="h-screen flex bg-gray-50 dark:bg-gray-900">
-      {/* Sidebar - Full Height */}
-      <div className="flex-shrink-0 h-full">
-        <AppSidebar />
-      </div>
+  // Calculate main content margin based on sidebar state
+  const getMainContentMargin = () => {
+    if (isExpanded || isHovered) {
+      return 'ml-[290px]'; // Expanded sidebar width
+    }
+    return 'ml-[90px]'; // Collapsed sidebar width
+  };
 
-      {/* Main Content Area - Full Height */}
-      <div className="flex-1 flex flex-col h-full overflow-hidden">
-        {/* Header - Positioned next to sidebar */}
+  return (
+    <div className="h-screen bg-gray-50 dark:bg-gray-900">
+      {/* Sidebar - Fixed Position Full Height */}
+      <AppSidebar />
+
+      {/* Main Content Area - Responsive to sidebar */}
+      <div className={`transition-all duration-300 ease-in-out ${getMainContentMargin()} flex flex-col h-full`}>
+        {/* Header */}
         <div className="flex-shrink-0">
           <AppHeader />
         </div>
 
-        {/* Page Content - Takes remaining height */}
+        {/* Page Content */}
         <main className="flex-1 overflow-auto">
           <div className="p-4 mx-auto max-w-7xl md:p-6">{children}</div>
         </main>

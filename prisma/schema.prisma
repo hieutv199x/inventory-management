@@ -21,6 +21,11 @@ model User {
   createdBy String?   @db.ObjectId
   creator   User?     @relation("UserCreator", fields: [createdBy], references: [id], onDelete: NoAction, onUpdate: NoAction)
   createdUsers User[] @relation("UserCreator")
+  
+  // Bank relations
+  uploadedBanks BankAccount[] @relation("BankUploader")
+  assignedBanks BankAccount[] @relation("BankAssignee")
+  bankHistoryActions BankHistory[]
 }
 
 enum UserRole {
@@ -81,6 +86,10 @@ model ShopAuthorization {
   // Liên kết tới ứng dụng đã ủy quyền cho shop này
   appId String    @db.ObjectId
   app   TikTokApp @relation(fields: [appId], references: [id], onDelete: Cascade)
+  
+  // Bank relations
+  bankAccounts BankAccount[]
+  
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -230,5 +239,52 @@ model Inventory {
   warehouseId String
   sku        Sku     @relation(fields: [skuId], references: [id])
   @@unique([skuId, warehouseId])
+}
+
+model BankAccount {
+  id            String     @id @default(auto()) @map("_id") @db.ObjectId
+  accountNumber String
+  routingNumber String
+  swiftCode     String
+  bankName      String
+  accountHolder String
+  status        BankStatus @default(UNUSED)
+  uploadDate    DateTime   @default(now())
+  setupDate     DateTime?
+  
+  // Relations
+  uploaderId    String @db.ObjectId
+  uploader      User   @relation("BankUploader", fields: [uploaderId], references: [id])
+  
+  assigneeId    String? @db.ObjectId
+  assignee      User?   @relation("BankAssignee", fields: [assigneeId], references: [id])
+  
+  shopId        String? @db.ObjectId
+  shop          ShopAuthorization? @relation(fields: [shopId], references: [id])
+  
+  historyActions BankHistory[]
+
+  @@map("bank_accounts")
+}
+
+model BankHistory {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  action    String
+  details   String
+  timestamp DateTime @default(now())
+  
+  // Relations
+  userId    String @db.ObjectId
+  user      User   @relation(fields: [userId], references: [id])
+  
+  bankId    String? @db.ObjectId
+  bank      BankAccount? @relation(fields: [bankId], references: [id])
+
+  @@map("bank_history")
+}
+
+enum BankStatus {
+  USED
+  UNUSED
 }
 

@@ -93,7 +93,7 @@ export default function BankManagementPage() {
             onClick={() => setShowHistoryModal(true)}
             className="flex items-center gap-2"
           >
-            <TimeIcon className="w-4 h-4" />
+            <TimeIcon className="w-5 h-5" />
             Lịch sử hành động
           </Button>
         </div>

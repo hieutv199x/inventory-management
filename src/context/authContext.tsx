@@ -128,22 +128,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [user]);
 
   const login = async (email: string, password: string) => {
-    // Mock authentication - replace with actual API call
-    const mockUser: User = {
-      id: '1',
-      email,
-      name: email.split('@')[0],
-      role: email.includes('admin') ? 'ADMIN' : 
-            email.includes('manager') ? 'MANAGER' :
-            email.includes('accountant') ? 'ACCOUNTANT' : 
-            email.includes('resource') ? 'RESOURCE' : 'SELLER'
-    };
+    try {
+      const response = await axiosInstance.post("/auth/login", {
+        email,
+        password
+      });
 
-    // Store in localStorage (replace with proper token handling)
-    localStorage.setItem('auth_token', 'mock_token');
-    localStorage.setItem('user_data', JSON.stringify(mockUser));
-    
-    setUser(mockUser);
+      const { token, user } = response.data;
+      
+      // Store authentication data
+      storeAuthData(token, user);
+      setUser(user);
+    } catch (error) {
+      console.error("Login failed:", error);
+      // Check if it's an axios error with response data
+      if (error && typeof error === 'object' && 'response' in error) {
+        const axiosError = error as { response?: { data?: { message?: string } } };
+        const errorMessage = axiosError.response?.data?.message || 'Login failed';
+        throw new Error(errorMessage);
+      }
+      throw new Error('Network error occurred');
+    }
   };
 
   const logout = () => {
