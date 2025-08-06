@@ -52,6 +52,11 @@ import ChatIcon from "./chat.svg";
 import MoreDotIcon from "./more-dot.svg";
 import BellIcon from "./bell.svg";
 import ConnectIcon from "./cached.svg";
+import DashboardIcon from "./dashboard.svg";
+import BankIcon from "./bank.svg";
+import ShopIcon from "./shop.svg";
+import SettingsIcon from "./settings.svg";
+import LogoutIcon from "./logout.svg";
 
 export {
   DownloadIcon,
@@ -108,4 +113,9 @@ export {
   ChevronUpIcon,
   ChatIcon,
   ConnectIcon,
+  DashboardIcon,
+  BankIcon,
+  ShopIcon,
+  SettingsIcon,
+  LogoutIcon,
 };

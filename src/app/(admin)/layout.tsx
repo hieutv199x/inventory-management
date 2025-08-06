@@ -1,57 +1,53 @@
 "use client";
 
-import { useSidebar } from "@/context/SidebarContext";
+import React from "react";
 import { useAuth } from "@/context/authContext";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
-import AppHeader from "@/layout/AppHeader";
 import AppSidebar from "@/layout/AppSidebar";
-import Backdrop from "@/layout/Backdrop";
-import React from "react";
+import AppHeader from "@/layout/AppHeader";
+import Loading from "@/components/Loading";
 
-export default function AdminLayout({
-  children,
-}: {
+interface AdminLayoutProps {
   children: React.ReactNode;
-}) {
-  const { isExpanded, isHovered, isMobileOpen } = useSidebar();
-  const { isLoggedIn, user } = useAuth();
+}
+
+export default function AdminLayout({ children }: AdminLayoutProps) {
+  const { user, isLoading } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
-    if (!isLoggedIn) {
-      router.push("/auth/login");
+    if (!isLoading && !user) {
+      router.push("/signin");
     }
-  }, [isLoggedIn, router]);
+  }, [user, isLoading, router]);
 
-  if (!isLoggedIn) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-lg">Loading...</div>
-      </div>
-    );
+  if (isLoading) {
+    return <Loading />;
   }
 
-  // Dynamic class for main content margin based on sidebar state
-  const mainContentMargin = isMobileOpen
-    ? "ml-0"
-    : isExpanded || isHovered
-    ? "lg:ml-[290px]"
-    : "lg:ml-[90px]";
+  if (!user) {
+    return null;
+  }
 
   return (
-    <div className="min-h-screen xl:flex">
-      {/* Sidebar and Backdrop */}
-      <AppSidebar />
-      <Backdrop />
-      {/* Main Content Area */}
-      <div
-        className={`flex-1 transition-all  duration-300 ease-in-out ${mainContentMargin}`}
-      >
-        {/* Header */}
-        <AppHeader />
-        {/* Page Content */}
-        <div className="p-4 mx-auto max-w-(--breakpoint-2xl) md:p-6">{children}</div>
+    <div className="h-screen flex bg-gray-50 dark:bg-gray-900">
+      {/* Sidebar - Full Height */}
+      <div className="flex-shrink-0 h-full">
+        <AppSidebar />
+      </div>
+
+      {/* Main Content Area - Full Height */}
+      <div className="flex-1 flex flex-col h-full overflow-hidden">
+        {/* Header - Positioned next to sidebar */}
+        <div className="flex-shrink-0">
+          <AppHeader />
+        </div>
+
+        {/* Page Content - Takes remaining height */}
+        <main className="flex-1 overflow-auto">
+          <div className="p-4 mx-auto max-w-7xl md:p-6">{children}</div>
+        </main>
       </div>
     </div>
   );

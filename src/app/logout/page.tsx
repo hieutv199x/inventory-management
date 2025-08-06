@@ -25,7 +25,7 @@ const LogoutPage = () => {
       setCountdown((prev) => {
         if (prev <= 1) {
           clearInterval(countdownInterval);
-          router.push('/login');
+          router.push('/signin');
           return 0;
         }
         return prev - 1;

@@ -4,20 +4,16 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useSidebar } from "../context/SidebarContext";
-import { isTokenExpired, getToken, isAuthenticated } from "../utils/auth";
 import {
   BoxCubeIcon,
   CalenderIcon,
   ChevronDownIcon,
   GridIcon,
   HorizontaLDots,
-  ListIcon,
-  PageIcon,
   PieChartIcon,
   PlugInIcon,
-  TableIcon,
   UserCircleIcon,
-  ConnectIcon,
+  BankIcon,
 } from "../icons/index";
 
 type NavItem = {
@@ -27,44 +23,8 @@ type NavItem = {
   subItems?: { name: string; path: string; pro?: boolean; new?: boolean }[];
 };
 
-const bankManagementItems: NavItem[] = [
-  {
-    icon: <PlugInIcon />,
-    name: "Connect Shops",
-    path: "/shops"
-  },
-  {
-    icon: <PieChartIcon />,
-    name: "Financial Reports",
-    subItems: [
-      { name: "Revenue Reports", path: "/financial/revenue", pro: false },
-      { name: "Transaction History", path: "/financial/transactions", pro: false }
-    ],
-  },
-];
-
-const accountManagementItems: NavItem[] = [
-  {
-    icon: <UserCircleIcon />,
-    name: "User Profile",
-    path: "/profile",
-  },
-  {
-    icon: <UserCircleIcon />,
-    name: "User Management",
-    path: "/users",
-  },
-  {
-    name: "Authentication",
-    icon: <PlugInIcon />,
-    subItems: [
-      { name: "Sign In", path: "/signin", pro: false },
-      { name: "Sign Up", path: "/signup", pro: false },
-    ],
-  },
-];
-
-const productManagementItems: NavItem[] = [
+// Sản phẩm (Products) Group
+const productItems: NavItem[] = [
   {
     icon: <GridIcon />,
     name: "Dashboard",
@@ -86,15 +46,38 @@ const productManagementItems: NavItem[] = [
     icon: <CalenderIcon />,
     name: "Calendar",
     path: "/calendar",
+  }
+];
+
+// Tài chính (Finance) Group
+const financeItems: NavItem[] = [
+  {
+    icon: <BankIcon />,
+    name: "Quản lý Bank",
+    path: "/bank"
   },
   {
-    name: "Reports",
-    icon: <TableIcon />,
+    icon: <PlugInIcon />,
+    name: "Connect Shops",
+    path: "/shops"
+  },
+  {
+    icon: <PieChartIcon />,
+    name: "Financial Reports",
     subItems: [
-      { name: "Sales Reports", path: "/reports/sales", pro: false },
-      { name: "Product Analytics", path: "/reports/products", pro: false }
+      { name: "Revenue Reports", path: "/financial/revenue", pro: false },
+      { name: "Transaction History", path: "/financial/transactions", pro: false }
     ],
   },
+];
+
+// Tài khoản (Accounts) Group
+const accountItems: NavItem[] = [
+  {
+    icon: <UserCircleIcon />,
+    name: "User Management",
+    path: "/users",
+  }
 ];
 
 const AppSidebar: React.FC = () => {
@@ -117,39 +100,20 @@ const AppSidebar: React.FC = () => {
       return;
     }
 
-    const checkTokenExpiration = () => {
-      try {
-        if (!isAuthenticated()) {
-          console.log('Token expired or missing, redirecting to logout');
-          router.push('/logout');
-        }
-      } catch (error) {
-        console.error('Error checking authentication:', error);
-        // Don't redirect on error, just log it
-      }
-    };
-
     // Only check once during initial load
     if (isInitialLoad && !hasCheckedAuth) {
       const timer = setTimeout(() => {
         setIsInitialLoad(false);
         setHasCheckedAuth(true);
-        checkTokenExpiration();
       }, 1000);
 
       return () => clearTimeout(timer);
-    }
-
-    // Set up periodic check (less frequent - every 10 minutes)
-    if (!isInitialLoad && hasCheckedAuth) {
-      const tokenCheckInterval = setInterval(checkTokenExpiration, 10 * 60 * 1000);
-      return () => clearInterval(tokenCheckInterval);
     }
   }, [router, pathname, isPublicRoute, isInitialLoad, hasCheckedAuth]);
 
   const renderMenuItems = (
     navItems: NavItem[],
-    menuType: "main" | "accounts"
+    menuType: "product" | "finance" | "account"
   ) => (
     <ul className="flex flex-col gap-4">
       {navItems.map((nav, index) => (
@@ -274,7 +238,7 @@ const AppSidebar: React.FC = () => {
   );
 
   const [openSubmenu, setOpenSubmenu] = useState<{
-    type: "main" | "accounts";
+    type: "product" | "finance" | "account";
     index: number;
   } | null>(null);
   const [subMenuHeight, setSubMenuHeight] = useState<Record<string, number>>(
@@ -288,16 +252,16 @@ const AppSidebar: React.FC = () => {
   useEffect(() => {
     // Check if the current path matches any submenu item
     let submenuMatched = false;
-    ["bank", "account", "product"].forEach((menuType) => {
-      const items = menuType === "bank" ? bankManagementItems : 
-                   menuType === "account" ? accountManagementItems : 
-                   productManagementItems;
+    ["product", "finance", "account"].forEach((menuType) => {
+      const items = menuType === "product" ? productItems : 
+                   menuType === "finance" ? financeItems : 
+                   accountItems;
       items.forEach((nav, index) => {
         if (nav.subItems) {
           nav.subItems.forEach((subItem) => {
             if (isActive(subItem.path)) {
               setOpenSubmenu({
-                type: menuType as "main" | "accounts",
+                type: menuType as "product" | "finance" | "account",
                 index,
               });
               submenuMatched = true;
@@ -326,7 +290,7 @@ const AppSidebar: React.FC = () => {
     }
   }, [openSubmenu]);
 
-  const handleSubmenuToggle = (index: number, menuType: "main" | "accounts") => {
+  const handleSubmenuToggle = (index: number, menuType: "product" | "finance" | "account") => {
     setOpenSubmenu((prevOpenSubmenu) => {
       if (
         prevOpenSubmenu &&
@@ -399,12 +363,12 @@ const AppSidebar: React.FC = () => {
                 }`}
               >
                 {isExpanded || isHovered || isMobileOpen ? (
-                  "Bank Management"
+                  "Sản phẩm"
                 ) : (
                   <HorizontaLDots />
                 )}
               </h2>
-              {renderMenuItems(bankManagementItems, "main")}
+              {renderMenuItems(productItems, "product")}
             </div>
 
             <div>
@@ -416,12 +380,12 @@ const AppSidebar: React.FC = () => {
                 }`}
               >
                 {isExpanded || isHovered || isMobileOpen ? (
-                  "Account Management"
+                  "Tài chính"
                 ) : (
                   <HorizontaLDots />
                 )}
               </h2>
-              {renderMenuItems(accountManagementItems, "accounts")}
+              {renderMenuItems(financeItems, "finance")}
             </div>
 
             <div>
@@ -433,12 +397,12 @@ const AppSidebar: React.FC = () => {
                 }`}
               >
                 {isExpanded || isHovered || isMobileOpen ? (
-                  "Product Management"
+                  "Tài khoản"
                 ) : (
                   <HorizontaLDots />
                 )}
               </h2>
-              {renderMenuItems(productManagementItems, "accounts")}
+              {renderMenuItems(accountItems, "account")}
             </div>
           </div>
         </nav>
