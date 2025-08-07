@@ -54,7 +54,10 @@ const financeItems: NavItem[] = [
   {
     icon: <BankIcon />,
     name: "Quản lý Bank",
-    path: "/bank"
+    subItems: [
+      { name: "Bank Management", path: "/bank", pro: false },
+      { name: "Statement Management", path: "/statement", pro: false }
+    ],
   },
   {
     icon: <PlugInIcon />,
@@ -89,7 +92,7 @@ const AppSidebar: React.FC = () => {
 
   // Public routes that don't require authentication
   const publicRoutes = ['/signin', '/signup', '/logout'];
-  const isPublicRoute = publicRoutes.includes(pathname);
+  const isPublicRoute = publicRoutes.includes(pathname!);
 
   // Token validation effect
   useEffect(() => {

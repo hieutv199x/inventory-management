@@ -91,6 +91,7 @@ model ShopAuthorization {
   bankAccounts BankAccount[]
   
   payments     TikTokPayment[]
+  statements   TikTokStatement[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -320,4 +321,28 @@ model TikTokPayment {
 
   createdAt                      DateTime @default(now())
   updatedAt                      DateTime @updatedAt
+}
+
+model TikTokStatement {
+  id                    String   @id @default(auto()) @map("_id") @db.ObjectId
+
+  statementId           String   @unique 
+  statementTime         Int
+
+  settlementAmount      String?
+  currency              String?
+  revenueAmount         String?
+  feeAmount             String?
+  adjustmentAmount      String?
+  paymentStatus         String?
+  paymentId             String?
+  netSalesAmount        String?
+  shippingCostAmount    String?
+
+  // Liên kết shop
+  shopId                String
+  shop                  ShopAuthorization @relation(fields: [shopId], references: [shopId])
+
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 }

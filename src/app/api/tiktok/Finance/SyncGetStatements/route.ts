@@ -6,7 +6,6 @@ const prisma = new PrismaClient();
 
 export async function GET() {
     try {
-
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 
@@ -18,13 +17,14 @@ export async function GET() {
         const statementTimeLt = Math.floor(today.getTime() / 1000);
 
         // Lấy thông tin shop và app
-         const shops = await prisma.shopAuthorization.findMany({
+        const shops = await prisma.shopAuthorization.findMany({
             include: {
-            app: true,
+                app: true,
             },
         });
 
-        
+
+
         for (const shop of shops) {
             try {
                 const credentials = {
@@ -54,7 +54,7 @@ export async function GET() {
                     credentials.accessToken,
                     "application/json",
                     statementTimeLt,
-                    "",
+                    "PAID",
                     50,
                     "",
                     "ASC",
@@ -62,12 +62,27 @@ export async function GET() {
                     credentials.shopCipher
                 );
                 console.log('response: ', JSON.stringify(result, null, 2));
+                // Lưu dữ liệu vào DB
+                if (result?.body.data?.statements && Array.isArray(result.body.data.statements)) {
+                    for (const statement of result.body.data.statements) {
+                        await prisma.tikTokStatement.upsert({
+                            where: { statementId: statement.id }, // Giả sử có trường statement_id
+                            update: { ...statement, shopId: shop.shopId },
+                            create: { 
+                                ...statement, 
+                                shopId: shop.shopId, 
+                                statementId: statement.id!, 
+                                statementTime: statement.statementTime ?? 0 
+                            },
+                        });
+                    }
+                }
             }
             catch (error) {
                 console.error(`Error processing shop ${shop.shopId}:`, error);
             }
         }
-
+        return new Response(null, { status: 204 });
     } catch (err: unknown) {
         console.error("Error syncing TikTok statements:", err);
         return NextResponse.json(
