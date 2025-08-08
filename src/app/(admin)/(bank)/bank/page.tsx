@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from 'react';
+import React, {useEffect, useState } from 'react';
 import Button from "@/components/ui/button/Button";
 import { EyeIcon, TrashBinIcon, TimeIcon, ArrowUpIcon, EnvelopeIcon } from "@/icons";
 import ImportBankModal from "@/components/bank/ImportBankModal";
@@ -8,6 +8,7 @@ import ConfirmDeleteModal from '@/components/ui/modal/ConfirmDeleteModal';
 import HistoryModal from '@/components/bank/HistoryModal';
 import BankDetailsModal from '@/components/bank/BankDetailsModal';
 import { useAuth } from '@/context/authContext';
+import axiosInstance from "@/utils/axiosInstance";
 
 interface BankAccount {
   id: string;
@@ -46,24 +47,55 @@ export default function BankManagementPage() {
     bank.swiftCode.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const handleImportSuccess = (importedBanks: BankAccount[]) => {
-    setBanks(prev => [...prev, ...importedBanks]);
-    setShowImportModal(false);
+  const handleImportSuccess = async (importedBanks: BankAccount[]) => {
+    try {
+      await axiosInstance.post("/banks",{
+        banks: importedBanks,
+      });
+      getBanks();
+      setShowImportModal(false);
+    } catch (error) {
+      console.error("Import failed:", error);
+      // Optional: show toast or error state
+    }
   };
 
-  const handleShopAssign = (bankId: string, shopName: string) => {
-    setBanks(prev => prev.map(bank => 
-      bank.id === bankId 
-        ? { ...bank, shop: shopName, status: 'used', setupDate: new Date().toISOString() }
-        : bank
-    ));
+
+  const handleShopAssign = async  (bankId: string, shopId: string) => {
+     await axiosInstance.put(`/banks/${bankId}`, {
+      shopId: shopId,
+    });
+    getBanks();
     setShowShopModal(false);
   };
 
-  const handleDelete = (bankId: string) => {
-    setBanks(prev => prev.filter(bank => bank.id !== bankId));
-    setShowDeleteModal(false);
+  const handleDelete = async (bankId: string) => {
+    try {
+      await axiosInstance.delete(`/banks/${bankId}`);
+      //toast.success("Bank deleted successfully!");
+      // Optional: refetch banks or update state
+      getBanks();
+    } catch (error) {
+      //toast.error("Failed to delete bank");
+      console.error("Delete error:", error);
+    } finally {
+      setShowDeleteModal(false);
+    }
   };
+
+  const getBanks = async () => {
+    try {
+      const response = await axiosInstance.get("/banks");
+      setBanks(response.data);
+    } catch (error) {
+      console.error("Failed to fetch banks:", error);
+      // Optional: hiện toast báo lỗi
+    }
+  };
+
+  useEffect(() => {
+    getBanks();
+  }, []);
 
   return (
     <div className="p-6">
@@ -186,7 +218,7 @@ export default function BankManagementPage() {
                         className="text-blue-600 hover:text-blue-800 dark:text-blue-400"
                         title="Xem thông tin"
                       >
-                        <EyeIcon className="w-4 h-4" />
+                        <EyeIcon className="w-6 h-6" />
                       </button>
                       {bank.status === 'unused' && canAssignShop && (
                         <button
@@ -197,7 +229,7 @@ export default function BankManagementPage() {
                           className="text-green-600 hover:text-green-800 dark:text-green-400"
                           title="Set up shop"
                         >
-                          <EnvelopeIcon className="w-4 h-4" />
+                          <EnvelopeIcon className="w-6 h-6" />
                         </button>
                       )}
                       {canDelete && (
@@ -209,7 +241,7 @@ export default function BankManagementPage() {
                           className="text-red-600 hover:text-red-800 dark:text-red-400"
                           title="Xóa"
                         >
-                          <TrashBinIcon className="w-4 h-4" />
+                          <TrashBinIcon className="w-6 h-6" />
                         </button>
                       )}
                     </div>

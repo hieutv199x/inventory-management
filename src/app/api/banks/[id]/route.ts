@@ -23,19 +23,19 @@ export async function PUT(
     const decoded = verifyToken(request);
     
     // Only ADMIN and ACCOUNTANT can assign shops
-    if (!['ADMIN', 'ACCOUNTANT'].includes(decoded.role)) {
-      return NextResponse.json(
-        { message: 'Insufficient permissions' },
-        { status: 403 }
-      );
-    }
+    // if (!['ADMIN', 'ACCOUNTANT'].includes(decoded.role)) {
+    //   return NextResponse.json(
+    //     { message: 'Insufficient permissions' },
+    //     { status: 403 }
+    //   );
+    // }
 
-    const { shopName } = await request.json();
+    const { shopId } = await request.json();
     
     // Find shop by name in ShopAuthorization
     const shop = await prisma.shopAuthorization.findFirst({
-      where: { 
-        shopName: shopName,
+      where: {
+        shopId: shopId,
         status: 'ACTIVE'
       }
     });
@@ -59,6 +59,13 @@ export async function PUT(
       );
     }
 
+    if (!['ADMIN', 'ACCOUNTANT'].includes(user.role)) {
+      return NextResponse.json(
+          { message: 'Insufficient permissions' },
+          { status: 403 }
+      );
+    }
+
     // Update bank account
     const updatedBank = await prisma.bankAccount.update({
       where: { id: params.id },
@@ -79,7 +86,7 @@ export async function PUT(
     await prisma.bankHistory.create({
       data: {
         action: 'Assign shop',
-        details: `Assigned ${shopName} to account ${updatedBank.accountNumber}`,
+        details: `Assigned ${updatedBank.shop?.shopName} to account ${updatedBank.accountNumber}`,
         userId: user.id,
         bankId: updatedBank.id
       }
@@ -119,10 +126,27 @@ export async function DELETE(
     const decoded = verifyToken(request);
     
     // Only ADMIN can delete banks
-    if (decoded.role !== 'ADMIN') {
+    // if (decoded.role !== 'ADMIN') {
+    //   return NextResponse.json(
+    //     { message: 'Only admins can delete banks' },
+    //     { status: 403 }
+    //   );
+    // }
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.userId }
+    });
+
+    if (!user) {
       return NextResponse.json(
-        { message: 'Only admins can delete banks' },
-        { status: 403 }
+          { message: 'User not found' },
+          { status: 404 }
+      );
+    }
+
+    if (!['ADMIN'].includes(user.role)) {
+      return NextResponse.json(
+          { message: 'Insufficient permissions' },
+          { status: 403 }
       );
     }
 

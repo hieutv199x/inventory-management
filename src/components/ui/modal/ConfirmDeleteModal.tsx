@@ -2,6 +2,7 @@
 import React from 'react';
 import Button from "@/components/ui/button/Button";
 import { CloseLineIcon, AlertIcon } from "@/icons";
+import { Modal } from "../modal";
 
 interface ConfirmDeleteModalProps {
   isOpen: boolean;
@@ -21,20 +22,13 @@ export default function ConfirmDeleteModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md mx-4">
-        <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-600">
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+      <Modal
+          isOpen={isOpen}
+          onClose={onClose} className="max-w-md p-6" >
+      <div >
+        <h4 className="mb-6 text-lg font-medium text-gray-800 dark:text-white/90">
             {title}
-          </h2>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-          >
-            <CloseLineIcon className="w-6 h-6" />
-          </button>
-        </div>
-
+        </h4>
         <div className="p-6">
           <div className="flex items-center gap-4 mb-6">
             <div className="flex-shrink-0">
@@ -64,6 +58,6 @@ export default function ConfirmDeleteModal({
           </div>
         </div>
       </div>
-    </div>
+      </Modal>
   );
 }

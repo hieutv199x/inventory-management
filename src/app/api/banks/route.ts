@@ -20,10 +20,23 @@ export async function GET(request: NextRequest) {
     const decoded = verifyToken(request);
     
     // Check permissions - only ADMIN and ACCOUNTANT can view banks
-    if (!['ADMIN', 'ACCOUNTANT'].includes(decoded.role)) {
+
+
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.userId }
+    });
+
+    if (!user) {
       return NextResponse.json(
-        { message: 'Insufficient permissions' },
-        { status: 403 }
+          { message: 'User not found' },
+          { status: 404 }
+      );
+    }
+
+    if (!['ADMIN', 'ACCOUNTANT'].includes(user.role)) {
+      return NextResponse.json(
+          { message: 'Insufficient permissions' },
+          { status: 403 }
       );
     }
 
@@ -75,12 +88,12 @@ export async function POST(request: NextRequest) {
     const decoded = verifyToken(request);
     
     // Only ADMIN can import banks
-    if (decoded.role !== 'ADMIN') {
-      return NextResponse.json(
-        { message: 'Only admins can import banks' },
-        { status: 403 }
-      );
-    }
+    // if (decoded.role !== 'ADMIN') {
+    //   return NextResponse.json(
+    //     { message: 'Only admins can import banks' },
+    //     { status: 403 }
+    //   );
+    // }
 
     const { banks } = await request.json();
     
@@ -95,6 +108,13 @@ export async function POST(request: NextRequest) {
         { status: 404 }
       );
     }
+
+    if (user.role != 'ADMIN') {
+        return NextResponse.json(
+          { message: 'Only admins can import banks' },
+          { status: 403 }
+        );
+      }
 
     // Create bank accounts in database
     const createdBanks = await Promise.all(

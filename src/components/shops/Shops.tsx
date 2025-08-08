@@ -13,7 +13,6 @@ import {
   import Label from "../form/Label";
 import Input from "../form/input/InputField";
   import { useModal } from "@/hooks/useModal";
-  import ComponentCard from "../common/ComponentCard";
   import Select from "../form/Select";
   import { ChevronDownIcon } from "@/icons";
 
