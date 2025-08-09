@@ -1,35 +1,31 @@
 import { NextRequest, NextResponse } from "next/server";
-import jwt from "jsonwebtoken";
-
-const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key";
+import { validateToken } from "@/lib/auth-middleware";
 
 export async function GET(request: NextRequest) {
   try {
-    const authHeader = request.headers.get("Authorization");
-    const token = authHeader?.replace("Bearer ", "");
-
-    if (!token) {
+    // Validate token and get user
+    const authResult = await validateToken(request);
+    if (authResult.error) {
       return NextResponse.json(
-        { message: "Authentication required" },
-        { status: 401 }
+        { error: authResult.error },
+        { status: authResult.status }
       );
     }
 
-    const decoded = jwt.verify(token, JWT_SECRET) as any;
+    const { user } = authResult;
 
-    // Mock user data - replace with database query
-    const user = {
-      id: decoded.userId,
-      email: decoded.email,
-      name: decoded.email.split("@")[0],
-      role: decoded.role,
-    };
-
-    return NextResponse.json(user);
+    return NextResponse.json({
+      user: {
+        id: user!.id,
+        email: user!.email,
+        name: user!.name,
+        role: user!.role,
+      },
+    });
   } catch (error) {
     console.error("Auth verification error:", error);
     return NextResponse.json(
-      { message: "Invalid token" },
+      { error: "Authentication failed" },
       { status: 401 }
     );
   }

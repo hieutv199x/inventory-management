@@ -81,26 +81,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         
         if (storedAuth) {
           if (isSessionExpired(storedAuth.expiry)) {
-            // Session expired, clear data
-            clearStoredAuthData();
-            httpClient.clearAuthToken();
+            // Session expired, clear data and redirect to login
+            console.log('Session expired, redirecting to login');
+            clearAuthData();
+            router.push('/signin');
           } else {
             // Set token in HTTP client and restore user
             httpClient.setAuthToken(storedAuth.token);
             setUser(storedAuth.user);
+            
+            // Verify token with server
+            try {
+              const data = await httpClient.get('/auth/me');
+              if (data.user) {
+                setUser(data.user);
+              } else {
+                throw new Error('Invalid token');
+              }
+            } catch (error) {
+              console.error('Token verification failed:', error);
+              clearAuthData();
+              router.push('/signin');
+            }
           }
         }
       } catch (error) {
         console.error("Auth check failed:", error);
-        clearStoredAuthData();
-        httpClient.clearAuthToken();
+        clearAuthData();
+        router.push('/signin');
       } finally {
         setIsLoading(false);
       }
     };
 
     checkAuth();
-  }, []);
+  }, [router]);
 
   // Auto-refresh session when it's close to expiring
   useEffect(() => {
@@ -108,18 +123,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const checkAndRefreshSession = async () => {
       const storedAuth = getStoredAuthData();
-      if (storedAuth && isSessionExpiringSoon(storedAuth.expiry, 15)) { // 15 minutes before expiry
-        try {
-          console.log("Auto-refreshing session...");
-          const data = await httpClient.get("/auth/me");
-          const refreshedUser = data.user;
-          storeAuthData(storedAuth.token, refreshedUser);
-          setUser(refreshedUser);
-          console.log("Session auto-refreshed successfully");
-        } catch (error) {
-          console.error("Failed to auto-refresh session:", error);
-          // Session is invalid, logout
-          clearAuthData();
+      if (storedAuth) {
+        if (isSessionExpired(storedAuth.expiry)) {
+          console.log("Session expired, logging out");
+          logout();
+          return;
+        }
+        
+        if (isSessionExpiringSoon(storedAuth.expiry, 15)) { // 15 minutes before expiry
+          try {
+            console.log("Auto-refreshing session...");
+            const data = await httpClient.get("/auth/me");
+            const refreshedUser = data.user;
+            storeAuthData(storedAuth.token, refreshedUser);
+            setUser(refreshedUser);
+            console.log("Session auto-refreshed successfully");
+          } catch (error) {
+            console.error("Failed to auto-refresh session:", error);
+            logout();
+          }
         }
       }
     };
@@ -141,7 +163,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       httpClient.setAuthToken(data.token);
       
       setUser(data.user);
-      router.push('/dashboard');
+      router.push('/');
     } catch (error) {
       console.error('Login error:', error);
       throw error;

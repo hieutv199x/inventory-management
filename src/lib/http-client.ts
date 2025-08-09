@@ -76,13 +76,15 @@ class HttpClient {
       if (!response.ok) {
         // Handle authentication errors
         if (response.status === 401) {
-          // Clear token and redirect to login
+          // Clear token
+          this.clearAuthToken();
+          
+          // Redirect to login page
           if (typeof window !== 'undefined') {
-            localStorage.removeItem('token');
-            localStorage.removeItem('authToken');
-            // Use Next.js router instead of direct window.location
-            const { redirect } = await import('next/navigation');
-            redirect('/signin');
+            // Check if we're not already on the login page to avoid infinite redirects
+            if (!window.location.pathname.includes('/signin')) {
+              window.location.href = '/signin';
+            }
           }
         }
 

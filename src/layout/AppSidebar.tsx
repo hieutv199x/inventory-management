@@ -16,7 +16,7 @@ import {
   GroupIcon,
   SettingsIcon,
 } from "../icons/index";
-import { FaUsersCog } from "react-icons/fa";
+import { FaMoneyCheckAlt, FaUsersCog } from "react-icons/fa";
 
 type NavItem = {
   name: string;
@@ -27,65 +27,50 @@ type NavItem = {
 
 // Sản phẩm (Products) Group
 const productItems: NavItem[] = [
-  {
-    icon: <GridIcon />,
-    name: "Dashboard",
-    subItems: [
-      { name: "Overview", path: "/dashboard", pro: false },
-      { name: "Product Management", path: "/products", pro: false },
-      { name: "Order Management", path: "/", pro: false }
-    ],
-  },
-  {
-    icon: <BoxCubeIcon />,
-    name: "Inventory",
-    subItems: [
-      { name: "Stock Overview", path: "/inventory", pro: false },
-      { name: "Warehouse Management", path: "/warehouse", pro: false }
-    ],
-  },
+  
+  // {
+  //   icon: <BoxCubeIcon />,
+  //   name: "Inventory",
+  //   subItems: [
+  //     { name: "Stock Overview", path: "/inventory", pro: false },
+  //     { name: "Warehouse Management", path: "/warehouse", pro: false }
+  //   ],
+  // },
   {
     icon: <CalenderIcon />,
-    name: "Calendar",
+    name: "Lịch",
     path: "/calendar",
   }
 ];
 
 // Tài chính (Finance) Group
 const financeItems: NavItem[] = [
-  {
-    icon: <BankIcon />,
-    name: "Quản lý Bank",
-    subItems: [
-      { name: "Bank Management", path: "/bank", pro: false },
-      { name: "Statement Management", path: "/statement", pro: false }
-    ],
+  {icon: <BankIcon />, 
+    name: "Quản lý bank", 
+    path: "/bank" 
+  },
+  { 
+    icon: <FaMoneyCheckAlt size={24}/>, 
+    name: "Tiền về", 
+    path: "/statement"
   },
   {
     icon: <PlugInIcon />,
-    name: "Connect Shops",
+    name: "Kết nối Shop",
     path: "/shops"
-  },
-  {
-    icon: <PieChartIcon />,
-    name: "Financial Reports",
-    subItems: [
-      { name: "Revenue Reports", path: "/financial/revenue", pro: false },
-      { name: "Transaction History", path: "/financial/transactions", pro: false }
-    ],
-  },
+  }
 ];
 
 // Tài khoản (Accounts) Group
 const accountItems: NavItem[] = [
   {
     icon: <GroupIcon />,
-    name: "User Management",
+    name: "Quản lý user",
     path: "/user-roles"
   },
   {
     icon: <FaUsersCog size={24}/>,
-    name: "Shop Permissions",
+    name: "Quản lý phân quyền shop",
     path: "/permissions"
   }
 ];
@@ -335,29 +320,13 @@ const AppSidebar: React.FC = () => {
       >
         <Link href="/">
           {isExpanded || isHovered || isMobileOpen ? (
-            <>
-              <Image
-                className="dark:hidden"
-                src="/images/logo/logo.svg"
-                alt="Logo"
-                width={150}
-                height={40}
-              />
-              <Image
-                className="hidden dark:block"
-                src="/images/logo/logo-dark.svg"
-                alt="Logo"
-                width={150}
-                height={40}
-              />
-            </>
+            <div className="text-2xl font-bold text-brand-500 dark:text-brand-400">
+              9Connect
+            </div>
           ) : (
-            <Image
-              src="/images/logo/logo-icon.svg"
-              alt="Logo"
-              width={32}
-              height={32}
-            />
+            <div className="text-lg font-bold text-brand-500 dark:text-brand-400">
+              9C
+            </div>
           )}
         </Link>
       </div>
