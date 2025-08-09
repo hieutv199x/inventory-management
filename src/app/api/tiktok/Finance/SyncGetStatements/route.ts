@@ -1,29 +1,28 @@
-import {  NextResponse } from "next/server";
+import {NextRequest, NextResponse} from "next/server";
 import {TikTokShopNodeApiClient} from "@/nodejs_sdk";
 import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
-export async function GET() {
+export async function GET(request: NextRequest) {
     try {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
+        const { searchParams } = new URL(request.url);
+        const statementTimeGe = parseInt(searchParams.get("statementTimeGe") || "0", 10);
+        const statementTimeLt = parseInt(searchParams.get("statementTimeLt") || "0", 10);
 
-        const yesterday = new Date(today);
-        yesterday.setDate(today.getDate() - 1); 
-
-        const statementTimeGe = Math.floor(yesterday.getTime() / 1000);
-
-        const statementTimeLt = Math.floor(today.getTime() / 1000);
-
+        if (!statementTimeGe || !statementTimeLt) {
+            return NextResponse.json(
+                { error: "Missing or invalid statementTimeGe or statementTimeLt" },
+                { status: 400 }
+            );
+        }
         // Lấy thông tin shop và app
         const shops = await prisma.shopAuthorization.findMany({
+            where: { status: "ACTIVE" },
             include: {
                 app: true,
             },
         });
-
-
 
         for (const shop of shops) {
             try {

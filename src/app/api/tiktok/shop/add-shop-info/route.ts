@@ -29,6 +29,7 @@ export async function POST(req: NextRequest) {
               appName,
               appKey,
               appSecret,
+              isActive: true,
               createdAt: new Date(),
               updatedAt: new Date(),
             },

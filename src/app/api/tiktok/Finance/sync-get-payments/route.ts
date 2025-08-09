@@ -1,30 +1,27 @@
-import {  NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import {TikTokShopNodeApiClient} from "@/nodejs_sdk";
 import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
-export async function GET() {
+export async function GET(request: NextRequest) {
     try {
+        const { searchParams } = new URL(request.url);
 
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
+        const statementTimeGe = parseInt(searchParams.get("statementTimeGe") || "0", 10);
+        const statementTimeLt = parseInt(searchParams.get("statementTimeLt") || "0", 10);
 
-        const yesterday = new Date(today);
-        yesterday.setDate(today.getDate() - 1); 
+        if (!statementTimeGe || !statementTimeLt) {
+            return NextResponse.json(
+                { error: "Missing or invalid statementTimeGe or statementTimeLt" },
+                { status: 400 }
+            );
+        }
 
-        const statementTimeGe = Math.floor(yesterday.getTime() / 1000);
-
-        const statementTimeLt = Math.floor(today.getTime() / 1000);
-
-        // Lấy thông tin shop và app
-         const shops = await prisma.shopAuthorization.findMany({
-            include: {
-            app: true,
-            },
+        const shops = await prisma.shopAuthorization.findMany({
+            include: { app: true },
         });
 
-        
         for (const shop of shops) {
             try {
                 const credentials = {
@@ -55,6 +52,12 @@ export async function GET() {
 
                 for (const payment of payments) {
                     try {
+                        const existing = await prisma.tikTokPayment.findUnique({
+                            where: { paymentId: payment.id! }
+                        });
+                        if (existing) {
+                            continue; // Skip if already exists
+                        }
                         await prisma.tikTokPayment.create({
                         data: {
                             paymentId: payment.id!,

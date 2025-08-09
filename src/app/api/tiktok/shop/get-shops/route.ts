@@ -12,6 +12,9 @@ const prisma = new PrismaClient();
 export async function GET() {
     try {
         const credentials = await prisma.shopAuthorization.findMany({
+            where:{
+                status: 'ACTIVE',
+            },
             orderBy: {
                 createdAt: 'desc',
             },

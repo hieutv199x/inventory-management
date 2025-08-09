@@ -5,6 +5,7 @@ import Button from "../ui/button/Button";
 import { Table, TableBody, TableCell, TableHeader, TableRow } from "@/components/ui/table";
 import SelectShop from "@/components/common/SelectShop";
 import axiosInstance from "@/utils/axiosInstance";
+import DatePicker from "@/components/form/date-picker";
 
 interface Statement {
   statementId: string;
@@ -20,8 +21,14 @@ interface Statement {
 interface PaidHistory {
   id: string;
   amount: string;
+  shopId: string;
+  transactionId: string;
+  amount: string;
+  amount: string;
   currency: string;
-  paidTime: number;
+  createTime: number;
+  status: string;
+  bankAccount: string;
 }
 
 export const StatementBank = () => {
@@ -31,6 +38,9 @@ export const StatementBank = () => {
   const [paidHistories, setPaidHistories] = useState<PaidHistory[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [startDate, setStartDate] = useState<string>("");
+  const [endDate, setEndDate] = useState<string>("");
 
   const fetchStatements = async () => {
     if (!selectedShop) return;
@@ -62,13 +72,42 @@ export const StatementBank = () => {
   const fetchPaidHistory = async () => {
     setLoading(true);
     try {
-      const res = await axiosInstance.get(`/tiktok/paid-history`);
+      const res = await axiosInstance.get(`/Payments/?shop_id=${selectedShop}`);
       setPaidHistories(res.data || []);
     } catch (error) {
       console.error("Failed to fetch paid history:", error);
 
     }
     setLoading(false);
+  };
+
+
+  const handlePaymentSync = async () => {
+    if (startDate && endDate) {
+      const statementTimeGe = Math.floor(new Date(startDate).getTime() / 1000);
+      const statementTimeLt = Math.floor(new Date(endDate).getTime() / 1000);
+      try {
+        await axiosInstance.get(
+            `/tiktok/Finance/sync-get-payments?statementTimeGe=${statementTimeGe}&statementTimeLt=${statementTimeLt}`
+        );
+      } catch (err) {
+        console.error("Sync API failed", err);
+      }
+    }
+  };
+
+  const handleStatementSync = async () => {
+    if (startDate && endDate) {
+      const statementTimeGe = Math.floor(new Date(startDate).getTime() / 1000);
+      const statementTimeLt = Math.floor(new Date(endDate).getTime() / 1000);
+      try {
+        await axiosInstance.get(
+            `/tiktok/Finance/SyncGetStatements?statementTimeGe=${statementTimeGe}&statementTimeLt=${statementTimeLt}`
+        );
+      } catch (err) {
+        console.error("Sync API failed", err);
+      }
+    }
   };
 
   useEffect(() => {
@@ -92,8 +131,8 @@ export const StatementBank = () => {
       <div className="p-4 bg-white rounded shadow dark:bg-white/[0.03]">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-bold text-gray-800 dark:text-white/90">Quản lý về tiền</h2>
-          <Button onClick={() => activeTab === "shops" ? fetchStatements() : fetchPaidHistory()}>
-            Refresh
+          <Button onClick={() => activeTab === "shops" ? handleStatementSync() : handlePaymentSync()}>
+            Sync
           </Button>
         </div>
 
@@ -114,8 +153,30 @@ export const StatementBank = () => {
 
         {activeTab === "shops" && (
             <div>
-              <div className="mb-4 w-64">
-                <SelectShop onChange={(val) => setSelectedShop(val)} placeholder="All Shop" enablePlaceholder={false} />
+              <div className="mb-4 flex items-center gap-2">
+                <div className="w-48">
+                  <SelectShop onChange={(val) => setSelectedShop(val)} placeholder="All Shop" enablePlaceholder={false} />
+                </div>
+                <div className="w-40">
+                  <DatePicker
+                      id="start-date-picker"
+                      label="Start Date"
+                      placeholder="dd/MM/yyyy"
+                      value={startDate}
+                      onChange={(_, dateStr) => setStartDate(dateStr)}
+                  />
+                </div>
+                <span>-</span>
+                <div className="w-40">
+                  <DatePicker
+                      id="end-date-picker"
+                      label="End Date"
+                      value={endDate}
+                      placeholder="dd/MM/yyyy"
+                      onChange={(_, dateStr) => setEndDate(dateStr)}
+                  />
+                </div>
+
               </div>
 
 
@@ -176,18 +237,26 @@ export const StatementBank = () => {
                     <TableHeader>
                       <TableRow>
                         <TableCell>ID</TableCell>
-                        <TableCell>Ngày thanh toán</TableCell>
-                        <TableCell>Số tiền</TableCell>
+                        <TableCell>Shop ID</TableCell>
+                        <TableCell>Transaction ID</TableCell>
+                        <TableCell>Amount</TableCell>
+                        <TableCell>Currency</TableCell>
+                        <TableCell>Status</TableCell>
+                        <TableCell>Bank Account</TableCell>
+                        <TableCell>Paid Time</TableCell>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {paidHistories.map((p) => (
                           <TableRow key={p.id}>
                             <TableCell>{p.id}</TableCell>
-                            <TableCell>{formatDate(p.paidTime)}</TableCell>
-                            <TableCell>
-                              {p.amount} {p.currency}
-                            </TableCell>
+                            <TableCell>{p.shopId}</TableCell>
+                            <TableCell>{p.transactionId}</TableCell>
+                            <TableCell>{p.amount}</TableCell>
+                            <TableCell>{p.currency}</TableCell>
+                            <TableCell>{p.status}</TableCell>
+                            <TableCell>{p.bankAccount}</TableCell>
+                            <TableCell>{formatDate(p.createTime)}</TableCell>
                           </TableRow>
                       ))}
                     </TableBody>

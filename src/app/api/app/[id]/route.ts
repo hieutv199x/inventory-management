@@ -30,19 +30,17 @@ export async function PUT(
     //   );
     // }
 
-    const { shopId } = await request.json();
+    const { appSecret } = await request.json();
     
     // Find shop by name in ShopAuthorization
-    const shop = await prisma.shopAuthorization.findFirst({
-      where: {
-        shopId: shopId,
-        status: 'ACTIVE'
-      }
+    const app = await prisma.tikTokApp.findUnique({
+      where: { id: params.id }
     });
 
-    if (!shop) {
+
+    if (!app) {
       return NextResponse.json(
-        { message: 'Shop not found or inactive' },
+        { message: 'app not found or inactive' },
         { status: 404 }
       );
     }
@@ -59,65 +57,27 @@ export async function PUT(
       );
     }
 
-    if (!['ADMIN', 'ACCOUNTANT'].includes(user.role)) {
+    if (!['ADMIN'].includes(user.role)) {
       return NextResponse.json(
           { message: 'Insufficient permissions' },
           { status: 403 }
       );
     }
-
-    // Update bank account
-    const updatedBank = await prisma.bankAccount.update({
+    const updatedApp = await prisma.tikTokApp.update({
       where: { id: params.id },
-      data: {
-        shopId: shop.id,
-        assigneeId: user.id,
-        status: 'USED',
-        setupDate: new Date()
-      },
-      include: {
-        uploader: { select: { name: true } },
-        assignee: { select: { name: true } },
-        shop: { select: { shopName: true } }
-      }
+      data: { appSecret }
     });
 
-    // Log history
-    await prisma.bankHistory.create({
-      data: {
-        action: 'Assign shop',
-        details: `Assigned ${updatedBank.shop?.shopName} to account ${updatedBank.accountNumber}`,
-        userId: user.id,
-        bankId: updatedBank.id
-      }
-    });
-
-    const formattedBank = {
-      id: updatedBank.id,
-      accountNumber: updatedBank.accountNumber,
-      routingNumber: updatedBank.routingNumber,
-      swiftCode: updatedBank.swiftCode,
-      bankName: updatedBank.bankName,
-      accountHolder: updatedBank.accountHolder,
-      uploadDate: updatedBank.uploadDate.toISOString(),
-      uploader: updatedBank.uploader.name,
-      status: updatedBank.status.toLowerCase(),
-      shop: updatedBank.shop?.shopName || null,
-      setupDate: updatedBank.setupDate?.toISOString() || null,
-      assignedSeller: updatedBank.assignee?.name || null
-    };
-
-    return NextResponse.json(formattedBank);
+    return NextResponse.json(updatedApp);
 
   } catch (error) {
-    console.error('Assign bank error:', error);
+    console.error('app:', error);
     return NextResponse.json(
-      { message: 'Failed to assign bank' },
+      { message: 'Failed to app' },
       { status: 500 }
     );
   }
 }
-
 export async function DELETE(
   request: NextRequest,
   { params }: { params: { id: string } }
@@ -144,8 +104,9 @@ export async function DELETE(
       );
     }
 
-    const app = await prisma.shopAuthorization.findUnique({
-      where: { shopId: params.id }
+    // Get the bank before deletion for history
+    const app = await prisma.tikTokApp.findUnique({
+      where: { id: params.id }
     });
 
     if (!app) {
@@ -155,12 +116,18 @@ export async function DELETE(
       );
     }
 
-    await prisma.shopAuthorization.update({
-      where: { shopId: params.id },
+    // Delete bank account
+    await prisma.tikTokApp.update({
+      where: { id: params.id },
+      data: { isActive: false }
+    });
+
+    await prisma.shopAuthorization.updateMany({
+      where: { appId: params.id },
       data: { status: 'INACTIVE' }
     });
 
-    return NextResponse.json({ message: 'Shop deleted successfully' });
+    return NextResponse.json({ message: 'App deleted successfully' });
 
   } catch (error) {
     console.error('Delete bank error:', error);

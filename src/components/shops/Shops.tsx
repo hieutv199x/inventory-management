@@ -34,7 +34,17 @@ import {httpClient} from "@/lib/http-client";
     country: string;
     status: string | null;
     createdAt: string;
-  }
+  };
+
+  interface App {
+    id: string;
+  appId: string;
+  appKey: string;
+  appSecret: string | null;
+  appName: string | null;
+    createdAt: string;
+    isActive: boolean;
+};
 
   export default function Shops() {
     const { user } = useAuth();
@@ -54,9 +64,14 @@ import {httpClient} from "@/lib/http-client";
     const [appSecret, setAppSecret] = useState("");
     const canDelete = user?.role === 'ADMIN';
 
-    const [showDetailsModal, setShowDetailsModal] = useState(false);
     const [showDeleteModal, setShowDeleteModal] = useState(false);
-    const [selectedApp, setSelectedApp] = useState<Shop | null>(null);
+    const [showDeleteAppModal, setShowDeleteAppModal] = useState(false);
+    const [selectedShop, setSelectedShop] = useState<Shop | null>(null);
+    const [selectedApp, setSelectedApp] = useState<App | null>(null);
+    const [showOffCanvas, setShowOffCanvas] = useState(false);
+    const [appList, setAppList] = useState<App[]>([]);
+    const [editingAppId, setEditingAppId] = useState<string | null>(null);
+    const [editAppSecret, setEditAppSecret] = useState<string>("");
 
     const { isOpen, openModal, closeModal } = useModal();
 
@@ -91,6 +106,12 @@ import {httpClient} from "@/lib/http-client";
       fetchShops();
     }, [fetchShops]);
 
+    const handleOpenOffCanvas = async () => {
+      const res = await httpClient.get("/app");
+      setAppList(res.app || []);
+      setShowOffCanvas(true);
+    };
+
     const resetForm = () => {
       setSelectedCountry(null);
       setServiceId("");
@@ -114,9 +135,9 @@ import {httpClient} from "@/lib/http-client";
           const errorText = await res.text();
           throw new Error(`Failed to save shop: ${errorText}`);
         }
-        // closeModal();
-        // resetForm();
-        // await fetchShops();
+        closeModal();
+        resetForm();
+        await fetchShops();
       } catch (err) {
         console.error("❌ Save shop error:", err);
       }
@@ -129,7 +150,6 @@ import {httpClient} from "@/lib/http-client";
 
     const handleDelete = async (AppKey: string) => {
       try {
-        debugger;
         await axiosInstance.delete(`/shops/${AppKey}`);
         //toast.success("Bank deleted successfully!");
         // Optional: refetch banks or update state
@@ -142,6 +162,39 @@ import {httpClient} from "@/lib/http-client";
       }
     };
 
+    const handleEditAppSecret = (app: App) => {
+      setEditingAppId(app.id);
+      setEditAppSecret(app.appSecret || "");
+    };
+
+    const handleCancelEdit = () => {
+      setEditingAppId(null);
+      setEditAppSecret("");
+    };
+
+    const handleSaveAppSecret = async (Id: string) => {
+      try {
+        await httpClient.put(`/app/${Id}`, { appSecret: editAppSecret });
+        const res = await httpClient.get("/app");
+        setAppList(res.app || []);
+        setEditingAppId(null);
+        setEditAppSecret("");
+      } catch (err) {
+        console.error("Failed to update appSecret", err);
+      }
+    };
+
+    const handleDeleteApp = async (Id: string) => {
+      try {
+        await httpClient.delete(`/app/${Id}`);
+        const res = await httpClient.get("/app");
+        setAppList(res.app || []);
+        setEditingAppId(null);
+        setEditAppSecret("");
+      } catch (err) {
+        console.error("Failed to delete app", err);
+      }
+    };
 
     const getStatusBadge = (status: string | null) => {
       const lowerStatus = status?.toLowerCase();
@@ -173,6 +226,9 @@ import {httpClient} from "@/lib/http-client";
           <div className="flex items-center gap-2">
             <button onClick={openModal} className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-theme-sm font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200">
               Import App
+            </button>
+            <button onClick={() => handleOpenOffCanvas()} className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-theme-sm font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200">
+              App List
             </button>
             <button onClick={fetchShops} className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-theme-sm font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200">
               Refresh
@@ -237,30 +293,9 @@ import {httpClient} from "@/lib/http-client";
                         </TableCell>
                         <TableCell className="py-3 text-gray-500 text-theme-sm dark:text-gray-400">
                           <div className="flex items-center gap-2">
-                            {/*<button*/}
-                            {/*    className="text-blue-500 hover:text-blue-600"*/}
-                            {/*    title="View"*/}
-                            {/*    onClick={() => handleView(shop)}*/}
-                            {/*>*/}
-                            {/*  /!* icon view *!/*/}
-                            {/*  <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">*/}
-                            {/*    <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12Z" />*/}
-                            {/*    <circle cx="12" cy="12" r="3" />*/}
-                            {/*  </svg>*/}
-                            {/*</button>*/}
-                            {/*<button*/}
-                            {/*    className="text-yellow-500 hover:text-yellow-600"*/}
-                            {/*    title="Edit"*/}
-                            {/*    onClick={() => handleEdit(shop)}*/}
-                            {/*>*/}
-                            {/*  /!* icon edit *!/*/}
-                            {/*  <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">*/}
-                            {/*    <path d="M11 5H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-5M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5Z" />*/}
-                            {/*  </svg>*/}
-                            {/*</button>*/}
                             <button
                                 onClick={() => {
-                                  setSelectedApp(shop);
+                                  setSelectedShop(shop);
                                   setShowDeleteModal(true);
                                 }}
                                 className="text-red-600 hover:text-red-800 dark:text-red-400"
@@ -334,14 +369,139 @@ import {httpClient} from "@/lib/http-client";
         </form>
       </Modal>
 
-        {showDeleteModal && selectedApp && canDelete && (
+        {showDeleteModal && selectedShop && canDelete && (
             <ConfirmDeleteModal
                 isOpen={showDeleteModal}
                 onClose={() => setShowDeleteModal(false)}
-                onConfirm={() => handleDelete(selectedApp.shopId)}
+                onConfirm={() => handleDelete(selectedShop.shopId)}
                 title="Xác nhận xóa Shop"
-                message={`Bạn có chắc chắn muốn xóa Shop ${selectedApp.shopName}?`}
+                message={`Bạn có chắc chắn muốn xóa Shop ${selectedShop.shopName}?`}
             />
+        )}
+
+        {showDeleteAppModal && selectedApp && canDelete && (
+            <ConfirmDeleteModal
+                isOpen={showDeleteAppModal}
+                onClose={() => setShowDeleteAppModal(false)}
+                onConfirm={() => handleDeleteApp(selectedApp?.id)}
+                title="Xác nhận xóa App"
+                message={`Bạn có chắc chắn muốn xóa App ${selectedApp.appName}?`}
+            />
+        )}
+
+        {showOffCanvas && (
+            <div className="fixed top-20 inset-0 z-50 flex">
+              <div className="flex-1" onClick={() => setShowOffCanvas(false)} />
+              <div className="w-[900px] bg-white dark:bg-gray-900 shadow-lg h-[calc(100vh-64px)] p-6 overflow-y-auto">
+                <button
+                    onClick={() => setShowOffCanvas(false)}
+                    className="absolute top-4 right-4 text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-white  text-4xl "
+                    aria-label="Close"
+                >
+                  &times;
+                </button>
+                <h4 className="text-lg font-semibold text-gray-800 dark:text-white/90">App List</h4>
+                <Table className="mt-5">
+                  <TableHeader className="border-gray-100 dark:border-gray-800 border-y">
+                    <TableRow>
+                      <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400">No</TableCell>
+                      <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400">App Name</TableCell>
+                      <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400">App Key</TableCell>
+                      <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400">App Secret</TableCell>
+                      <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400">Status</TableCell>
+                      <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400">Created At</TableCell>
+                      <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400">Actions</TableCell>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody className="divide-y divide-gray-100 dark:divide-gray-800">
+                    {appList.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={6} className="py-5 text-center text-gray-500">No apps found.</TableCell>
+                        </TableRow>
+                    ) : (
+                        appList.map((app, idx) => {
+                          const isEditing = editingAppId === app.id;
+                          return (
+                              <TableRow key={app.id}>
+                                <TableCell className="py-3 text-gray-500 text-theme-sm dark:text-gray-400">{idx + 1}</TableCell>
+                                <TableCell className="py-3 text-gray-800 text-theme-sm dark:text-white/90">{app.appName}</TableCell>
+                                <TableCell className="py-3 text-gray-800 text-theme-sm dark:text-white/90">{app.appKey}</TableCell>
+                                <TableCell className="py-3 text-gray-800 text-theme-sm dark:text-white/90">
+                                  {isEditing ? (
+                                      <input
+                                          type="text"
+                                          value={editAppSecret}
+                                          onChange={e => setEditAppSecret(e.target.value)}
+                                          className="border rounded px-1 py-0.5 w-80"
+                                      />
+                                  ) : (
+                                      app.appSecret
+                                  )}
+                                </TableCell>
+                                <TableCell className="py-3 text-gray-800 text-theme-sm dark:text-white/90">
+                                  {app.isActive ? <Badge size="sm" color="success">Active</Badge> : <Badge size="sm" color="error">Inactive</Badge>}
+                                </TableCell>
+                                <TableCell className="py-3 text-gray-500 text-theme-sm dark:text-gray-400">
+                                  {new Date(app.createdAt).toLocaleDateString()}
+                                </TableCell>
+                                <TableCell className="py-3 text-gray-500 text-theme-sm dark:text-gray-400">
+                                  {isEditing ? (
+                                      <>
+                                        <button
+                                            className="text-green-600 hover:text-green-800 mr-2"
+                                            title="Save"
+                                            onClick={() => handleSaveAppSecret(app.id)}
+                                        >
+                                          {/* Save Icon */}
+                                          <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                                            <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round"/>
+                                          </svg>
+                                        </button>
+                                        <button
+                                            className="text-gray-400 hover:text-gray-600 mr-2"
+                                            title="Cancel"
+                                            onClick={handleCancelEdit}
+                                        >
+                                          {/* Cancel Icon */}
+                                          <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                                            <path d="M6 18L18 6M6 6l12 12" strokeLinecap="round" strokeLinejoin="round"/>
+                                          </svg>
+                                        </button>
+
+                                      </>
+                                  ) : (
+                                      <>
+                                        <button
+                                            className="text-yellow-500 hover:text-yellow-600 mr-2"
+                                            title="Edit"
+                                            onClick={() => handleEditAppSecret(app)}
+                                        >
+                                          {/* Edit Icon */}
+                                          <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                                            <path d="M11 5H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-5M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5Z" />
+                                          </svg>
+                                        </button>
+                                        <button
+                                            onClick={() => {
+                                              setSelectedApp(app);
+                                              setShowDeleteAppModal(true);
+                                            }}
+                                            className="text-red-600 hover:text-red-800 dark:text-red-400"
+                                            title="Delete"
+                                        >
+                                          <TrashBinIcon className="w-6 h-6" />
+                                        </button>
+                                      </>
+                                  )}
+                                </TableCell>
+                              </TableRow>
+                          );
+                        })
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+              </div>
         )}
 
       </div>
