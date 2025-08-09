@@ -1,8 +1,8 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
-import Cookies from "js-cookie";
-import axiosInstance from "@/utils/axiosInstance";
+import { useRouter } from "next/navigation";
+import { httpClient } from '@/lib/http-client';
 
 interface User {
   id: string;
@@ -71,21 +71,29 @@ const clearStoredAuthData = () => {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const router = useRouter();
 
   // Check for existing session on mount
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        const token = localStorage.getItem("auth_token");
-        const userData = localStorage.getItem("user_data");
+        const storedAuth = getStoredAuthData();
         
-        if (token && userData) {
-          setUser(JSON.parse(userData));
+        if (storedAuth) {
+          if (isSessionExpired(storedAuth.expiry)) {
+            // Session expired, clear data
+            clearStoredAuthData();
+            httpClient.clearAuthToken();
+          } else {
+            // Set token in HTTP client and restore user
+            httpClient.setAuthToken(storedAuth.token);
+            setUser(storedAuth.user);
+          }
         }
       } catch (error) {
         console.error("Auth check failed:", error);
-        localStorage.removeItem("auth_token");
-        localStorage.removeItem("user_data");
+        clearStoredAuthData();
+        httpClient.clearAuthToken();
       } finally {
         setIsLoading(false);
       }
@@ -103,21 +111,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (storedAuth && isSessionExpiringSoon(storedAuth.expiry, 15)) { // 15 minutes before expiry
         try {
           console.log("Auto-refreshing session...");
-          const response = await axiosInstance.get("/auth/me");
-          const refreshedUser = response.data;
+          const data = await httpClient.get("/auth/me");
+          const refreshedUser = data.user;
           storeAuthData(storedAuth.token, refreshedUser);
           setUser(refreshedUser);
           console.log("Session auto-refreshed successfully");
         } catch (error) {
           console.error("Failed to auto-refresh session:", error);
-          // Check if it's an axios error with 401 status
-          if (error && typeof error === 'object' && 'response' in error) {
-            const axiosError = error as { response?: { status: number } };
-            if (axiosError.response?.status === 401) {
-              // Session is invalid, logout
-              clearAuthData();
-            }
-          }
+          // Session is invalid, logout
+          clearAuthData();
         }
       }
     };
@@ -129,44 +131,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (email: string, password: string) => {
     try {
-      const response = await axiosInstance.post("/auth/login", {
-        email,
-        password
-      });
-
-      const { token, user } = response.data;
+      setIsLoading(true);
+      const data = await httpClient.post('/auth/login', { email, password });
       
-      // Store authentication data
-      storeAuthData(token, user);
-      setUser(user);
+      // Store auth data
+      storeAuthData(data.token, data.user);
+      
+      // Set token in HTTP client
+      httpClient.setAuthToken(data.token);
+      
+      setUser(data.user);
+      router.push('/dashboard');
     } catch (error) {
-      console.error("Login failed:", error);
-      // Check if it's an axios error with response data
-      if (error && typeof error === 'object' && 'response' in error) {
-        const axiosError = error as { response?: { data?: { message?: string } } };
-        const errorMessage = axiosError.response?.data?.message || 'Login failed';
-        throw new Error(errorMessage);
-      }
-      throw new Error('Network error occurred');
+      console.error('Login error:', error);
+      throw error;
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const logout = () => {
-    localStorage.removeItem("auth_token");
-    localStorage.removeItem("user_data");
-    setUser(null);
-    Cookies.remove("session_id", { path: "/" });
-    clearStoredAuthData();
-    console.log("Authentication data cleared");
+    clearAuthData();
+    router.push('/signin');
   };
 
   const clearAuthData = () => {
     setUser(null);
-    Cookies.remove("session_id", { path: "/" });
     clearStoredAuthData();
+    httpClient.clearAuthToken();
     console.log("Authentication data cleared");
   };
-
 
   return (
     <AuthContext.Provider value={{ user, isLoading, login, logout }}>

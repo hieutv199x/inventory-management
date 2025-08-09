@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+import { validateToken, checkRole } from "@/lib/auth-middleware";
 import bcrypt from "bcryptjs";
-import { PrismaClient, UserRole } from "@prisma/client";
-import { verifyToken } from "@/utils/auth";
-
-const prisma = new PrismaClient();
 
 // Get user by ID
 export async function GET(
@@ -11,40 +9,21 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    const authHeader = request.headers.get("authorization");
-    const token = authHeader?.replace("Bearer ", "");
-
-    if (!token) {
+    // Validate token and get user
+    const authResult = await validateToken(request);
+    if (authResult.error) {
       return NextResponse.json(
-        { error: "Token is required" },
-        { status: 401 }
+        { error: authResult.error },
+        { status: authResult.status }
       );
     }
 
-    const decoded = verifyToken(token);
-    if (!decoded) {
-      return NextResponse.json(
-        { error: "Invalid token" },
-        { status: 401 }
-      );
-    }
-
-    const currentUser = await prisma.user.findUnique({
-      where: { id: decoded.userId },
-    });
-
-    if (!currentUser || !currentUser.isActive) {
-      return NextResponse.json(
-        { error: "User not found or inactive" },
-        { status: 401 }
-      );
-    }
+    const { user: currentUser } = authResult;
 
     // Users can view their own profile, or admins/managers can view any profile
     if (
-      currentUser.id !== params.id &&
-      currentUser.role !== UserRole.ADMIN &&
-      currentUser.role !== UserRole.MANAGER
+      currentUser!.id !== params.id &&
+      !checkRole(currentUser!.role, ["ADMIN", "MANAGER"])
     ) {
       return NextResponse.json(
         { error: "Insufficient permissions" },
@@ -62,13 +41,6 @@ export async function GET(
         isActive: true,
         createdAt: true,
         updatedAt: true,
-        creator: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-          },
-        },
       },
     });
 
@@ -95,113 +67,98 @@ export async function PUT(
   { params }: { params: { id: string } }
 ) {
   try {
-    const authHeader = request.headers.get("authorization");
-    const token = authHeader?.replace("Bearer ", "");
-
-    if (!token) {
+    // Validate token and get user
+    const authResult = await validateToken(request);
+    if (authResult.error) {
       return NextResponse.json(
-        { error: "Token is required" },
-        { status: 401 }
+        { error: authResult.error },
+        { status: authResult.status }
       );
     }
 
-    const decoded = verifyToken(token);
-    if (!decoded) {
-      return NextResponse.json(
-        { error: "Invalid token" },
-        { status: 401 }
-      );
-    }
+    const { user: currentUser } = authResult;
 
-    const currentUser = await prisma.user.findUnique({
-      where: { id: decoded.userId },
-    });
+    // Check if user has permission (Admin or Manager, or updating own profile)
+    const { id } = params;
+    const isOwnProfile = currentUser!.id === id;
+    const hasAdminAccess = checkRole(currentUser!.role, ["ADMIN", "MANAGER"]);
 
-    if (!currentUser || !currentUser.isActive) {
-      return NextResponse.json(
-        { error: "User not found or inactive" },
-        { status: 401 }
-      );
-    }
-
-    const { name, email, role, isActive, password } = await request.json();
-
-    // Users can update their own profile (limited fields), or admins/managers can update any profile
-    const canUpdateUser = currentUser.id === params.id || 
-                          currentUser.role === UserRole.ADMIN || 
-                          currentUser.role === UserRole.MANAGER;
-
-    if (!canUpdateUser) {
+    if (!isOwnProfile && !hasAdminAccess) {
       return NextResponse.json(
         { error: "Insufficient permissions" },
         { status: 403 }
       );
     }
 
-    const targetUser = await prisma.user.findUnique({
-      where: { id: params.id },
+    const { name, email, role, password } = await request.json();
+
+    if (!name || !email) {
+      return NextResponse.json(
+        { error: "Name and email are required" },
+        { status: 400 }
+      );
+    }
+
+    // Check if user exists
+    const existingUser = await prisma.user.findUnique({
+      where: { id },
     });
 
-    if (!targetUser) {
+    if (!existingUser) {
       return NextResponse.json(
         { error: "User not found" },
         { status: 404 }
       );
     }
 
-    // Prepare update data
-    const updateData: any = {};
+    // Check if email is already taken by another user
+    if (email !== existingUser.email) {
+      const emailExists = await prisma.user.findUnique({
+        where: { email },
+      });
 
-    // Anyone can update their own name and email
-    if (name !== undefined) updateData.name = name;
-    if (email !== undefined) updateData.email = email;
-
-    // Only admins/managers can change roles and activation status
-    if (currentUser.role === UserRole.ADMIN || currentUser.role === UserRole.MANAGER) {
-      if (role !== undefined) {
-        // Only ADMIN can assign ADMIN or MANAGER roles
-        if ((role === UserRole.ADMIN || role === UserRole.MANAGER) && currentUser.role !== UserRole.ADMIN) {
-          return NextResponse.json(
-            { error: "Only admins can assign admin or manager roles" },
-            { status: 403 }
-          );
-        }
-        updateData.role = role;
-      }
-      if (isActive !== undefined) updateData.isActive = isActive;
-    }
-
-    // Password update
-    if (password) {
-      // Users can change their own password, or admins/managers can change any password
-      if (currentUser.id === params.id || currentUser.role === UserRole.ADMIN || currentUser.role === UserRole.MANAGER) {
-        updateData.password = await bcrypt.hash(password, 12);
-      } else {
+      if (emailExists) {
         return NextResponse.json(
-          { error: "Insufficient permissions to change password" },
-          { status: 403 }
+          { error: "Email is already taken" },
+          { status: 400 }
         );
       }
     }
 
+    // Build update data
+    const updateData: any = { name, email };
+
+    // Only admins can change roles
+    if (
+      role &&
+      role !== existingUser.role &&
+      checkRole(currentUser!.role, ["ADMIN"])
+    ) {
+      updateData.role = role;
+    } else if (
+      role &&
+      role !== existingUser.role &&
+      !checkRole(currentUser!.role, ["ADMIN"])
+    ) {
+      return NextResponse.json(
+        { error: "Only administrators can change user roles" },
+        { status: 403 }
+      );
+    }
+
+    // Password update
+    if (password) {
+      updateData.password = await bcrypt.hash(password, 12);
+    }
+
     const updatedUser = await prisma.user.update({
-      where: { id: params.id },
+      where: { id },
       data: updateData,
       select: {
         id: true,
         name: true,
         email: true,
         role: true,
-        isActive: true,
-        createdAt: true,
-        updatedAt: true,
-        creator: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-          },
-        },
       },
     });
 
@@ -209,7 +166,7 @@ export async function PUT(
   } catch (error) {
     console.error("Update user error:", error);
     return NextResponse.json(
-      { error: "Internal server error" },
+      { error: "Failed to update user" },
       { status: 500 }
     );
   }
@@ -221,54 +178,50 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
-    const authHeader = request.headers.get("authorization");
-    const token = authHeader?.replace("Bearer ", "");
-
-    if (!token) {
+    // Validate token and get user
+    const authResult = await validateToken(request);
+    if (authResult.error) {
       return NextResponse.json(
-        { error: "Token is required" },
-        { status: 401 }
+        { error: authResult.error },
+        { status: authResult.status }
       );
     }
 
-    const decoded = verifyToken(token);
-    if (!decoded) {
-      return NextResponse.json(
-        { error: "Invalid token" },
-        { status: 401 }
-      );
-    }
+    const { user } = authResult;
 
-    const currentUser = await prisma.user.findUnique({
-      where: { id: decoded.userId },
-    });
-
-    if (!currentUser || !currentUser.isActive) {
+    // Check if user has permission (Admin only)
+    if (!checkRole(user!.role, ["ADMIN"])) {
       return NextResponse.json(
-        { error: "User not found or inactive" },
-        { status: 401 }
-      );
-    }
-
-    // Only ADMIN can delete users
-    if (currentUser.role !== UserRole.ADMIN) {
-      return NextResponse.json(
-        { error: "Only admins can delete users" },
+        { error: "Only administrators can delete users" },
         { status: 403 }
       );
     }
 
-    // Can't delete yourself
-    if (currentUser.id === params.id) {
+    const { id } = params;
+
+    // Prevent self-deletion
+    if (user!.id === id) {
       return NextResponse.json(
         { error: "Cannot delete your own account" },
         { status: 400 }
       );
     }
 
-    // Delete user (this will also cascade delete sessions)
+    // Check if user exists
+    const existingUser = await prisma.user.findUnique({
+      where: { id },
+    });
+
+    if (!existingUser) {
+      return NextResponse.json(
+        { error: "User not found" },
+        { status: 404 }
+      );
+    }
+
+    // Delete user (this will cascade delete user shop roles due to foreign key constraints)
     await prisma.user.delete({
-      where: { id: params.id },
+      where: { id },
     });
 
     return NextResponse.json({ message: "User deleted successfully" });

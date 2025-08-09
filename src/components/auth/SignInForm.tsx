@@ -24,7 +24,6 @@ export default function SignInForm() {
     e.preventDefault();
     setError("");
     setIsLoading(true); 
-    debugger;
     try {
       await login(email, password);
       router.push("/");

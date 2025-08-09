@@ -9,14 +9,16 @@ import {
   ShopIcon, 
   UserIcon, 
   SettingsIcon,
-  LogoutIcon 
+  LogoutIcon,
+  GroupIcon
 } from '@/icons';
+import { FaUsersCog } from "react-icons/fa";
 
 interface MenuItem {
   name: string;
   href: string;
   icon: React.ComponentType<{ className?: string }>;
-  roles?: ('ADMIN' | 'MANAGER' | 'ACCOUNTANT' | 'SELLER' | 'RESOURCE')[];
+  roles?: ('ADMIN' | 'MANAGER' | 'ACCOUNTANT' | 'SELLER' | 'RESOURCE' | 'OWNER')[];
 }
 
 const menuItems: MenuItem[] = [
@@ -35,6 +37,12 @@ const menuItems: MenuItem[] = [
     name: 'Quản lý Shop',
     href: '/shops',
     icon: ShopIcon,
+  },
+  {
+    name: 'Phân quyền',
+    href: '/permissions',
+    icon: GroupIcon ,
+    roles: ['ADMIN', 'OWNER', 'MANAGER']
   },
   {
     name: 'Người dùng',

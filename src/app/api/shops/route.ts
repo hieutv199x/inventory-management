@@ -1,47 +1,57 @@
 import { NextRequest, NextResponse } from 'next/server';
-import jwt from 'jsonwebtoken';
 import { prisma } from '@/lib/prisma';
-
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
+import { validateToken, checkRole } from '@/lib/auth-middleware';
 
 export async function GET(request: NextRequest) {
   try {
-    const authHeader = request.headers.get('Authorization');
-    const token = authHeader?.replace('Bearer ', '');
-
-    if (!token) {
-      return NextResponse.json(
-        { message: 'Authentication required' },
-        { status: 401 }
-      );
+    // Validate token and get user
+    const authResult = await validateToken(request);
+    if (authResult.error) {
+      return NextResponse.json({ error: authResult.error }, { status: authResult.status });
     }
 
-    jwt.verify(token, JWT_SECRET);
-    
-    // Get shops from ShopAuthorization
-    const shopAuthorizations = await prisma.shopAuthorization.findMany({
-      where: {
-        status: 'ACTIVE'
-      },
+    const { user } = authResult;
+
+    // Check if user has permission
+    if (!checkRole(user!.role, ['ADMIN', 'MANAGER'])) {
+      // If not admin/manager, only show shops they have access to
+      const userShops = await prisma.shopAuthorization.findMany({
+        where: {
+          userShopRoles: {
+            some: {
+              userId: user!.id
+            }
+          }
+        },
+        select: {
+          id: true,
+          shopName: true
+        },
+        orderBy: {
+          shopName: 'asc'
+        }
+      });
+
+      return NextResponse.json({ shops: userShops });
+    }
+
+    // Admin/Manager can see all shops
+    const shops = await prisma.shopAuthorization.findMany({
       select: {
         id: true,
-        shopName: true,
-        shopId: true
+        shopName: true
+      },
+      orderBy: {
+        shopName: 'asc'
       }
     });
 
-    const shops = shopAuthorizations.map(shop => ({
-      id: shop.id,
-      name: shop.shopName || `Shop ${shop.shopId}`
-    }));
-
-    return NextResponse.json(shops);
-
+    return NextResponse.json({ shops });
   } catch (error) {
-    console.error('Get shops error:', error);
+    console.error('Error fetching shops:', error);
     return NextResponse.json(
-      { message: 'Authentication required' },
-      { status: 401 }
+      { error: 'Failed to fetch shops' },
+      { status: 500 }
     );
   }
 }

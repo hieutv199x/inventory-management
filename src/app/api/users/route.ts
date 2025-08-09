@@ -1,146 +1,164 @@
 import { NextRequest, NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
-import { PrismaClient, UserRole } from "@prisma/client";
-import { verifyToken } from "@/utils/auth";
-
-const prisma = new PrismaClient();
+import { validateToken, checkRole } from "@/lib/auth-middleware";
 
 // Get all users (Admin and Manager only)
 export async function GET(request: NextRequest) {
   try {
-    const authHeader = request.headers.get("authorization");
-    const token = authHeader?.replace("Bearer ", "");
-
-    if (!token) {
+    // Validate token and get user
+    const authResult = await validateToken(request);
+    if (authResult.error) {
       return NextResponse.json(
-        { error: "Token is required" },
-        { status: 401 }
+        { error: authResult.error },
+        { status: authResult.status }
       );
     }
 
-    const decoded = verifyToken(token);
-    if (!decoded) {
-      return NextResponse.json(
-        { error: "Invalid token" },
-        { status: 401 }
-      );
-    }
+    const { user } = authResult;
 
-    // Get current user to check permissions
-    const currentUser = await prisma.user.findUnique({
-      where: { id: decoded.userId },
-    });
-
-    if (!currentUser || !currentUser.isActive) {
-      return NextResponse.json(
-        { error: "User not found or inactive" },
-        { status: 401 }
-      );
-    }
-
-    // Check permissions - only ADMIN and MANAGER can view all users
-    if (currentUser.role !== UserRole.ADMIN && currentUser.role !== UserRole.MANAGER) {
+    // Check if user has permission (Admin or Manager only)
+    if (!checkRole(user!.role, ["ADMIN", "MANAGER"])) {
       return NextResponse.json(
         { error: "Insufficient permissions" },
         { status: 403 }
       );
     }
 
+    const { searchParams } = new URL(request.url);
+    const page = parseInt(searchParams.get("page") || "1");
+    const limit = parseInt(searchParams.get("limit") || "10");
+    const search = searchParams.get("search") || "";
+
+    const skip = (page - 1) * limit;
+
+    // Build where clause for search - Fix the role field reference
+    const userRoles = ["ADMIN", "MANAGER", "USER"]; // adjust according to your enum
+    const matchedRoles = userRoles.filter((role) =>
+      role.toLowerCase().includes(search.toLowerCase())
+    );
+
+    const where = search
+      ? {
+          OR: [
+            { name: { contains: search, mode: "insensitive" as const } },
+            { email: { contains: search, mode: "insensitive" as const } },
+            ...(matchedRoles.length > 0
+              ? [{ role: { in: matchedRoles as any } }]
+              : []),
+            {
+              userShopRoles: {
+                some: {
+                  OR: [
+                    {
+                      shop: {
+                        shopName: { contains: search, mode: "insensitive" as const },
+                      },
+                    },
+                    // Assuming userShopRoles.role is also an enum
+                    ...(matchedRoles.length > 0
+                      ? [{ role: { in: matchedRoles as any } }]
+                      : []),
+                  ],
+                },
+              },
+            },
+          ],
+        }
+      : {};
+
+    // Get total count
+    const total = await prisma.user.count({ where });
+
+    // Get paginated users
     const users = await prisma.user.findMany({
+      where,
       select: {
         id: true,
         name: true,
         email: true,
         role: true,
-        isActive: true,
-        createdAt: true,
-        updatedAt: true,
-        creator: {
+        userShopRoles: {
           select: {
             id: true,
-            name: true,
-            email: true,
+            role: true,
+            shop: {
+              select: {
+                id: true,
+                shopName: true,
+              },
+            },
           },
         },
       },
       orderBy: {
         createdAt: "desc",
       },
+      skip,
+      take: limit,
     });
 
-    return NextResponse.json({ users });
+    // Transform the data to match the expected format - Fix the role mapping
+    const transformedUsers = users.map((user) => ({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      shops: user.userShopRoles.map((userShopRole) => ({
+        id: userShopRole.shop.id,
+        shopName: userShopRole.shop.shopName,
+        role: userShopRole.role, // This is the shop role, not user role
+      })),
+    }));
+
+    const totalPages = Math.ceil(total / limit);
+
+    return NextResponse.json({
+      users: transformedUsers,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages,
+      },
+    });
   } catch (error) {
-    console.error("Get users error:", error);
+    console.error("Error fetching users:", error);
     return NextResponse.json(
-      { error: "Internal server error" },
+      { error: "Failed to fetch users" },
       { status: 500 }
     );
   }
 }
 
-// Create new user (Admin and Manager only)
+// Create new user (Admin only)
 export async function POST(request: NextRequest) {
   try {
-    const authHeader = request.headers.get("authorization");
-    const token = authHeader?.replace("Bearer ", "");
-
-    if (!token) {
+    // Validate token and get user
+    const authResult = await validateToken(request);
+    if (authResult.error) {
       return NextResponse.json(
-        { error: "Token is required" },
-        { status: 401 }
+        { error: authResult.error },
+        { status: authResult.status }
       );
     }
 
-    const decoded = verifyToken(token);
-    if (!decoded) {
-      return NextResponse.json(
-        { error: "Invalid token" },
-        { status: 401 }
-      );
-    }
+    const { user: currentUser } = authResult;
 
-    // Get current user to check permissions
-    const currentUser = await prisma.user.findUnique({
-      where: { id: decoded.userId },
-    });
-
-    if (!currentUser || !currentUser.isActive) {
+    // Check if user has permission (Admin only)
+    if (!checkRole(currentUser!.role, ["ADMIN"])) {
       return NextResponse.json(
-        { error: "User not found or inactive" },
-        { status: 401 }
-      );
-    }
-
-    // Check permissions
-    if (currentUser.role !== UserRole.ADMIN && currentUser.role !== UserRole.MANAGER) {
-      return NextResponse.json(
-        { error: "Insufficient permissions" },
+        { error: "Only administrators can create users" },
         { status: 403 }
       );
     }
 
-    const { name, email, password, role } = await request.json();
+    const { name, email, role, password } = await request.json();
 
-    if (!name || !email || !password || !role) {
+    if (!name || !email || !role || !password) {
       return NextResponse.json(
-        { error: "Name, email, password, and role are required" },
+        { error: "Missing required fields" },
         { status: 400 }
-      );
-    }
-
-    // Validate role
-    if (!Object.values(UserRole).includes(role)) {
-      return NextResponse.json(
-        { error: "Invalid role" },
-        { status: 400 }
-      );
-    }
-
-    // Only ADMIN can create other ADMINs or MANAGERs
-    if ((role === UserRole.ADMIN || role === UserRole.MANAGER) && currentUser.role !== UserRole.ADMIN) {
-      return NextResponse.json(
-        { error: "Only admins can create admin or manager accounts" },
-        { status: 403 }
       );
     }
 
@@ -159,38 +177,26 @@ export async function POST(request: NextRequest) {
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 12);
 
-    // Create user
     const newUser = await prisma.user.create({
       data: {
         name,
         email,
-        password: hashedPassword,
         role,
-        createdBy: currentUser.id,
+        password: hashedPassword,
       },
       select: {
         id: true,
         name: true,
         email: true,
         role: true,
-        isActive: true,
-        createdAt: true,
-        updatedAt: true,
-        creator: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-          },
-        },
       },
     });
 
     return NextResponse.json({ user: newUser }, { status: 201 });
   } catch (error) {
-    console.error("Create user error:", error);
+    console.error("Error creating user:", error);
     return NextResponse.json(
-      { error: "Internal server error" },
+      { error: "Failed to create user" },
       { status: 500 }
     );
   }

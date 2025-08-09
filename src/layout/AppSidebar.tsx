@@ -12,9 +12,11 @@ import {
   HorizontaLDots,
   PieChartIcon,
   PlugInIcon,
-  UserCircleIcon,
   BankIcon,
+  GroupIcon,
+  SettingsIcon,
 } from "../icons/index";
+import { FaUsersCog } from "react-icons/fa";
 
 type NavItem = {
   name: string;
@@ -77,9 +79,14 @@ const financeItems: NavItem[] = [
 // Tài khoản (Accounts) Group
 const accountItems: NavItem[] = [
   {
-    icon: <UserCircleIcon />,
+    icon: <GroupIcon />,
     name: "User Management",
-    path: "/users",
+    path: "/user-roles"
+  },
+  {
+    icon: <FaUsersCog size={24}/>,
+    name: "Shop Permissions",
+    path: "/permissions"
   }
 ];
 
@@ -414,5 +421,4 @@ const AppSidebar: React.FC = () => {
     </aside>
   );
 };
-
 export default AppSidebar;

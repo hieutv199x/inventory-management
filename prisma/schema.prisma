@@ -8,6 +8,28 @@ generator client {
   binaryTargets = ["native", "rhel-openssl-3.0.x"]
 }
 
+enum Role {
+  OWNER
+  MANAGER
+  STAFF
+  VIEWER
+}
+
+model UserShopRole {
+  id        String   @id @default(cuid()) @map("_id") @db.String
+  userId    String   @db.ObjectId
+  shopId    String   @db.ObjectId
+  role      Role
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  shop ShopAuthorization @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, shopId])
+  @@map("user_shop_roles")
+}
+
 model User {
   id        String    @id @default(auto()) @map("_id") @db.ObjectId
   name      String
@@ -26,6 +48,8 @@ model User {
   uploadedBanks BankAccount[] @relation("BankUploader")
   assignedBanks BankAccount[] @relation("BankAssignee")
   bankHistoryActions BankHistory[]
+
+  userShopRoles UserShopRole[]
 }
 
 enum UserRole {
@@ -92,6 +116,9 @@ model ShopAuthorization {
   
   payments     TikTokPayment[]
   statements   TikTokStatement[]
+
+  // Opposite relation for UserShopRole
+  userShopRoles UserShopRole[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
