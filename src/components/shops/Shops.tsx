@@ -9,12 +9,16 @@ import {
   import Badge from "../ui/badge/Badge";
   import Button from "../ui/button/Button";
   import { Modal } from "../ui/modal";
-  import {useCallback, useEffect, useState} from "react";
+  import React, {useCallback, useEffect, useState} from "react";
   import Label from "../form/Label";
 import Input from "../form/input/InputField";
   import { useModal } from "@/hooks/useModal";
   import Select from "../form/Select";
-  import { ChevronDownIcon } from "@/icons";
+  import {ChevronDownIcon, TrashBinIcon} from "@/icons";
+import ConfirmDeleteModal from "@/components/ui/modal/ConfirmDeleteModal";
+import axiosInstance from "@/utils/axiosInstance";
+import {useAuth} from "@/context/authContext";
+import {httpClient} from "@/lib/http-client";
 
   interface Shop {
     id: string;
@@ -22,15 +26,18 @@ import Input from "../form/input/InputField";
     shopName: string | null;
     shopCipher: string | null;
     app:{
-      appId: string | null;
+      appId: string;
       appKey: string;
       appSecret: string | null;
+      appName: string | null;
     },
     country: string;
     status: string | null;
+    createdAt: string;
   }
 
   export default function Shops() {
+    const { user } = useAuth();
     const options = [
       { value: "US", label: "US" },
       { value: "UK", label: "UK" },
@@ -39,12 +46,17 @@ import Input from "../form/input/InputField";
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    const [selectedCountry, setSelectedCountry] = useState<{ value: string; label: string } | null>(null);
+    const [selectedCountry, setSelectedCountry] = useState<{ value: string; label: string } | null>({ value: "UK", label: "UK" });
     const [showSecret, setShowSecret] = useState<{ [id: string]: boolean }>({});
     const [serviceId, setServiceId] = useState("");
     const [appName, setAppName] = useState("");
     const [appKey, setAppKey] = useState("");
     const [appSecret, setAppSecret] = useState("");
+    const canDelete = user?.role === 'ADMIN';
+
+    const [showDetailsModal, setShowDetailsModal] = useState(false);
+    const [showDeleteModal, setShowDeleteModal] = useState(false);
+    const [selectedApp, setSelectedApp] = useState<Shop | null>(null);
 
     const { isOpen, openModal, closeModal } = useModal();
 
@@ -96,20 +108,9 @@ import Input from "../form/input/InputField";
           appKey,
           appSecret,
         };
-    
-        const res = await fetch("/api/tiktok/shop/add-shop-info", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(payload),
-        });
-    
-        const data = await res.json();
+    debugger;
+        const res = await httpClient.post("tiktok/shop/add-shop-info", payload);
 
-        if (!res.ok) throw new Error(data.error || "Save failed");
-    
-        console.log("✅ Shop saved:", data);
         closeModal();
         resetForm();
         await fetchShops();
@@ -122,12 +123,27 @@ import Input from "../form/input/InputField";
       const found = options.find(opt => opt.value === value) || null;
       setSelectedCountry(found);
     };
-  
+
+    const handleDelete = async (AppKey: string) => {
+      try {
+        debugger;
+        await axiosInstance.delete(`/shops/${AppKey}`);
+        //toast.success("Bank deleted successfully!");
+        // Optional: refetch banks or update state
+        await fetchShops();
+      } catch (error) {
+        //toast.error("Failed to delete bank");
+        console.error("Delete error:", error);
+      } finally {
+        setShowDeleteModal(false);
+      }
+    };
+
 
     const getStatusBadge = (status: string | null) => {
       const lowerStatus = status?.toLowerCase();
       switch (lowerStatus) {
-        case "ACTIVE":
+        case "active":
         case 'live':
           return <Badge size="sm" color="success">{status}</Badge>;
         case 'jumio':
@@ -153,7 +169,7 @@ import Input from "../form/input/InputField";
   
           <div className="flex items-center gap-2">
             <button onClick={openModal} className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-theme-sm font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200">
-              Import shop
+              Import App
             </button>
             <button onClick={fetchShops} className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-theme-sm font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200">
               Refresh
@@ -166,9 +182,11 @@ import Input from "../form/input/InputField";
             <TableHeader className="border-gray-100 dark:border-gray-800 border-y">
               <TableRow>
                 <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400">No</TableCell>
+                <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400">Shop ID</TableCell>
                 <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400">Shop Name</TableCell>
                 <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400">Info</TableCell>
                 <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400">Status</TableCell>
+                <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400">Created date</TableCell>
                 <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400">Action</TableCell>
               </TableRow>
             </TableHeader>
@@ -186,6 +204,7 @@ import Input from "../form/input/InputField";
                   shops.map((shop, index) => (
                       <TableRow key={shop.id}>
                         <TableCell className="py-3 text-gray-500 text-theme-sm dark:text-gray-400">{index + 1}</TableCell>
+                        <TableCell className="py-3 text-gray-800 text-theme-sm dark:text-white/90">{shop.shopId || 'N/A'}</TableCell>
                         <TableCell className="py-3 text-gray-800 text-theme-sm dark:text-white/90">{shop.shopName || 'N/A'}</TableCell>
                         <TableCell className="py-3">
                           <div className="flex flex-col space-y-1">
@@ -207,12 +226,45 @@ import Input from "../form/input/InputField";
                         </span>
                           </div>
                         </TableCell>
-                        <TableCell className="py-3 text-gray-500 text-theme-sm dark:text-gray-400">{getStatusBadge(shop.status)}</TableCell>
+                        <TableCell className="py-3 text-gray-500 text-theme-sm dark:text-gray-400">
+                          {getStatusBadge(shop.status)}
+                        </TableCell>
+                        <TableCell className="py-3 text-gray-500 text-theme-sm dark:text-gray-400">
+                          {new Date(shop.createdAt).toLocaleDateString()}
+                        </TableCell>
                         <TableCell className="py-3 text-gray-500 text-theme-sm dark:text-gray-400">
                           <div className="flex items-center gap-2">
-                            <button className="text-blue-500 hover:text-blue-600" title="View"><svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12Z" /><circle cx="12" cy="12" r="3" /></svg></button>
-                            <button className="text-yellow-500 hover:text-yellow-600" title="Edit"><svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M11 5H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-5M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5Z" /></svg></button>
-                            <button className="text-red-500 hover:text-red-600" title="Delete"><svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M3 6h18M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2m2 0v12a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6h12Z" /></svg></button>
+                            {/*<button*/}
+                            {/*    className="text-blue-500 hover:text-blue-600"*/}
+                            {/*    title="View"*/}
+                            {/*    onClick={() => handleView(shop)}*/}
+                            {/*>*/}
+                            {/*  /!* icon view *!/*/}
+                            {/*  <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">*/}
+                            {/*    <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12Z" />*/}
+                            {/*    <circle cx="12" cy="12" r="3" />*/}
+                            {/*  </svg>*/}
+                            {/*</button>*/}
+                            {/*<button*/}
+                            {/*    className="text-yellow-500 hover:text-yellow-600"*/}
+                            {/*    title="Edit"*/}
+                            {/*    onClick={() => handleEdit(shop)}*/}
+                            {/*>*/}
+                            {/*  /!* icon edit *!/*/}
+                            {/*  <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">*/}
+                            {/*    <path d="M11 5H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-5M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5Z" />*/}
+                            {/*  </svg>*/}
+                            {/*</button>*/}
+                            <button
+                                onClick={() => {
+                                  setSelectedApp(shop);
+                                  setShowDeleteModal(true);
+                                }}
+                                className="text-red-600 hover:text-red-800 dark:text-red-400"
+                                title="Xóa"
+                            >
+                              <TrashBinIcon className="w-6 h-6" />
+                            </button>
                           </div>
                         </TableCell>
                       </TableRow>
@@ -229,7 +281,7 @@ import Input from "../form/input/InputField";
       >
         <form className="">
           <h4 className="mb-6 text-lg font-medium text-gray-800 dark:text-white/90">
-            Import shop
+            Import App
           </h4>
           <div className="w-1/3">
               <Label>Country</Label>
@@ -278,6 +330,17 @@ import Input from "../form/input/InputField";
           </div>
         </form>
       </Modal>
+
+        {showDeleteModal && selectedApp && canDelete && (
+            <ConfirmDeleteModal
+                isOpen={showDeleteModal}
+                onClose={() => setShowDeleteModal(false)}
+                onConfirm={() => handleDelete(selectedApp.shopId)}
+                title="Xác nhận xóa Shop"
+                message={`Bạn có chắc chắn muốn xóa Shop ${selectedApp.shopName}?`}
+            />
+        )}
+
       </div>
     );
   }

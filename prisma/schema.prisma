@@ -84,6 +84,7 @@ model TikTokApp {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  isActive  Boolean  @default(true)
 
   // Một ứng dụng có thể có nhiều sự ủy quyền từ các shop khác nhau.
   authorizations ShopAuthorization[]
