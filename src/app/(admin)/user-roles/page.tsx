@@ -249,10 +249,10 @@ export default function UserRolesPage() {
           <FaUsers className="h-8 w-8 text-brand-500" />
           <div>
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-              User Management & Roles
+              Quản lý người dùng & phân quyền
             </h1>
             <p className="text-gray-600 dark:text-gray-400">
-              Manage users, system roles, and shop assignments
+              Quản lý người dùng, quyền hệ thống và phân công cửa hàng
             </p>
           </div>
         </div>
@@ -286,7 +286,7 @@ export default function UserRolesPage() {
             className="px-4 py-2 bg-brand-500 text-white rounded-lg hover:bg-brand-600 transition-colors flex items-center space-x-2"
           >
             <FaPlus className="h-4 w-4" />
-            <span>Add New User</span>
+            <span>Thêm người dùng mới</span>
           </button>
         </div>
       </div>
@@ -297,7 +297,7 @@ export default function UserRolesPage() {
           <FaSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
           <input
             type="text"
-            placeholder="Search users by name, email, role, or shop..."
+            placeholder="Tìm kiếm người dùng theo tên, email, quyền hoặc cửa hàng..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="pl-10 pr-4 py-2 w-full border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
@@ -310,7 +310,7 @@ export default function UserRolesPage() {
         </div>
         {searchTerm && (
           <div className="flex items-center text-sm text-gray-600 dark:text-gray-400">
-            Found {pagination.total} users
+            Tìm thấy {pagination.total} người dùng
             <button
               onClick={() => setSearchTerm('')}
               className="ml-2 text-brand-600 hover:text-brand-800 dark:text-brand-400 dark:hover:text-brand-300"
@@ -324,7 +324,7 @@ export default function UserRolesPage() {
       {/* Pagination and Page Size Controls */}
       <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
         <div className="flex items-center space-x-2">
-          <span className="text-sm text-gray-700 dark:text-gray-300">Show:</span>
+          <span className="text-sm text-gray-700 dark:text-gray-300">Hiển thị:</span>
           <select
             value={pagination.limit}
             onChange={(e) => handlePageSizeChange(Number(e.target.value))}
@@ -336,15 +336,15 @@ export default function UserRolesPage() {
             <option value={50}>50</option>
           </select>
           <span className="text-sm text-gray-700 dark:text-gray-300">
-            entries per page
+            mục mỗi trang
           </span>
         </div>
 
         <div className="flex items-center space-x-2">
           <span className="text-sm text-gray-700 dark:text-gray-300">
-            Showing {((pagination.page - 1) * pagination.limit) + 1} to{' '}
-            {Math.min(pagination.page * pagination.limit, pagination.total)} of{' '}
-            {pagination.total} entries
+            Hiển thị {((pagination.page - 1) * pagination.limit) + 1} đến{' '}
+            {Math.min(pagination.page * pagination.limit, pagination.total)} của{' '}
+            {pagination.total} mục
           </span>
         </div>
       </div>
@@ -384,12 +384,12 @@ export default function UserRolesPage() {
             <div className="col-span-full bg-white dark:bg-gray-800 rounded-lg p-8 text-center shadow">
               <FaUserCircle className="h-12 w-12 text-gray-400 mx-auto mb-4" />
               <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-                {searchTerm ? 'No users found' : 'No users found'}
+                {searchTerm ? 'Không tìm thấy người dùng' : 'Không tìm thấy người dùng'}
               </h3>
               <p className="text-gray-600 dark:text-gray-400 mb-4">
                 {searchTerm 
-                  ? `No users match "${searchTerm}". Try adjusting your search.`
-                  : 'Get started by adding your first user to the system.'
+                  ? `Không có người dùng nào khớp với "${searchTerm}". Hãy thử điều chỉnh tìm kiếm.`
+                  : 'Bắt đầu bằng cách thêm người dùng đầu tiên vào hệ thống.'
                 }
               </p>
               {!searchTerm && (
@@ -397,7 +397,7 @@ export default function UserRolesPage() {
                   onClick={() => setShowAddModal(true)}
                   className="px-4 py-2 bg-brand-500 text-white rounded-lg hover:bg-brand-600 transition-colors"
                 >
-                  Add User
+                  Thêm người dùng
                 </button>
               )}
             </div>
@@ -429,11 +429,11 @@ export default function UserRolesPage() {
                 {/* Shop Assignments */}
                 <div className="space-y-2">
                   <h4 className="text-sm font-medium text-gray-900 dark:text-white">
-                    Shop Assignments ({user.shops.length})
+                    Phân công cửa hàng ({user.shops.length})
                   </h4>
                   {user.shops.length === 0 ? (
                     <p className="text-xs text-gray-500 dark:text-gray-400">
-                      No shop assignments
+                      Không có phân công cửa hàng
                     </p>
                   ) : (
                     <div className="space-y-1">
@@ -449,7 +449,7 @@ export default function UserRolesPage() {
                       ))}
                       {user.shops.length > 3 && (
                         <p className="text-xs text-gray-500 dark:text-gray-400">
-                          +{user.shops.length - 3} more shops
+                          +{user.shops.length - 3} cửa hàng khác
                         </p>
                       )}
                     </div>
@@ -463,14 +463,14 @@ export default function UserRolesPage() {
                     className="flex-1 px-3 py-1.5 text-xs font-medium text-brand-600 hover:text-brand-700 dark:text-brand-400 dark:hover:text-brand-300 border border-brand-300 rounded hover:bg-brand-50 dark:hover:bg-brand-900 transition-colors flex items-center justify-center space-x-1"
                   >
                     <FaEdit className="h-3 w-3" />
-                    <span>Edit</span>
+                    <span>Sửa</span>
                   </button>
                   <button 
                     onClick={() => handleDeleteUser(user.id)}
                     className="flex-1 px-3 py-1.5 text-xs font-medium text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 border border-red-300 rounded hover:bg-red-50 dark:hover:bg-red-900 transition-colors flex items-center justify-center space-x-1"
                   >
                     <FaTrash className="h-3 w-3" />
-                    <span>Delete</span>
+                    <span>Xóa</span>
                   </button>
                 </div>
               </div>
@@ -482,7 +482,7 @@ export default function UserRolesPage() {
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow">
           <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
             <h3 className="text-lg font-medium text-gray-900 dark:text-white">
-              {searchTerm ? `Search Results (${pagination.total})` : `All Users (${pagination.total})`}
+              {searchTerm ? `Kết quả tìm kiếm (${pagination.total})` : `Tất cả người dùng (${pagination.total})`}
             </h3>
           </div>
           
@@ -491,16 +491,16 @@ export default function UserRolesPage() {
               <thead className="bg-gray-50 dark:bg-gray-900">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                    User
+                    Người dùng
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                    System Role
+                    Quyền hệ thống
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                    Shop Assignments
+                    Phân công cửa hàng
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                    Actions
+                    Thao tác
                   </th>
                 </tr>
               </thead>
@@ -509,8 +509,8 @@ export default function UserRolesPage() {
                   <tr>
                     <td colSpan={4} className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
                       {searchTerm 
-                        ? `No users match "${searchTerm}". Try adjusting your search.`
-                        : 'No users found. Add users to get started.'
+                        ? `Không có người dùng nào khớp với "${searchTerm}". Hãy thử điều chỉnh tìm kiếm.`
+                        : 'Không tìm thấy người dùng. Thêm người dùng để bắt đầu.'
                       }
                     </td>
                   </tr>
@@ -541,7 +541,7 @@ export default function UserRolesPage() {
                         <div className="text-sm text-gray-900 dark:text-white">
                           {user.shops.length === 0 ? (
                             <span className="text-gray-500 dark:text-gray-400 italic">
-                              No shop assignments
+                              Không có phân công cửa hàng
                             </span>
                           ) : (
                             <div className="space-y-1">
@@ -570,14 +570,14 @@ export default function UserRolesPage() {
                           className="text-brand-600 hover:text-brand-900 dark:text-brand-400 dark:hover:text-brand-300 inline-flex items-center space-x-1"
                         >
                           <FaEdit className="h-3 w-3" />
-                          <span>Edit</span>
+                          <span>Sửa</span>
                         </button>
                         <button 
                           onClick={() => handleDeleteUser(user.id)}
                           className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300 inline-flex items-center space-x-1"
                         >
                           <FaTrash className="h-3 w-3" />
-                          <span>Delete</span>
+                          <span>Xóa</span>
                         </button>
                       </td>
                     </tr>
@@ -598,7 +598,7 @@ export default function UserRolesPage() {
               disabled={pagination.page === 1}
               className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 dark:hover:bg-gray-700"
             >
-              Previous
+              Trước
             </button>
             
             <div className="flex items-center space-x-1">
@@ -635,12 +635,12 @@ export default function UserRolesPage() {
               disabled={pagination.page === pagination.totalPages}
               className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 dark:hover:bg-gray-700"
             >
-              Next
+              Tiếp theo
             </button>
           </div>
           
           <div className="text-sm text-gray-700 dark:text-gray-300">
-            Page {pagination.page} of {pagination.totalPages}
+            Trang {pagination.page} / {pagination.totalPages}
           </div>
         </div>
       )}
@@ -650,7 +650,7 @@ export default function UserRolesPage() {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md">
             <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Add New User</h2>
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Thêm người dùng mới</h2>
               <button onClick={closeModals} className="text-gray-400 hover:text-gray-600">
                 <FaTimes className="h-5 w-5" />
               </button>
@@ -660,7 +660,7 @@ export default function UserRolesPage() {
               {/* Name */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Name
+                  Tên
                 </label>
                 <input
                   type="text"
@@ -688,7 +688,7 @@ export default function UserRolesPage() {
               {/* Role */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Role
+                  Quyền hệ thống
                 </label>
                 <select
                   value={formData.role}
@@ -696,18 +696,18 @@ export default function UserRolesPage() {
                   className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-1 focus:ring-brand-500 dark:focus:ring-brand-400 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                   required
                 >
-                  <option value="SELLER">Seller</option>
-                  <option value="ADMIN">Admin</option>
-                  <option value="MANAGER">Manager</option>
-                  <option value="ACCOUNTANT">Accountant</option>
-                  <option value="RESOURCE">Resource</option>
+                  <option value="SELLER">Nhân viên bán hàng</option>
+                  <option value="ADMIN">Quản trị viên</option>
+                  <option value="MANAGER">Quản lý</option>
+                  <option value="ACCOUNTANT">Kế toán</option>
+                  <option value="RESOURCE">Tài nguyên</option>
                 </select>
               </div>
 
               {/* Password - Only for new users */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Password
+                  Mật khẩu
                 </label>
                 <input
                   type="password"
@@ -724,14 +724,14 @@ export default function UserRolesPage() {
                   onClick={closeModals}
                   className="flex-1 px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-200 dark:bg-gray-600 rounded-md hover:bg-gray-300 dark:hover:bg-gray-500 transition-colors"
                 >
-                  Cancel
+                  Hủy
                 </button>
                 <button
                   type="submit"
                   disabled={loading}
                   className="flex-1 px-4 py-2 bg-brand-500 text-white rounded-md hover:bg-brand-600 disabled:opacity-50 transition-colors"
                 >
-                  {loading ? 'Creating...' : 'Create User'}
+                  {loading ? 'Đang tạo...' : 'Tạo người dùng'}
                 </button>
               </div>
             </form>
@@ -744,7 +744,7 @@ export default function UserRolesPage() {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md">
             <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Edit User</h2>
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Sửa người dùng</h2>
               <button onClick={closeModals} className="text-gray-400 hover:text-gray-600">
                 <FaTimes className="h-5 w-5" />
               </button>
@@ -754,7 +754,7 @@ export default function UserRolesPage() {
               {/* Name */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Name
+                  Tên
                 </label>
                 <input
                   type="text"
@@ -782,7 +782,7 @@ export default function UserRolesPage() {
               {/* Role */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Role
+                  Quyền hệ thống
                 </label>
                 <select
                   value={formData.role}
@@ -790,18 +790,18 @@ export default function UserRolesPage() {
                   className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-1 focus:ring-brand-500 dark:focus:ring-brand-400 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                   required
                 >
-                  <option value="SELLER">Seller</option>
-                  <option value="ADMIN">Admin</option>
-                  <option value="MANAGER">Manager</option>
-                  <option value="ACCOUNTANT">Accountant</option>
-                  <option value="RESOURCE">Resource</option>
+                  <option value="SELLER">Nhân viên bán hàng</option>
+                  <option value="ADMIN">Quản trị viên</option>
+                  <option value="MANAGER">Quản lý</option>
+                  <option value="ACCOUNTANT">Kế toán</option>
+                  <option value="RESOURCE">Tài nguyên</option>
                 </select>
               </div>
 
               {/* Password - Leave empty for unchanged */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Password (leave blank to keep unchanged)
+                  Mật khẩu (để trống để giữ nguyên)
                 </label>
                 <input
                   type="password"
@@ -817,14 +817,14 @@ export default function UserRolesPage() {
                   onClick={closeModals}
                   className="flex-1 px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-200 dark:bg-gray-600 rounded-md hover:bg-gray-300 dark:hover:bg-gray-500 transition-colors"
                 >
-                  Cancel
+                  Hủy
                 </button>
                 <button
                   type="submit"
                   disabled={loading}
                   className="flex-1 px-4 py-2 bg-brand-500 text-white rounded-md hover:bg-brand-600 disabled:opacity-50 transition-colors"
                 >
-                  {loading ? 'Updating...' : 'Update User'}
+                  {loading ? 'Đang cập nhật...' : 'Cập nhật người dùng'}
                 </button>
               </div>
             </form>
