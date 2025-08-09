@@ -1,0 +1,6 @@
+Note,Bank Name,Routing Number,Swift Code,Account Number,Type
+Goldman Sachs Bank N.A Chicago Branch Wells Fargo Bank,JPMorgan Chase Bank N.A New York Branch,365454878451,45874512254472,154654648178,Checking
+Goldman Sachs Bank N.A Chicago Branch Wells Fargo Bank,JPMorgan Chase Bank N.A New York Branch,365454878451,45874512254473,154654648179,Checking
+Example Bank Entry 1,Bank of America National Association,021000322,BOFAUS3N,123456789012,Savings
+Example Bank Entry 2,Wells Fargo Bank National Association,121000248,WFBIUS6S,987654321098,Checking
+Example Bank Entry 3,Chase Bank USA National Association,021000021,CHASUS33,555666777888,Business

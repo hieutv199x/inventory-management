@@ -12,7 +12,7 @@ const JWT_SECRET = process.env.JWT_SECRET || "your_jwt_secret";
 type User = PrismaUser;
 
 export const generateToken = (userId: string): string => {
-  const token = jwt.sign({ userId }, JWT_SECRET, { expiresIn: "1h" });
+  const token = jwt.sign({ userId }, JWT_SECRET, { expiresIn: "8h" });
   console.log("Generated Token:", token);
   return token;
 };
