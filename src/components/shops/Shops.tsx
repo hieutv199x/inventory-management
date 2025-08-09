@@ -108,12 +108,15 @@ import {httpClient} from "@/lib/http-client";
           appKey,
           appSecret,
         };
-    debugger;
-        const res = await httpClient.post("tiktok/shop/add-shop-info", payload);
+        const res = await httpClient.post("/tiktok/shop/add-shop-info", payload);
 
-        closeModal();
-        resetForm();
-        await fetchShops();
+        if (!res.ok) {
+          const errorText = await res.text();
+          throw new Error(`Failed to save shop: ${errorText}`);
+        }
+        // closeModal();
+        // resetForm();
+        // await fetchShops();
       } catch (err) {
         console.error("❌ Save shop error:", err);
       }
