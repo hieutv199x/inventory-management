@@ -1,8 +1,9 @@
 "use client";
-import React, {useCallback, useEffect, useState} from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import Select from "@/components/form/Select";
-import {ChevronDownIcon} from "@/icons";
+import { ChevronDownIcon } from "@/icons";
 import Label from "@/components/form/Label";
+import { httpClient } from "@/lib/http-client";
 
 interface Shop {
     shopId: string;
@@ -18,28 +19,17 @@ interface SelectShopProps {
 }
 
 export default function SelectShop({
-                                       onChange,
-                                       className = "",
-                                       placeholder = "--- Select Shop ---",
-                                       enablePlaceholder = false,
-                                   }: SelectShopProps) {
+    onChange,
+    className = "",
+    placeholder = "--- Select Shop ---",
+    enablePlaceholder = false,
+}: SelectShopProps) {
 
     const [shops, setShops] = useState<Shop[]>([]);
 
     const fetchShops = useCallback(async () => {
         try {
-            const res = await fetch("/api/tiktok/shop/get-shops");
-            if (!res.ok) {
-                const errorText = await res.text();
-                try {
-                    const errorData = JSON.parse(errorText);
-                    throw new Error(errorData.error || `Request failed with status ${res.status}`);
-                } catch (e) {
-                    console.error("Non-JSON response from server:", errorText);
-                    throw new Error(`Server returned an unexpected response. Check console for details.`);
-                }
-            }
-            const data = await res.json();
+            const data = await httpClient.get("/tiktok/shop/get-shops");
             // Giả sử API trả về một mảng các shop
             setShops(data.credentials || []);
         } catch (err) {
@@ -79,8 +69,8 @@ export default function SelectShop({
                     className="dark:bg-dark-900"
                 />
                 <span className="absolute text-gray-500 -translate-y-1/2 pointer-events-none right-3 top-1/2 dark:text-gray-400">
-                          <ChevronDownIcon/>
-                        </span>
+                    <ChevronDownIcon />
+                </span>
             </div>
         </div>
     );

@@ -4,6 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useSidebar } from "../context/SidebarContext";
+import { useAuth } from "../context/authContext";
 import {
   BoxCubeIcon,
   CalenderIcon,
@@ -16,67 +17,85 @@ import {
   GroupIcon,
   SettingsIcon,
 } from "../icons/index";
-import { FaMoneyCheckAlt, FaUsersCog } from "react-icons/fa";
+import { FaMoneyCheckAlt, FaUsersCog, FaChartLine, FaBoxOpen, FaWarehouse } from "react-icons/fa";
 
 type NavItem = {
   name: string;
   icon: React.ReactNode;
   path?: string;
   subItems?: { name: string; path: string; pro?: boolean; new?: boolean }[];
+  roles?: string[]; // Add roles permission
 };
 
 // Sản phẩm (Products) Group
 const productItems: NavItem[] = [
-  
-  // {
-  //   icon: <BoxCubeIcon />,
-  //   name: "Inventory",
-  //   subItems: [
-  //     { name: "Stock Overview", path: "/inventory", pro: false },
-  //     { name: "Warehouse Management", path: "/warehouse", pro: false }
-  //   ],
-  // },
+  {
+    icon: <BoxCubeIcon />,
+    name: "Sản phẩm",
+    subItems: [
+      { name: "Danh sách sản phẩm", path: "/products" },
+      { name: "Thêm sản phẩm", path: "/products/add" }
+    ],
+    roles: ["ADMIN", "MANAGER", "SELLER"]
+  },
+  {
+    icon: <FaBoxOpen size={24} />,
+    name: "Kho hàng",
+    subItems: [
+      { name: "Tổng quan kho", path: "/inventory" },
+      { name: "Quản lý kho", path: "/warehouse" }
+    ],
+    roles: ["ADMIN", "MANAGER", "SELLER"]
+  },
   {
     icon: <CalenderIcon />,
     name: "Lịch",
     path: "/calendar",
+    roles: ["ADMIN", "MANAGER", "ACCOUNTANT", "SELLER"]
   }
 ];
 
 // Tài chính (Finance) Group
 const financeItems: NavItem[] = [
-  {icon: <BankIcon />, 
+  {
+    icon: <BankIcon />, 
     name: "Quản lý bank", 
-    path: "/bank" 
+    path: "/bank",
+    roles: ["ADMIN", "ACCOUNTANT"]
   },
   { 
     icon: <FaMoneyCheckAlt size={24}/>, 
     name: "Tiền về", 
-    path: "/statement"
+    path: "/statement",
+    roles: ["ADMIN", "MANAGER", "ACCOUNTANT", "SELLER"]
   },
   {
     icon: <PlugInIcon />,
     name: "Kết nối Shop",
-    path: "/shops"
+    path: "/shops",
+    roles: ["ADMIN", "MANAGER", "SELLER"]
   }
 ];
 
-// Tài khoản (Accounts) Group
+// Tài khoản (Accounts) Group - Only for ADMIN and MANAGER
 const accountItems: NavItem[] = [
   {
     icon: <GroupIcon />,
     name: "Quản lý user",
-    path: "/user-roles"
+    path: "/user-roles",
+    roles: ["ADMIN", "MANAGER"]
   },
   {
     icon: <FaUsersCog size={24}/>,
-    name: "Quản lý phân quyền shop",
-    path: "/permissions"
+    name: "Phân quyền shop",
+    path: "/permissions",
+    roles: ["ADMIN", "MANAGER"]
   }
 ];
 
 const AppSidebar: React.FC = () => {
   const { isExpanded, isMobileOpen, isHovered, setIsHovered } = useSidebar();
+  const { user } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
   const [isInitialLoad, setIsInitialLoad] = useState(true);
@@ -106,60 +125,46 @@ const AppSidebar: React.FC = () => {
     }
   }, [router, pathname, isPublicRoute, isInitialLoad, hasCheckedAuth]);
 
+  // Check if user has permission to see menu item
+  const hasPermission = useCallback((roles?: string[]) => {
+    if (!roles || roles.length === 0) return true;
+    if (!user?.role) return false;
+    return roles.includes(user.role);
+  }, [user?.role]);
+
+  // Filter menu items based on user role
+  const getFilteredItems = useCallback((items: NavItem[]) => {
+    return items.filter(item => hasPermission(item.roles));
+  }, [hasPermission]);
+
   const renderMenuItems = (
     navItems: NavItem[],
-    menuType: "product" | "finance" | "account"
-  ) => (
-    <ul className="flex flex-col gap-4">
-      {navItems.map((nav, index) => (
-        <li key={nav.name}>
-          {nav.subItems ? (
-            <button
-              onClick={() => handleSubmenuToggle(index, menuType)}
-              className={`menu-item group  ${
-                openSubmenu?.type === menuType && openSubmenu?.index === index
-                  ? "menu-item-active"
-                  : "menu-item-inactive"
-              } cursor-pointer ${
-                !isExpanded && !isHovered
-                  ? "lg:justify-center"
-                  : "lg:justify-start"
-              }`}
-            >
-              <span
-                className={` ${
+    menuType: "product" | "finance" | "account" | "system" | "resource"
+  ) => {
+    const filteredItems = getFilteredItems(navItems);
+    
+    if (filteredItems.length === 0) return null;
+
+    return (
+      <ul className="flex flex-col gap-4">
+        {filteredItems.map((nav, index) => (
+          <li key={nav.name}>
+            {nav.subItems ? (
+              <button
+                onClick={() => handleSubmenuToggle(index, menuType)}
+                className={`menu-item group  ${
                   openSubmenu?.type === menuType && openSubmenu?.index === index
-                    ? "menu-item-icon-active"
-                    : "menu-item-icon-inactive"
-                }`}
-              >
-                {nav.icon}
-              </span>
-              {(isExpanded || isHovered || isMobileOpen) && (
-                <span className={`menu-item-text`}>{nav.name}</span>
-              )}
-              {(isExpanded || isHovered || isMobileOpen) && (
-                <ChevronDownIcon
-                  className={`ml-auto w-5 h-5 transition-transform duration-200  ${
-                    openSubmenu?.type === menuType &&
-                    openSubmenu?.index === index
-                      ? "rotate-180 text-brand-500"
-                      : ""
-                  }`}
-                />
-              )}
-            </button>
-          ) : (
-            nav.path && (
-              <Link
-                href={nav.path}
-                className={`menu-item group ${
-                  isActive(nav.path) ? "menu-item-active" : "menu-item-inactive"
+                    ? "menu-item-active"
+                    : "menu-item-inactive"
+                } cursor-pointer ${
+                  !isExpanded && !isHovered
+                    ? "lg:justify-center"
+                    : "lg:justify-start"
                 }`}
               >
                 <span
-                  className={`${
-                    isActive(nav.path)
+                  className={` ${
+                    openSubmenu?.type === menuType && openSubmenu?.index === index
                       ? "menu-item-icon-active"
                       : "menu-item-icon-inactive"
                   }`}
@@ -169,71 +174,103 @@ const AppSidebar: React.FC = () => {
                 {(isExpanded || isHovered || isMobileOpen) && (
                   <span className={`menu-item-text`}>{nav.name}</span>
                 )}
-              </Link>
-            )
-          )}
-          {nav.subItems && (isExpanded || isHovered || isMobileOpen) && (
-            <div
-              ref={(el) => {
-                subMenuRefs.current[`${menuType}-${index}`] = el;
-              }}
-              className="overflow-hidden transition-all duration-300"
-              style={{
-                height:
-                  openSubmenu?.type === menuType && openSubmenu?.index === index
-                    ? `${subMenuHeight[`${menuType}-${index}`]}px`
-                    : "0px",
-              }}
-            >
-              <ul className="mt-2 space-y-1 ml-9">
-                {nav.subItems.map((subItem) => (
-                  <li key={subItem.name}>
-                    <Link
-                      href={subItem.path}
-                      className={`menu-dropdown-item ${
-                        isActive(subItem.path)
-                          ? "menu-dropdown-item-active"
-                          : "menu-dropdown-item-inactive"
-                      }`}
-                    >
-                      {subItem.name}
-                      <span className="flex items-center gap-1 ml-auto">
-                        {subItem.new && (
-                          <span
-                            className={`ml-auto ${
-                              isActive(subItem.path)
-                                ? "menu-dropdown-badge-active"
-                                : "menu-dropdown-badge-inactive"
-                            } menu-dropdown-badge `}
-                          >
-                            new
-                          </span>
-                        )}
-                        {subItem.pro && (
-                          <span
-                            className={`ml-auto ${
-                              isActive(subItem.path)
-                                ? "menu-dropdown-badge-active"
-                                : "menu-dropdown-badge-inactive"
-                            } menu-dropdown-badge `}
-                          >
-                            pro
-                          </span>
-                        )}
-                      </span>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </li>
-      ))}
-    </ul>
-  );
+                {(isExpanded || isHovered || isMobileOpen) && (
+                  <ChevronDownIcon
+                    className={`ml-auto w-5 h-5 transition-transform duration-200  ${
+                      openSubmenu?.type === menuType &&
+                      openSubmenu?.index === index
+                        ? "rotate-180 text-brand-500"
+                        : ""
+                    }`}
+                  />
+                )}
+              </button>
+            ) : (
+              nav.path && (
+                <Link
+                  href={nav.path}
+                  className={`menu-item group ${
+                    isActive(nav.path) ? "menu-item-active" : "menu-item-inactive"
+                  }`}
+                >
+                  <span
+                    className={`${
+                      isActive(nav.path)
+                        ? "menu-item-icon-active"
+                        : "menu-item-icon-inactive"
+                    }`}
+                  >
+                    {nav.icon}
+                  </span>
+                  {(isExpanded || isHovered || isMobileOpen) && (
+                    <span className={`menu-item-text`}>{nav.name}</span>
+                  )}
+                </Link>
+              )
+            )}
+            {nav.subItems && (isExpanded || isHovered || isMobileOpen) && (
+              <div
+                ref={(el) => {
+                  subMenuRefs.current[`${menuType}-${index}`] = el;
+                }}
+                className="overflow-hidden transition-all duration-300"
+                style={{
+                  height:
+                    openSubmenu?.type === menuType && openSubmenu?.index === index
+                      ? `${subMenuHeight[`${menuType}-${index}`]}px`
+                      : "0px",
+                }}
+              >
+                <ul className="mt-2 space-y-1 ml-9">
+                  {nav.subItems.map((subItem) => (
+                    <li key={subItem.name}>
+                      <Link
+                        href={subItem.path}
+                        className={`menu-dropdown-item ${
+                          isActive(subItem.path)
+                            ? "menu-dropdown-item-active"
+                            : "menu-dropdown-item-inactive"
+                        }`}
+                      >
+                        {subItem.name}
+                        <span className="flex items-center gap-1 ml-auto">
+                          {subItem.new && (
+                            <span
+                              className={`ml-auto ${
+                                isActive(subItem.path)
+                                  ? "menu-dropdown-badge-active"
+                                  : "menu-dropdown-badge-inactive"
+                              } menu-dropdown-badge `}
+                            >
+                              new
+                            </span>
+                          )}
+                          {subItem.pro && (
+                            <span
+                              className={`ml-auto ${
+                                isActive(subItem.path)
+                                  ? "menu-dropdown-badge-active"
+                                  : "menu-dropdown-badge-inactive"
+                              } menu-dropdown-badge `}
+                            >
+                              pro
+                            </span>
+                          )}
+                        </span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </li>
+        ))}
+      </ul>
+    );
+  };
 
   const [openSubmenu, setOpenSubmenu] = useState<{
-    type: "product" | "finance" | "account";
+    type: "product" | "finance" | "account" | "system" | "resource";
     index: number;
   } | null>(null);
   const [subMenuHeight, setSubMenuHeight] = useState<Record<string, number>>(
@@ -285,7 +322,7 @@ const AppSidebar: React.FC = () => {
     }
   }, [openSubmenu]);
 
-  const handleSubmenuToggle = (index: number, menuType: "product" | "finance" | "account") => {
+  const handleSubmenuToggle = (index: number, menuType: "product" | "finance" | "account" | "system" | "resource") => {
     setOpenSubmenu((prevOpenSubmenu) => {
       if (
         prevOpenSubmenu &&
@@ -296,6 +333,35 @@ const AppSidebar: React.FC = () => {
       }
       return { type: menuType, index };
     });
+  };
+
+  // Render menu section with role-based visibility
+  const renderMenuSection = (
+    title: string,
+    items: NavItem[],
+    menuType: "product" | "finance" | "account" | "system" | "resource"
+  ) => {
+    const filteredItems = getFilteredItems(items);
+    if (filteredItems.length === 0) return null;
+
+    return (
+      <div>
+        <h2
+          className={`mb-4 text-xs uppercase flex leading-[20px] text-gray-400 ${
+            !isExpanded && !isHovered
+              ? "lg:justify-center"
+              : "justify-start"
+          }`}
+        >
+          {isExpanded || isHovered || isMobileOpen ? (
+            title
+          ) : (
+            <HorizontaLDots />
+          )}
+        </h2>
+        {renderMenuItems(filteredItems, menuType)}
+      </div>
+    );
   };
 
   return (
@@ -333,61 +399,14 @@ const AppSidebar: React.FC = () => {
       <div className="flex flex-col overflow-y-auto duration-300 ease-linear no-scrollbar">
         <nav className="mb-6">
           <div className="flex flex-col gap-4">
-            <div>
-              <h2
-                className={`mb-4 text-xs uppercase flex leading-[20px] text-gray-400 ${
-                  !isExpanded && !isHovered
-                    ? "lg:justify-center"
-                    : "justify-start"
-                }`}
-              >
-                {isExpanded || isHovered || isMobileOpen ? (
-                  "Sản phẩm"
-                ) : (
-                  <HorizontaLDots />
-                )}
-              </h2>
-              {renderMenuItems(productItems, "product")}
-            </div>
-
-            <div>
-              <h2
-                className={`mb-4 text-xs uppercase flex leading-[20px] text-gray-400 ${
-                  !isExpanded && !isHovered
-                    ? "lg:justify-center"
-                    : "justify-start"
-                }`}
-              >
-                {isExpanded || isHovered || isMobileOpen ? (
-                  "Tài chính"
-                ) : (
-                  <HorizontaLDots />
-                )}
-              </h2>
-              {renderMenuItems(financeItems, "finance")}
-            </div>
-
-            <div>
-              <h2
-                className={`mb-4 text-xs uppercase flex leading-[20px] text-gray-400 ${
-                  !isExpanded && !isHovered
-                    ? "lg:justify-center"
-                    : "justify-start"
-                }`}
-              >
-                {isExpanded || isHovered || isMobileOpen ? (
-                  "Tài khoản"
-                ) : (
-                  <HorizontaLDots />
-                )}
-              </h2>
-              {renderMenuItems(accountItems, "account")}
-            </div>
+            {renderMenuSection("Sản phẩm", productItems, "product")}
+            {renderMenuSection("Tài chính", financeItems, "finance")}
+            {renderMenuSection("Tài khoản", accountItems, "account")}
           </div>
         </nav>
-        {/* {isExpanded || isHovered || isMobileOpen ? <SidebarWidget /> : null} */}
       </div>
     </aside>
   );
 };
+
 export default AppSidebar;

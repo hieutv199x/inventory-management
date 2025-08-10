@@ -64,6 +64,7 @@ export default function Shops() {
   // Role-based permissions
   const canAdd = user?.role === 'ADMIN' || user?.role === 'MANAGER';
   const canDelete = user?.role === 'ADMIN';
+  const canViewAllShops = user?.role === 'ADMIN' || user?.role === 'MANAGER';
 
   // Fetch shops with search and pagination
   const fetchShops = useCallback(async (page = 1, search = '', limit = 12) => {
@@ -72,12 +73,12 @@ export default function Shops() {
       const params = new URLSearchParams({
         page: page.toString(),
         limit: limit.toString(),
-        ...(search && { search })
+        ...(search && { search }),
+        // Add user role filter - if not admin/manager, only get assigned shops
+        ...(user?.id && !canViewAllShops && { userId: user.id })
       });
       
-      const response = await fetch(`/api/tiktok/shop/get-shops?${params}`);
-      if (!response.ok) throw new Error('Failed to fetch shops');
-      const data = await response.json();
+      const data = await httpClient.get(`/tiktok/shop/get-shops?${params}`);
       
       setShops(data.credentials || []);
       setPagination({
@@ -93,7 +94,7 @@ export default function Shops() {
       setLoading(false);
       setSearchLoading(false);
     }
-  }, []);
+  }, [canViewAllShops, user?.id]);
 
   // Debounced search - fix circular dependency
   useEffect(() => {

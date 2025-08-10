@@ -4,7 +4,7 @@ import React, { useEffect, useState } from "react";
 import Button from "../ui/button/Button";
 import { Table, TableBody, TableCell, TableHeader, TableRow } from "@/components/ui/table";
 import SelectShop from "@/components/common/SelectShop";
-import axiosInstance from "@/utils/axiosInstance";
+import { httpClient } from "@/lib/http-client";
 import DatePicker from "@/components/form/date-picker";
 
 interface Statement {
@@ -23,8 +23,6 @@ interface PaidHistory {
   amount: string;
   shopId: string;
   transactionId: string;
-  amount: string;
-  amount: string;
   currency: string;
   createTime: number;
   status: string;
@@ -45,19 +43,27 @@ export const StatementBank = () => {
   const fetchStatements = async () => {
     if (!selectedShop) return;
     setLoading(true);
+    setError(null);
     try {
-      const res = await axiosInstance.get(`/statements?shop_id=${selectedShop}`);
-      const rawStatements = res.data || [];
+      let url = `/statements?shop_id=${selectedShop}`;
+      if (startDate && endDate) {
+        const startTimestamp = Math.floor(new Date(startDate).getTime() / 1000);
+        const endTimestamp = Math.floor(new Date(endDate).getTime() / 1000);
+        url += `&start_date=${startTimestamp}&end_date=${endTimestamp}`;
+      }
+      
+      const res = await httpClient.get(url);
+      const rawStatements = res || [];
 
       const mappedStatements: Statement[] = rawStatements.map((item: any) => ({
         statementId: item.statementId,
         shopId: item.shopId,
-        shopName: item.shop?.shopName || '', // dùng optional chaining
+        shopName: item.shop?.shopName || '',
         revenue: item.revenueAmount || '0',
         holdAmount: item.adjustmentAmount || '0',
         paidAmount: item.settlementAmount || '0',
         holdDate: item.statementTime,
-        bankAccount: '', // nếu backend chưa trả về bankAccount thì để trống
+        bankAccount: '',
       }));
 
       setStatements(mappedStatements);
@@ -71,24 +77,30 @@ export const StatementBank = () => {
 
   const fetchPaidHistory = async () => {
     setLoading(true);
+    setError(null);
     try {
-      const res = await axiosInstance.get(`/Payments/?shop_id=${selectedShop}`);
-      setPaidHistories(res.data || []);
+      let url = `/Payments/?shop_id=${selectedShop}`;
+      if (startDate && endDate) {
+        const startTimestamp = Math.floor(new Date(startDate).getTime() / 1000);
+        const endTimestamp = Math.floor(new Date(endDate).getTime() / 1000);
+        url += `&start_date=${startTimestamp}&end_date=${endTimestamp}`;
+      }
+      
+      const res = await httpClient.get(url);
+      setPaidHistories(res || []);
     } catch (error) {
       console.error("Failed to fetch paid history:", error);
-
     }
     setLoading(false);
   };
-
 
   const handlePaymentSync = async () => {
     if (startDate && endDate) {
       const statementTimeGe = Math.floor(new Date(startDate).getTime() / 1000);
       const statementTimeLt = Math.floor(new Date(endDate).getTime() / 1000);
       try {
-        await axiosInstance.get(
-            `/tiktok/Finance/sync-get-payments?statementTimeGe=${statementTimeGe}&statementTimeLt=${statementTimeLt}`
+        await httpClient.get(
+          `/tiktok/Finance/sync-get-payments?statementTimeGe=${statementTimeGe}&statementTimeLt=${statementTimeLt}`
         );
       } catch (err) {
         console.error("Sync API failed", err);
@@ -101,8 +113,8 @@ export const StatementBank = () => {
       const statementTimeGe = Math.floor(new Date(startDate).getTime() / 1000);
       const statementTimeLt = Math.floor(new Date(endDate).getTime() / 1000);
       try {
-        await axiosInstance.get(
-            `/tiktok/Finance/SyncGetStatements?statementTimeGe=${statementTimeGe}&statementTimeLt=${statementTimeLt}`
+        await httpClient.get(
+          `/tiktok/Finance/SyncGetStatements?statementTimeGe=${statementTimeGe}&statementTimeLt=${statementTimeLt}`
         );
       } catch (err) {
         console.error("Sync API failed", err);
@@ -110,7 +122,16 @@ export const StatementBank = () => {
     }
   };
 
+  const handleSearch = () => {
+    if (activeTab === "shops") {
+      fetchStatements();
+    } else {
+      fetchPaidHistory();
+    }
+  };
+
   useEffect(() => {
+    // Initial load without date filters
     if (activeTab === "shops") fetchStatements();
     else fetchPaidHistory();
   }, [activeTab, selectedShop]);
@@ -128,142 +149,296 @@ export const StatementBank = () => {
   };
 
   return (
-      <div className="p-4 bg-white rounded shadow dark:bg-white/[0.03]">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-bold text-gray-800 dark:text-white/90">Quản lý về tiền</h2>
-          <Button onClick={() => activeTab === "shops" ? handleStatementSync() : handlePaymentSync()}>
-            Sync
+    <div className="p-6 space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <h2 className="text-2xl font-bold text-gray-800 dark:text-white">
+          Quản lý về tiền
+        </h2>
+      </div>
+
+      {/* Filter Controls */}
+      <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow-sm border border-gray-200 dark:border-gray-700">
+        <div className="flex flex-wrap items-end gap-4">
+          <div className="min-w-[200px]">
+            <SelectShop 
+              onChange={(val) => setSelectedShop(val)} 
+              placeholder="Tất cả shop" 
+              enablePlaceholder={false} 
+            />
+          </div>
+          
+          <div className="min-w-[160px]">
+            <DatePicker
+              id="start-date-picker"
+              label="Từ ngày"
+              placeholder="dd/MM/yyyy"
+              value={startDate}
+              onChange={(_, dateStr) => setStartDate(dateStr)}
+            />
+          </div>
+          
+          <div className="min-w-[160px]">
+            <DatePicker
+              id="end-date-picker"
+              label="Đến ngày"
+              value={endDate}
+              placeholder="dd/MM/yyyy"
+              onChange={(_, dateStr) => setEndDate(dateStr)}
+            />
+          </div>
+
+          <Button 
+            onClick={handleSearch}
+            disabled={!selectedShop || loading}
+            className="h-11"
+            variant="outline"
+          >
+            {loading ? "Đang tìm..." : "Tìm kiếm"}
+          </Button>
+          
+          <Button 
+            onClick={() => activeTab === "shops" ? handleStatementSync() : handlePaymentSync()}
+            disabled={!startDate || !endDate || loading}
+            className="h-11"
+          >
+            Đồng bộ dữ liệu
           </Button>
         </div>
+        
+        {/* Filter Summary */}
+        <div className="mt-3 flex flex-wrap gap-2">
+          {selectedShop && selectedShop !== 'all' && (
+            <span className="px-2 py-1 bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 rounded-md text-xs font-medium">
+              Shop: {selectedShop}
+            </span>
+          )}
+          {startDate && (
+            <span className="px-2 py-1 bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 rounded-md text-xs font-medium">
+              Từ: {new Date(startDate).toLocaleDateString('vi-VN')}
+            </span>
+          )}
+          {endDate && (
+            <span className="px-2 py-1 bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 rounded-md text-xs font-medium">
+              Đến: {new Date(endDate).toLocaleDateString('vi-VN')}
+            </span>
+          )}
+        </div>
+      </div>
 
-        <div className="flex border-b mb-4">
-          <button
-              className={`px-4 py-2 ${activeTab === "shops" ? "border-b-2 border-blue-500 font-semibold dark:text-white/90" : "text-gray-500"}`}
+      {/* Tab Navigation */}
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
+        <div className="border-b border-gray-200 dark:border-gray-700">
+          <nav className="flex space-x-8 px-6">
+            <button
+              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+                activeTab === "shops" 
+                  ? "border-blue-500 text-blue-600 dark:text-blue-400" 
+                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300"
+              }`}
               onClick={() => setActiveTab("shops")}
-          >
-            Danh sách shop
-          </button>
-          <button
-              className={`px-4 py-2 ml-2 ${activeTab === "history" ? "border-b-2 border-blue-500 font-semibold dark:text-white/90" : "text-gray-500"}`}
+            >
+              Báo cáo tài chính
+            </button>
+            <button
+              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+                activeTab === "history" 
+                  ? "border-blue-500 text-blue-600 dark:text-blue-400" 
+                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300"
+              }`}
               onClick={() => setActiveTab("history")}
-          >
-            Lịch sử paid
-          </button>
+            >
+              Lịch sử thanh toán
+            </button>
+          </nav>
         </div>
 
-        {activeTab === "shops" && (
+        {/* Tab Content */}
+        <div className="p-6">
+          {activeTab === "shops" && (
             <div>
-              <div className="mb-4 flex items-center gap-2">
-                <div className="w-48">
-                  <SelectShop onChange={(val) => setSelectedShop(val)} placeholder="All Shop" enablePlaceholder={false} />
-                </div>
-                <div className="w-40">
-                  <DatePicker
-                      id="start-date-picker"
-                      label="Start Date"
-                      placeholder="dd/MM/yyyy"
-                      value={startDate}
-                      onChange={(_, dateStr) => setStartDate(dateStr)}
-                  />
-                </div>
-                <span>-</span>
-                <div className="w-40">
-                  <DatePicker
-                      id="end-date-picker"
-                      label="End Date"
-                      value={endDate}
-                      placeholder="dd/MM/yyyy"
-                      onChange={(_, dateStr) => setEndDate(dateStr)}
-                  />
-                </div>
-
-              </div>
-
-
-                  <Table>
-                    <TableHeader className="border-gray-100 dark:border-gray-800 border-y">
-                      <TableRow>
-                        <TableCell
-                            isHeader
-                            className="py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400">ID</TableCell>
-                        <TableCell isHeader
-                                   className="py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400">Shop ID</TableCell>
-                        <TableCell isHeader
-                                   className="py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400">Tên shop</TableCell>
-                        <TableCell isHeader
-                                   className="py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400">Doanh số</TableCell>
-                        <TableCell isHeader
-                                   className="py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400">Tiền Hold</TableCell>
-                        <TableCell isHeader
-                                   className="py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400">Paid</TableCell>
-                        <TableCell isHeader
-                                   className="py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400">Ngày hold</TableCell>
-                        <TableCell isHeader
-                                   className="py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400">Bank account</TableCell>
+              <Table>
+                <TableHeader className="border-gray-100 dark:border-gray-700 border-y">
+                  <TableRow>
+                    <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
+                      Mã báo cáo
+                    </TableCell>
+                    <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
+                      Shop ID
+                    </TableCell>
+                    <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
+                      Tên shop
+                    </TableCell>
+                    <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
+                      Doanh thu
+                    </TableCell>
+                    <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
+                      Tiền giữ
+                    </TableCell>
+                    <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
+                      Đã thanh toán
+                    </TableCell>
+                    <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
+                      Ngày báo cáo
+                    </TableCell>
+                    <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
+                      Tài khoản ngân hàng
+                    </TableCell>
+                  </TableRow>
+                </TableHeader>
+                <TableBody className="divide-y divide-gray-100 dark:divide-gray-700">
+                  {loading ? (
+                    <TableRow>
+                      <TableCell colSpan={8} className="py-12 text-center">
+                        <div className="flex items-center justify-center space-x-2">
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                          <span className="text-gray-500 dark:text-gray-400">Đang tải dữ liệu...</span>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ) : error ? (
+                    <TableRow>
+                      <TableCell colSpan={8} className="py-12 text-center">
+                        <div className="text-red-500 dark:text-red-400">
+                          <p className="font-medium">Có lỗi xảy ra</p>
+                          <p className="text-sm mt-1">{error}</p>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ) : statements.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={8} className="py-12 text-center">
+                        <div className="text-gray-500 dark:text-gray-400">
+                          <p className="font-medium">Không có dữ liệu</p>
+                          <p className="text-sm mt-1">Chọn shop và khoảng thời gian để xem báo cáo</p>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    statements.map((s) => (
+                      <TableRow key={s.statementId} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                        <TableCell className="py-3 text-gray-900 dark:text-gray-100 font-mono text-sm">
+                          {s.statementId}
+                        </TableCell>
+                        <TableCell className="py-3 text-gray-700 dark:text-gray-300">
+                          {s.shopId}
+                        </TableCell>
+                        <TableCell className="py-3 text-gray-700 dark:text-gray-300 font-medium">
+                          {s.shopName}
+                        </TableCell>
+                        <TableCell className="py-3 text-gray-700 dark:text-gray-300 font-medium">
+                          {formatCurrency(s.revenue)}
+                        </TableCell>
+                        <TableCell className="py-3 text-gray-700 dark:text-gray-300 font-medium">
+                          {formatCurrency(s.holdAmount)}
+                        </TableCell>
+                        <TableCell className="py-3 text-green-600 dark:text-green-400 font-medium">
+                          {formatCurrency(s.paidAmount)}
+                        </TableCell>
+                        <TableCell className="py-3 text-gray-700 dark:text-gray-300">
+                          {formatDate(s.holdDate)}
+                        </TableCell>
+                        <TableCell className="py-3 text-gray-700 dark:text-gray-300">
+                          {s.bankAccount || '—'}
+                        </TableCell>
                       </TableRow>
-                    </TableHeader>
-                    <TableBody className="divide-y divide-gray-100 dark:divide-gray-800">
-                      {loading ? (
-                          <TableRow><TableCell colSpan={8} className="py-5 text-center text-gray-500">Loading products...</TableCell></TableRow>
-                      ) : error ? (
-                          <TableRow><TableCell colSpan={8} className="py-5 text-center text-red-500">Error: {error}</TableCell></TableRow>
-                      ) : statements.length === 0 ? (
-                          <TableRow><TableCell colSpan={8} className="py-5 text-center text-gray-500">No products found with the selected filters.</TableCell></TableRow>
-                      ) : (
-                      statements.map((s) => (
-                          <TableRow key={s.statementId}>
-                            <TableCell className="py-3 text-gray-500 text-theme-sm dark:text-gray-400">{s.statementId}</TableCell>
-                            <TableCell className="py-3 text-gray-500 text-theme-sm dark:text-gray-400">{s.shopId}</TableCell>
-                            <TableCell className="py-3 text-gray-500 text-theme-sm dark:text-gray-400">{s.shopName}</TableCell>
-                            <TableCell className="py-3 text-gray-500 text-theme-sm dark:text-gray-400">{formatCurrency(s.revenue)}</TableCell>
-                            <TableCell className="py-3 text-gray-500 text-theme-sm dark:text-gray-400">{formatCurrency(s.holdAmount)}</TableCell>
-                            <TableCell className="py-3 text-gray-500 text-theme-sm dark:text-gray-400">{formatCurrency(s.paidAmount)}</TableCell>
-                            <TableCell className="py-3 text-gray-500 text-theme-sm dark:text-gray-400">{formatDate(s.holdDate)}</TableCell>
-                            <TableCell className="py-3 text-gray-500 text-theme-sm dark:text-gray-400">{s.bankAccount}</TableCell>
-                          </TableRow>
-                      )))}
-                    </TableBody>
-                  </Table>
-
+                    ))
+                  )}
+                </TableBody>
+              </Table>
             </div>
-        )}
+          )}
 
-        {activeTab === "history" && (
+          {activeTab === "history" && (
             <div>
               {loading ? (
-                  <p>Đang tải lịch sử paid...</p>
+                <div className="flex items-center justify-center py-12">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mr-3"></div>
+                  <span className="text-gray-600 dark:text-gray-400">Đang tải lịch sử thanh toán...</span>
+                </div>
               ) : (
-                  <Table>
-                    <TableHeader>
+                <Table>
+                  <TableHeader className="border-gray-100 dark:border-gray-700 border-y">
+                    <TableRow>
+                      <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
+                        ID
+                      </TableCell>
+                      <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
+                        Shop ID
+                      </TableCell>
+                      <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
+                        Mã giao dịch
+                      </TableCell>
+                      <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
+                        Số tiền
+                      </TableCell>
+                      <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
+                        Tiền tệ
+                      </TableCell>
+                      <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
+                        Trạng thái
+                      </TableCell>
+                      <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
+                        Tài khoản NH
+                      </TableCell>
+                      <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
+                        Thời gian
+                      </TableCell>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody className="divide-y divide-gray-100 dark:divide-gray-700">
+                    {paidHistories.length === 0 ? (
                       <TableRow>
-                        <TableCell>ID</TableCell>
-                        <TableCell>Shop ID</TableCell>
-                        <TableCell>Transaction ID</TableCell>
-                        <TableCell>Amount</TableCell>
-                        <TableCell>Currency</TableCell>
-                        <TableCell>Status</TableCell>
-                        <TableCell>Bank Account</TableCell>
-                        <TableCell>Paid Time</TableCell>
+                        <TableCell colSpan={8} className="py-12 text-center">
+                          <div className="text-gray-500 dark:text-gray-400">
+                            <p className="font-medium">Không có lịch sử thanh toán</p>
+                            <p className="text-sm mt-1">Chọn shop để xem lịch sử thanh toán</p>
+                          </div>
+                        </TableCell>
                       </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {paidHistories.map((p) => (
-                          <TableRow key={p.id}>
-                            <TableCell>{p.id}</TableCell>
-                            <TableCell>{p.shopId}</TableCell>
-                            <TableCell>{p.transactionId}</TableCell>
-                            <TableCell>{p.amount}</TableCell>
-                            <TableCell>{p.currency}</TableCell>
-                            <TableCell>{p.status}</TableCell>
-                            <TableCell>{p.bankAccount}</TableCell>
-                            <TableCell>{formatDate(p.createTime)}</TableCell>
-                          </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                    ) : (
+                      paidHistories.map((p) => (
+                        <TableRow key={p.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                          <TableCell className="py-3 text-gray-900 dark:text-gray-100 font-mono text-sm">
+                            {p.id}
+                          </TableCell>
+                          <TableCell className="py-3 text-gray-700 dark:text-gray-300">
+                            {p.shopId}
+                          </TableCell>
+                          <TableCell className="py-3 text-gray-700 dark:text-gray-300 font-mono">
+                            {p.transactionId}
+                          </TableCell>
+                          <TableCell className="py-3 text-gray-700 dark:text-gray-300 font-medium">
+                            {formatCurrency(p.amount)}
+                          </TableCell>
+                          <TableCell className="py-3 text-gray-700 dark:text-gray-300">
+                            {p.currency}
+                          </TableCell>
+                          <TableCell className="py-3">
+                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                              p.status === 'PAID' 
+                                ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                                : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
+                            }`}>
+                              {p.status}
+                            </span>
+                          </TableCell>
+                          <TableCell className="py-3 text-gray-700 dark:text-gray-300">
+                            {p.bankAccount || '—'}
+                          </TableCell>
+                          <TableCell className="py-3 text-gray-700 dark:text-gray-300">
+                            {formatDate(p.createTime)}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
               )}
             </div>
-        )}
+          )}
+        </div>
       </div>
+    </div>
   );
 };

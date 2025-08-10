@@ -1,43 +1,108 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { PrismaClient } from '@prisma/client';
 import jwt from 'jsonwebtoken';
-import { prisma } from '@/lib/prisma';
 
+const prisma = new PrismaClient();
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 
+const verifyToken = (request: NextRequest) => {
+  const authHeader = request.headers.get('Authorization');
+  const token = authHeader?.replace('Bearer ', '');
+
+  if (!token) {
+    throw new Error('Authentication required');
+  }
+
+  return jwt.verify(token, JWT_SECRET) as any;
+};
+
 export async function GET(request: NextRequest) {
-    try {
-        const authHeader = request.headers.get('Authorization');
-        const token = authHeader?.replace('Bearer ', '');
+  try {
+    const decoded = verifyToken(request);
 
-        if (!token) {
-            return NextResponse.json(
-                { message: 'Authentication required' },
-                { status: 401 }
-            );
-        }
-        //jwt.verify(token, JWT_SECRET);
-        const { searchParams } = new URL(request.url);
-        const shopId = searchParams.get('shop_id');
+    // Get current user
+    const currentUser = await prisma.user.findUnique({
+      where: { id: decoded.userId },
+    });
 
-        const whereClause = shopId && shopId !== 'all' ? { shopId } : {};
-
-        const payments = await prisma.tikTokPayment.findMany({
-            where: whereClause,
-            orderBy: {
-                createTime: 'desc',
-            },
-            include: {
-                shop: true,
-            },
-        });
-
-        return NextResponse.json(payments);
-
-    } catch (error) {
-        console.error('Get shops error:', error);
-        return NextResponse.json(
-            { message: 'Authentication required' },
-            { status: 401 }
-        );
+    if (!currentUser) {
+      return NextResponse.json(
+        { error: 'User not found' },
+        { status: 404 }
+      );
     }
+
+    const { searchParams } = new URL(request.url);
+    const shopId = searchParams.get('shop_id');
+    const startDate = searchParams.get('start_date');
+    const endDate = searchParams.get('end_date');
+
+    // Build where clause based on user permissions
+    let whereClause: any = {};
+
+    // If user is not ADMIN or MANAGER, filter by user shop roles
+    if (!['ADMIN', 'MANAGER'].includes(currentUser.role)) {
+      // Get shops that the user has access to through UserShopRole
+      const userShopRoles = await prisma.userShopRole.findMany({
+        where: {
+          userId: currentUser.id,
+        },
+        select: {
+          shopId: true,
+        },
+      });
+
+      const accessibleShopIds = userShopRoles.map((usr) => usr.shopId);
+
+      // If user has no shop assignments, return empty result
+      if (accessibleShopIds.length === 0) {
+        return NextResponse.json([]);
+      }
+
+      // Filter by accessible shops
+      whereClause.shopId = {
+        in: accessibleShopIds,
+      };
+    }
+
+    // If specific shop is requested (not 'all'), add to filter
+    if (shopId && shopId !== 'all') {
+      whereClause.shopId = shopId;
+    }
+    // If shopId is 'all' or not provided, we keep the existing whereClause 
+    // which already filters by user permissions for non-admin users
+
+    // Add date range filter if provided
+    if (startDate && endDate) {
+      whereClause.createTime = {
+        gte: parseInt(startDate),
+        lte: parseInt(endDate),
+      };
+    }
+
+    // Get payments with user access control
+    const payments = await prisma.tikTokPayment.findMany({
+      where: whereClause,
+      include: {
+        shop: {
+          select: {
+            shopName: true,
+          },
+        },
+      },
+      orderBy: {
+        createTime: 'desc',
+      },
+    });
+
+    return NextResponse.json(payments);
+  } catch (error) {
+    console.error('Error fetching payments:', error);
+    return NextResponse.json(
+      { error: 'Failed to fetch payments' },
+      { status: 500 }
+    );
+  } finally {
+    await prisma.$disconnect();
+  }
 }

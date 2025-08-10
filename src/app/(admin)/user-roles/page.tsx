@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useEffect } from 'react';
-import { FaUserCircle, FaPlus, FaEdit, FaTrash, FaTimes, FaUsers, FaTable, FaTh, FaSearch, FaUserSlash, FaUserCheck } from 'react-icons/fa';
+import { FaUserCircle, FaPlus, FaEdit, FaTrash, FaTimes, FaUsers, FaTable, FaTh, FaSearch, FaUserSlash, FaUserCheck, FaKey } from 'react-icons/fa';
 import { userApi } from '@/lib/api-client';
 
 interface User {
@@ -26,12 +26,17 @@ export default function UserRolesPage() {
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showResetPasswordModal, setShowResetPasswordModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
     role: 'SELLER' as User['role'],
     password: ''
+  });
+  const [resetPasswordData, setResetPasswordData] = useState({
+    newPassword: '',
+    confirmPassword: ''
   });
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -214,6 +219,46 @@ export default function UserRolesPage() {
     }
   };
 
+  // Reset password function
+  const handleResetPassword = async (userId: string) => {
+    const confirmMessage = 'Bạn có chắc chắn muốn reset mật khẩu cho người dùng này?';
+    if (!confirm(confirmMessage)) return;
+
+    setSelectedUser(users.find(u => u.id === userId) || null);
+    setShowResetPasswordModal(true);
+  };
+
+  // Submit password reset
+  const handleSubmitPasswordReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedUser) return;
+
+    if (resetPasswordData.newPassword !== resetPasswordData.confirmPassword) {
+      setError('Mật khẩu xác nhận không khớp');
+      return;
+    }
+
+    if (resetPasswordData.newPassword.length < 6) {
+      setError('Mật khẩu phải có ít nhất 6 ký tự');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+
+    try {
+      await userApi.resetPassword(selectedUser.id, { password: resetPasswordData.newPassword });
+      setSuccess('Mật khẩu đã được reset thành công');
+      setShowResetPasswordModal(false);
+      setResetPasswordData({ newPassword: '', confirmPassword: '' });
+      setSelectedUser(null);
+    } catch (error: any) {
+      setError(error.message || 'Có lỗi xảy ra khi reset mật khẩu');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const openEditModal = (user: User) => {
     setSelectedUser(user);
     setFormData({
@@ -228,8 +273,10 @@ export default function UserRolesPage() {
   const closeModals = () => {
     setShowAddModal(false);
     setShowEditModal(false);
+    setShowResetPasswordModal(false);
     setSelectedUser(null);
     setFormData({ name: '', email: '', role: 'SELLER', password: '' });
+    setResetPasswordData({ newPassword: '', confirmPassword: '' });
     setError('');
   };
 
@@ -396,7 +443,7 @@ export default function UserRolesPage() {
         })}
       </div>
 
-      {/* Users Content - Use users instead of filteredUsers */}
+      {/* Users Content - Grid View */}
       {viewMode === 'grid' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {users.length === 0 ? (
@@ -488,7 +535,7 @@ export default function UserRolesPage() {
                 </div>
 
                 {/* Actions */}
-                <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 flex space-x-2">
+                <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 flex flex-wrap gap-2">
                   <button 
                     onClick={() => openEditModal(user)}
                     className="flex-1 px-3 py-1.5 text-xs font-medium text-brand-600 hover:text-brand-700 dark:text-brand-400 dark:hover:text-brand-300 border border-brand-300 rounded hover:bg-brand-50 dark:hover:bg-brand-900 transition-colors flex items-center justify-center space-x-1"
@@ -516,6 +563,14 @@ export default function UserRolesPage() {
                         <span>Kích hoạt</span>
                       </>
                     )}
+                  </button>
+                  
+                  <button 
+                    onClick={() => handleResetPassword(user.id)}
+                    className="flex-1 px-3 py-1.5 text-xs font-medium text-purple-600 hover:text-purple-700 dark:text-purple-400 dark:hover:text-purple-300 border border-purple-300 rounded hover:bg-purple-50 dark:hover:bg-purple-900 transition-colors flex items-center justify-center space-x-1"
+                  >
+                    <FaKey className="h-3 w-3" />
+                    <span>Reset PW</span>
                   </button>
                   
                   <button 
@@ -634,43 +689,53 @@ export default function UserRolesPage() {
                           )}
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-3">
-                        <button 
-                          onClick={() => openEditModal(user)}
-                          className="text-brand-600 hover:text-brand-900 dark:text-brand-400 dark:hover:text-brand-300 inline-flex items-center space-x-1"
-                        >
-                          <FaEdit className="h-3 w-3" />
-                          <span>Sửa</span>
-                        </button>
-                        
-                        <button 
-                          onClick={() => handleToggleUserStatus(user.id, user.isActive)}
-                          className={`inline-flex items-center space-x-1 ${
-                            user.isActive 
-                              ? 'text-orange-600 hover:text-orange-900 dark:text-orange-400 dark:hover:text-orange-300'
-                              : 'text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300'
-                          }`}
-                        >
-                          {user.isActive ? (
-                            <>
-                              <FaUserSlash className="h-3 w-3" />
-                              <span>Vô hiệu</span>
-                            </>
-                          ) : (
-                            <>
-                              <FaUserCheck className="h-3 w-3" />
-                              <span>Kích hoạt</span>
-                            </>
-                          )}
-                        </button>
-                        
-                        <button 
-                          onClick={() => handleDeleteUser(user.id)}
-                          className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300 inline-flex items-center space-x-1"
-                        >
-                          <FaTrash className="h-3 w-3" />
-                          <span>Xóa</span>
-                        </button>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                        <div className="flex items-center space-x-3 flex-wrap gap-2">
+                          <button 
+                            onClick={() => openEditModal(user)}
+                            className="text-brand-600 hover:text-brand-900 dark:text-brand-400 dark:hover:text-brand-300 inline-flex items-center space-x-1"
+                          >
+                            <FaEdit className="h-3 w-3" />
+                            <span>Sửa</span>
+                          </button>
+                          
+                          <button 
+                            onClick={() => handleToggleUserStatus(user.id, user.isActive)}
+                            className={`inline-flex items-center space-x-1 ${
+                              user.isActive 
+                                ? 'text-orange-600 hover:text-orange-900 dark:text-orange-400 dark:hover:text-orange-300'
+                                : 'text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300'
+                            }`}
+                          >
+                            {user.isActive ? (
+                              <>
+                                <FaUserSlash className="h-3 w-3" />
+                                <span>Vô hiệu</span>
+                              </>
+                            ) : (
+                              <>
+                                <FaUserCheck className="h-3 w-3" />
+                                <span>Kích hoạt</span>
+                              </>
+                            )}
+                          </button>
+                          
+                          <button 
+                            onClick={() => handleResetPassword(user.id)}
+                            className="text-purple-600 hover:text-purple-900 dark:text-purple-400 dark:hover:text-purple-300 inline-flex items-center space-x-1"
+                          >
+                            <FaKey className="h-3 w-3" />
+                            <span>Reset</span>
+                          </button>
+                          
+                          <button 
+                            onClick={() => handleDeleteUser(user.id)}
+                            className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300 inline-flex items-center space-x-1"
+                          >
+                            <FaTrash className="h-3 w-3" />
+                            <span>Xóa</span>
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -909,6 +974,78 @@ export default function UserRolesPage() {
                   className="flex-1 px-4 py-2 bg-brand-500 text-white rounded-md hover:bg-brand-600 disabled:opacity-50 transition-colors"
                 >
                   {loading ? 'Đang cập nhật...' : 'Cập nhật người dùng'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Reset Password Modal */}
+      {showResetPasswordModal && selectedUser && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+                Reset mật khẩu cho {selectedUser.name}
+              </h2>
+              <button onClick={closeModals} className="text-gray-400 hover:text-gray-600">
+                <FaTimes className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmitPasswordReset} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Mật khẩu mới
+                </label>
+                <input
+                  type="password"
+                  value={resetPasswordData.newPassword}
+                  onChange={(e) => setResetPasswordData({ ...resetPasswordData, newPassword: e.target.value })}
+                  className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-1 focus:ring-brand-500 dark:focus:ring-brand-400 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                  required
+                  minLength={6}
+                  placeholder="Nhập mật khẩu mới (tối thiểu 6 ký tự)"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Xác nhận mật khẩu mới
+                </label>
+                <input
+                  type="password"
+                  value={resetPasswordData.confirmPassword}
+                  onChange={(e) => setResetPasswordData({ ...resetPasswordData, confirmPassword: e.target.value })}
+                  className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-1 focus:ring-brand-500 dark:focus:ring-brand-400 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                  required
+                  minLength={6}
+                  placeholder="Nhập lại mật khẩu mới"
+                />
+              </div>
+
+              {resetPasswordData.newPassword && resetPasswordData.confirmPassword && 
+               resetPasswordData.newPassword !== resetPasswordData.confirmPassword && (
+                <div className="text-red-600 text-sm">
+                  Mật khẩu xác nhận không khớp
+                </div>
+              )}
+
+              <div className="flex space-x-3 pt-4">
+                <button
+                  type="button"
+                  onClick={closeModals}
+                  className="flex-1 px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-200 dark:bg-gray-600 rounded-md hover:bg-gray-300 dark:hover:bg-gray-500 transition-colors"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading || resetPasswordData.newPassword !== resetPasswordData.confirmPassword}
+                  className="flex-1 px-4 py-2 bg-purple-500 text-white rounded-md hover:bg-purple-600 disabled:opacity-50 transition-colors"
+                >
+                  {loading ? 'Đang reset...' : 'Reset mật khẩu'}
                 </button>
               </div>
             </form>

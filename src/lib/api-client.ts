@@ -24,6 +24,9 @@ export const userApi = {
 
   toggleStatus: (id: string, statusData: { isActive: boolean }) =>
     httpClient.put(`/users/${id}/toggle-status`, statusData),
+
+  resetPassword: (id: string, passwordData: { password: string }) =>
+    httpClient.put(`/users/${id}/reset-password`, passwordData),
 };
 
 // User Shop Role API methods
