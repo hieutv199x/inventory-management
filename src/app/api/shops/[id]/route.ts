@@ -17,10 +17,11 @@ const verifyToken = (request: NextRequest) => {
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const decoded = verifyToken(request);
+    const { id } = await params;
     
     // Only ADMIN and ACCOUNTANT can assign shops
     // if (!['ADMIN', 'ACCOUNTANT'].includes(decoded.role)) {
@@ -68,7 +69,7 @@ export async function PUT(
 
     // Update bank account
     const updatedBank = await prisma.bankAccount.update({
-      where: { id: params.id },
+      where: { id },
       data: {
         shopId: shop.id,
         assigneeId: user.id,
@@ -120,11 +121,11 @@ export async function PUT(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const decoded = verifyToken(request);
-    
+    const { id } = await params;
 
     const user = await prisma.user.findUnique({
       where: { id: decoded.userId }
@@ -133,7 +134,7 @@ export async function DELETE(
     if (!user) {
       return NextResponse.json(
           { message: 'User not found' },
-          { status: 404 }
+          { status: 400 }
       );
     }
 
@@ -144,28 +145,28 @@ export async function DELETE(
       );
     }
 
-    const app = await prisma.shopAuthorization.findUnique({
-      where: { shopId: params.id }
+    const shop = await prisma.shopAuthorization.findUnique({
+      where: { id }
     });
 
-    if (!app) {
+    if (!shop) {
       return NextResponse.json(
-        { message: 'App not found' },
+        { message: 'Shop not found' },
         { status: 404 }
       );
     }
 
     await prisma.shopAuthorization.update({
-      where: { shopId: params.id },
+      where: { id },
       data: { status: 'INACTIVE' }
     });
 
     return NextResponse.json({ message: 'Shop deleted successfully' });
 
   } catch (error) {
-    console.error('Delete bank error:', error);
+    console.error('Delete shop error:', error);
     return NextResponse.json(
-      { message: 'Failed to delete bank' },
+      { message: 'Failed to delete shop' },
       { status: 500 }
     );
   }

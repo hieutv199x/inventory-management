@@ -42,78 +42,31 @@ export async function GET(request: NextRequest) {
     const page = parseInt(searchParams.get('page') || '1', 10);
     const limit = parseInt(searchParams.get('limit') || '12', 10);
     const search = searchParams.get('search') || '';
-    const userId = searchParams.get('userId');
+    const status = searchParams.get('status') || '';
 
     const skip = (page - 1) * limit;
 
     // Build where clause for search
-    let whereClause: any = search
-      ? {
-          OR: [
-            {
-              shopName: {
-                contains: search,
-                mode: 'insensitive' as const,
-              },
-            },
-            {
-              shopId: {
-                contains: search,
-                mode: 'insensitive' as const,
-              },
-            },
-            {
-              region: {
-                contains: search,
-                mode: 'insensitive' as const,
-              },
-            },
-            {
-              app: {
-                appName: {
-                  contains: search,
-                  mode: 'insensitive' as const,
-                },
-              },
-            },
-          ],
-        }
-      : {};
+    const whereClause: any = {};
 
-    // If user is not ADMIN or MANAGER, filter by user shop roles
+    // Filter by status if provided (e.g., 'ACTIVE')
+    if (status) {
+      whereClause.status = status;
+    }
+
+    // Add search functionality
+    if (search) {
+      whereClause.OR = [
+        { shopName: { contains: search, mode: 'insensitive' } },
+        { shopId: { contains: search, mode: 'insensitive' } },
+        { country: { contains: search, mode: 'insensitive' } },
+        { app: { appName: { contains: search, mode: 'insensitive' } } },
+      ];
+    }
+
+    // Role-based filtering
     if (!['ADMIN', 'MANAGER'].includes(currentUser.role)) {
-      // Get shops that the user has access to through UserShopRole
-      const userShopRoles = await prisma.userShopRole.findMany({
-        where: {
-          userId: currentUser.id,
-        },
-        select: {
-          shopId: true,
-        },
-      });
-
-      const accessibleShopIds = userShopRoles.map((usr) => usr.shopId);
-
-      // If user has no shop assignments, return empty result
-      if (accessibleShopIds.length === 0) {
-        return NextResponse.json({
-          credentials: [],
-          pagination: {
-            page,
-            limit,
-            total: 0,
-            totalPages: 0,
-          },
-        });
-      }
-
-      // Add shop ID filter to where clause
-      whereClause = {
-        ...whereClause,
-        id: {
-          in: accessibleShopIds,
-        },
-      };
+      whereClause.assignedUserId = currentUser.id;
     }
 
     // Get shops with search and pagination

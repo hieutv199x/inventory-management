@@ -21,7 +21,8 @@ export async function GET(request: NextRequest) {
             some: {
               userId: user!.id
             }
-          }
+          },
+          status: 'ACTIVE'
         },
         select: {
           id: true,

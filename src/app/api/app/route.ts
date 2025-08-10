@@ -28,6 +28,9 @@ export async function GET(request: NextRequest) {
 
         // Admin/Manager can see all shops
         const app = await prisma.tikTokApp.findMany({
+            where: {
+                isActive: true
+            },
             orderBy: {
                 appName: 'asc'
             }

@@ -99,6 +99,7 @@ export default function Shops() {
       const params = new URLSearchParams({
         page: page.toString(),
         limit: limit.toString(),
+        status: 'ACTIVE',
         ...(search && { search }),
         // Add user role filter - if not admin/manager, only get assigned shops
         ...(user?.id && !canViewAllShops && { userId: user.id })
@@ -933,6 +934,17 @@ export default function Shops() {
           onConfirm={() => handleDeleteApp(selectedApp.id)}
           title="Xác nhận xóa App"
           message={`Bạn có chắc chắn muốn xóa App "${selectedApp.appName}"?`}
+        />
+      )}
+
+      {/* Delete Shop Confirmation Modal */}
+      {showDeleteModal && selectedShop && canDelete && (
+        <ConfirmDeleteModal
+          isOpen={showDeleteModal}
+          onClose={closeModals}
+          onConfirm={() => handleDeleteShop(selectedShop.id)}
+          title="Xác nhận xóa Shop"
+          message={`Bạn có chắc chắn muốn xóa Shop "${selectedShop.shopName || selectedShop.shopId}"? Hành động này không thể hoàn tác.`}
         />
       )}
 
