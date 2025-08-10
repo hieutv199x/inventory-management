@@ -67,32 +67,10 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Create shop authorization
-    const shopAuth = await prisma.shopAuthorization.create({
-      data: {
-        shopId: serviceId,
-        shopCipher: `cipher_${Date.now()}`, // Generate a cipher
-        shopName: appName, // Using appName as shop name temporarily
-        region: country,
-        accessToken: 'temp_access_token', // This should be obtained from TikTok OAuth
-        refreshToken: 'temp_refresh_token', // This should be obtained from TikTok OAuth
-        expiresIn: 3600,
-        scope: 'shop.basic',
-        status: 'ACTIVE',
-        appId: app.id,
-      },
-    });
-
-    return NextResponse.json({
-      message: 'Shop added successfully',
-      shop: {
-        id: shopAuth.id,
-        shopId: shopAuth.shopId,
-        shopName: shopAuth.shopName,
-        country: shopAuth.region,
-        status: shopAuth.status,
-      },
-    });
+    return NextResponse.json(
+      { message: 'App is saved successfully', data: app },
+      { status: 201 }
+    );
   } catch (error) {
     console.error('Error adding shop:', error);
     return NextResponse.json(

@@ -238,7 +238,7 @@ export const StatementBank = () => {
               }`}
               onClick={() => setActiveTab("shops")}
             >
-              Báo cáo tài chính
+              Lịch sử thanh toán
             </button>
             <button
               className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
@@ -248,7 +248,7 @@ export const StatementBank = () => {
               }`}
               onClick={() => setActiveTab("history")}
             >
-              Lịch sử thanh toán
+              Lịch sử tiền v
             </button>
           </nav>
         </div>

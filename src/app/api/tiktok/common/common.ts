@@ -69,21 +69,3 @@ export const generateSign = (
   
   return sign;  
 };
-
-
-
-
-/**
- * Truy vấn thông tin TikTokAppCredential theo appKey
- * @param appKey TikTok App Key
- * @returns TikTokAppCredential | null
- */
-export async function getTikTokCredentialByAppKey(appKey: string) {
-  if (!appKey) throw new Error("AppKey is required");
-
-  const credential = await prisma.tikTokAppCredential.findFirst({
-    where: { appKey },
-  });
-
-  return credential;
-}

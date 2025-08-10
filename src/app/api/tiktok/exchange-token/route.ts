@@ -17,7 +17,7 @@ export async function POST(req: Request) {
         });
 
         if (!credential) {
-            return NextResponse.json({ error: 'App key not found in database' }, { status: 404 });
+            return NextResponse.json({ error: 'App key not found in database' }, { status: 400 });
         }
         const appSecret = credential.appSecret;
 

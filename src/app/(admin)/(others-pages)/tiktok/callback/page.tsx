@@ -1,7 +1,8 @@
 "use client";
 
-import React, {Suspense, useEffect, useState} from "react";
-import {useRouter, useSearchParams} from "next/navigation";
+import React, {Suspense, useEffect, useState, useRef} from "react";
+import {useSearchParams} from "next/navigation";
+import { httpClient } from '@/lib/http-client';
 
 /**
  * This component handles the core logic of processing the TikTok redirect.
@@ -11,14 +12,22 @@ const TikTokCallbackHandler: React.FC = () => {
     const searchParams = useSearchParams();
     const [status, setStatus] = useState<"loading" | "success" | "error">("loading");
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
+    const processedRef = useRef(false);
 
     useEffect(() => {
+        // Prevent duplicate execution in React Strict Mode
+        if (processedRef.current) return;
+        
         if (!searchParams) return;
+        
         const app_key = searchParams.get("app_key");
         const code = searchParams.get("code");
         const error = searchParams.get("error");
 
         const processTikTokAuth = async () => {
+            // Mark as processed immediately to prevent race conditions
+            processedRef.current = true;
+            
             if (error) {
                 console.error(`Error from TikTok redirect: ${error}`);
                 setErrorMessage(error);
@@ -29,17 +38,10 @@ const TikTokCallbackHandler: React.FC = () => {
             if (code && app_key) {
                 console.log("Received TikTok authorization code, sending to backend...");
                 try {
-                    const response = await fetch('/api/tiktok/exchange-token', {
-                        method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({code, app_key}),
+                    const data = await httpClient.post('/tiktok/exchange-token', {
+                        code,
+                        app_key
                     });
-
-                    if (!response.ok) {
-                        throw new Error('Failed to exchange token');
-                    }
-
-                    const data = await response.json();
 
                     console.log('Token data:', data);
                     if (Array.isArray(data) && data.length > 0 && data[0].cipher) {

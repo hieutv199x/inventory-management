@@ -1,9 +1,9 @@
 "use client";
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { clearToken } from '../../utils/auth';
 
-const LogoutPage = () => {
+const LogoutContent = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [countdown, setCountdown] = useState(3);
@@ -57,6 +57,18 @@ const LogoutPage = () => {
         </div>
       </div>
     </div>
+  );
+};
+
+const LogoutPage = () => {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      </div>
+    }>
+      <LogoutContent />
+    </Suspense>
   );
 };
 

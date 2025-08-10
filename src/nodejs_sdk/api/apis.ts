@@ -77,7 +77,7 @@ this.name = 'HttpError';
 }
 }
 
-export { RequestFile } from '../model/models';
+export type { RequestFile } from '../model/models';
 
 export const APIS = [AuthorizationV202309Api, AuthorizationV202312Api, AuthorizationV202401Api, AuthorizationV202403Api, CustomerServiceV202309Api, CustomerServiceV202407Api, DataReconciliationV202309Api, DataReconciliationV202310Api, DataReconciliationV202401Api, EventV202309Api, FinanceV202309Api, FinanceV202501Api, FinanceV202506Api, FulfillmentV202309Api, FulfillmentV202407Api, FulfillmentV202502Api, LogisticsV202309Api, OrderV202309Api, OrderV202407Api, ProductV202309Api, ProductV202312Api, ProductV202401Api, ProductV202404Api, ProductV202405Api, ProductV202407Api, ProductV202409Api, ProductV202501Api, ProductV202502Api, ProductV202505Api, ProductV202506Api, PromotionV202309Api, PromotionV202406Api, ReturnRefundV202309Api, SellerV202309Api, SupplyChainV202309Api];
 
