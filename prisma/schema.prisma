@@ -10,9 +10,9 @@ generator client {
 
 enum Role {
   OWNER
-  MANAGER
-  STAFF
-  VIEWER
+  RESOURCE
+  ACCOUNTANT
+  SELLER
 }
 
 model UserShopRole {
@@ -55,9 +55,9 @@ model User {
 enum UserRole {
   ADMIN
   MANAGER
+  RESOURCE
   ACCOUNTANT
   SELLER
-  RESOURCE
 }
 
 model Session {

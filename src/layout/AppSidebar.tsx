@@ -29,30 +29,30 @@ type NavItem = {
 
 // Sản phẩm (Products) Group
 const productItems: NavItem[] = [
-  {
-    icon: <BoxCubeIcon />,
-    name: "Sản phẩm",
-    subItems: [
-      { name: "Danh sách sản phẩm", path: "/products" },
-      { name: "Thêm sản phẩm", path: "/products/add" }
-    ],
-    roles: ["ADMIN", "MANAGER", "SELLER"]
-  },
-  {
-    icon: <FaBoxOpen size={24} />,
-    name: "Kho hàng",
-    subItems: [
-      { name: "Tổng quan kho", path: "/inventory" },
-      { name: "Quản lý kho", path: "/warehouse" }
-    ],
-    roles: ["ADMIN", "MANAGER", "SELLER"]
-  },
-  {
-    icon: <CalenderIcon />,
-    name: "Lịch",
-    path: "/calendar",
-    roles: ["ADMIN", "MANAGER", "ACCOUNTANT", "SELLER"]
-  }
+  // {
+  //   icon: <BoxCubeIcon />,
+  //   name: "Sản phẩm",
+  //   subItems: [
+  //     { name: "Danh sách sản phẩm", path: "/products" },
+  //     { name: "Thêm sản phẩm", path: "/products/add" }
+  //   ],
+  //   roles: ["ADMIN", "MANAGER", "SELLER"]
+  // },
+  // {
+  //   icon: <FaBoxOpen size={24} />,
+  //   name: "Kho hàng",
+  //   subItems: [
+  //     { name: "Tổng quan kho", path: "/inventory" },
+  //     { name: "Quản lý kho", path: "/warehouse" }
+  //   ],
+  //   roles: ["ADMIN", "MANAGER", "SELLER"]
+  // },
+  // {
+  //   icon: <CalenderIcon />,
+  //   name: "Lịch",
+  //   path: "/calendar",
+  //   roles: ["ADMIN", "MANAGER", "ACCOUNTANT", "SELLER"]
+  // }
 ];
 
 // Tài chính (Finance) Group

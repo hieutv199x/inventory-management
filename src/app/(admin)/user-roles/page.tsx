@@ -2,6 +2,10 @@
 import React, { useState, useEffect } from 'react';
 import { FaUserCircle, FaPlus, FaEdit, FaTrash, FaTimes, FaUsers, FaTable, FaTh, FaSearch, FaUserSlash, FaUserCheck, FaKey } from 'react-icons/fa';
 import { userApi } from '@/lib/api-client';
+import { Modal } from '@/components/ui/modal';
+import Button from '@/components/ui/button/Button';
+import Label from '@/components/form/Label';
+import Input from '@/components/form/input/InputField';
 
 interface User {
   id: string;
@@ -983,74 +987,63 @@ export default function UserRolesPage() {
 
       {/* Reset Password Modal */}
       {showResetPasswordModal && selectedUser && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-                Reset mật khẩu cho {selectedUser.name}
-              </h2>
-              <button onClick={closeModals} className="text-gray-400 hover:text-gray-600">
-                <FaTimes className="h-5 w-5" />
-              </button>
+        <Modal isOpen={showResetPasswordModal} onClose={closeModals} className="max-w-md p-6">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+              Reset mật khẩu cho {selectedUser.name}
+            </h2>
+            <button onClick={closeModals} className="text-gray-400 hover:text-gray-600">
+              <FaTimes className="h-5 w-5" />
+            </button>
+          </div>
+
+          <form onSubmit={handleSubmitPasswordReset} className="space-y-4">
+            <div>
+              <Label>Mật khẩu mới</Label>
+              <Input
+                type="password"
+                value={resetPasswordData.newPassword}
+                onChange={(e) => setResetPasswordData({ ...resetPasswordData, newPassword: e.target.value })}
+                placeholder="Nhập mật khẩu mới (tối thiểu 6 ký tự)"
+              />
             </div>
 
-            <form onSubmit={handleSubmitPasswordReset} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Mật khẩu mới
-                </label>
-                <input
-                  type="password"
-                  value={resetPasswordData.newPassword}
-                  onChange={(e) => setResetPasswordData({ ...resetPasswordData, newPassword: e.target.value })}
-                  className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-1 focus:ring-brand-500 dark:focus:ring-brand-400 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                  required
-                  minLength={6}
-                  placeholder="Nhập mật khẩu mới (tối thiểu 6 ký tự)"
-                />
-              </div>
+            <div>
+              <Label>Xác nhận mật khẩu mới</Label>
+              <Input
+                type="password"
+                value={resetPasswordData.confirmPassword}
+                onChange={(e) => setResetPasswordData({ ...resetPasswordData, confirmPassword: e.target.value })}
+                placeholder="Nhập lại mật khẩu mới"
+              />
+            </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Xác nhận mật khẩu mới
-                </label>
-                <input
-                  type="password"
-                  value={resetPasswordData.confirmPassword}
-                  onChange={(e) => setResetPasswordData({ ...resetPasswordData, confirmPassword: e.target.value })}
-                  className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-1 focus:ring-brand-500 dark:focus:ring-brand-400 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                  required
-                  minLength={6}
-                  placeholder="Nhập lại mật khẩu mới"
-                />
+            {resetPasswordData.newPassword && resetPasswordData.confirmPassword && 
+             resetPasswordData.newPassword !== resetPasswordData.confirmPassword && (
+              <div className="text-red-600 text-sm">
+                Mật khẩu xác nhận không khớp
               </div>
+            )}
 
-              {resetPasswordData.newPassword && resetPasswordData.confirmPassword && 
-               resetPasswordData.newPassword !== resetPasswordData.confirmPassword && (
-                <div className="text-red-600 text-sm">
-                  Mật khẩu xác nhận không khớp
-                </div>
-              )}
-
-              <div className="flex space-x-3 pt-4">
-                <button
-                  type="button"
-                  onClick={closeModals}
-                  className="flex-1 px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-200 dark:bg-gray-600 rounded-md hover:bg-gray-300 dark:hover:bg-gray-500 transition-colors"
-                >
-                  Hủy
-                </button>
-                <button
-                  type="submit"
-                  disabled={loading || resetPasswordData.newPassword !== resetPasswordData.confirmPassword}
-                  className="flex-1 px-4 py-2 bg-purple-500 text-white rounded-md hover:bg-purple-600 disabled:opacity-50 transition-colors"
-                >
-                  {loading ? 'Đang reset...' : 'Reset mật khẩu'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+            <div className="flex space-x-3 pt-4">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={closeModals}
+                className="flex-1"
+              >
+                Hủy
+              </Button>
+              <Button
+                type="submit"
+                disabled={loading || resetPasswordData.newPassword !== resetPasswordData.confirmPassword}
+                className="flex-1 bg-purple-500 hover:bg-purple-600"
+              >
+                {loading ? 'Đang reset...' : 'Reset mật khẩu'}
+              </Button>
+            </div>
+          </form>
+        </Modal>
       )}
     </div>
   );

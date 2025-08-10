@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useEffect, useCallback } from 'react';
-import { FaStore, FaPlus, FaEdit, FaTrash, FaTimes, FaSearch, FaEye, FaTh, FaList } from 'react-icons/fa';
+import { FaStore, FaPlus, FaEdit, FaTrash, FaTimes, FaSearch, FaEye, FaTh, FaList, FaKey } from 'react-icons/fa';
 import { useAuth } from '@/context/authContext';
 import { httpClient } from '@/lib/http-client';
 import Badge from "@/components/ui/badge/Badge";
@@ -10,6 +10,14 @@ import Label from "@/components/form/Label";
 import Input from "@/components/form/input/InputField";
 import Select from "@/components/form/Select";
 import ConfirmDeleteModal from "@/components/ui/modal/ConfirmDeleteModal";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { ChevronDownIcon, TrashBinIcon } from "@/icons";
 
 interface Shop {
   id: string;
@@ -22,9 +30,19 @@ interface Shop {
     appSecret: string | null;
     appName: string | null;
   };
-  country: string; // This maps to region in ShopAuthorization
+  country: string;
   status: string | null;
   createdAt: string;
+}
+
+interface App {
+  id: string;
+  appId: string;
+  appKey: string;
+  appSecret: string | null;
+  appName: string | null;
+  createdAt: string;
+  isActive: boolean;
 }
 
 export default function Shops() {
@@ -47,6 +65,14 @@ export default function Shops() {
     total: 0,
     totalPages: 0
   });
+
+  // App management states
+  const [showAppListModal, setShowAppListModal] = useState(false);
+  const [appList, setAppList] = useState<App[]>([]);
+  const [editingAppId, setEditingAppId] = useState<string | null>(null);
+  const [editAppSecret, setEditAppSecret] = useState<string>("");
+  const [selectedApp, setSelectedApp] = useState<App | null>(null);
+  const [showDeleteAppModal, setShowDeleteAppModal] = useState(false);
   
   const [formData, setFormData] = useState({
     country: 'US',
@@ -130,6 +156,21 @@ export default function Shops() {
     unknown: shops.filter(shop => !shop.status || !['active', 'live', 'jumio', 'up doc', 'inactive', 'die 7 days', 'shop closed'].includes(shop.status.toLowerCase()))
   };
 
+  // Helper to render status badge
+  function getStatusBadge(status?: string | null) {
+    const normalized = status?.toLowerCase() || '';
+    if (['active', 'live'].includes(normalized)) {
+      return <Badge size="sm" color="success">Hoạt động</Badge>;
+    }
+    if (['jumio', 'up doc'].includes(normalized)) {
+      return <Badge size="sm" color="warning">Chờ xác minh</Badge>;
+    }
+    if (['inactive', 'die 7 days', 'shop closed'].includes(normalized)) {
+      return <Badge size="sm" color="error">Không hoạt động</Badge>;
+    }
+    return <Badge size="sm" color="primary">{status || 'Không rõ'}</Badge>;
+  }
+
   // Handle add shop
   const handleAddShop = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -168,22 +209,53 @@ export default function Shops() {
     }
   };
 
-  // Get status badge
-  const getStatusBadge = (status: string | null) => {
-    const lowerStatus = status?.toLowerCase();
-    switch (lowerStatus) {
-      case "active":
-      case 'live':
-        return <Badge size="sm" color="success">{status}</Badge>;
-      case 'jumio':
-      case 'up doc':
-        return <Badge size="sm" color="warning">{status}</Badge>;
-      case 'inactive':
-      case 'die 7 days':
-      case 'shop closed':
-        return <Badge size="sm" color="error">{status}</Badge>;
-      default:
-        return <Badge size="sm" color="dark">{status || 'Unknown'}</Badge>;
+  // App List functionality
+  const handleOpenAppList = async () => {
+    try {
+      const res = await httpClient.get("/app");
+      setAppList(res.app || []);
+      setShowAppListModal(true);
+    } catch (err) {
+      console.error("Error fetching apps:", err);
+      setError('Không thể tải danh sách app');
+    }
+  };
+
+  const handleEditAppSecret = (app: App) => {
+    setEditingAppId(app.id);
+    setEditAppSecret(app.appSecret || "");
+  };
+
+  const handleCancelEdit = () => {
+    setEditingAppId(null);
+    setEditAppSecret("");
+  };
+
+  const handleSaveAppSecret = async (id: string) => {
+    try {
+      await httpClient.put(`/app/${id}`, { appSecret: editAppSecret });
+      const res = await httpClient.get("/app");
+      setAppList(res.app || []);
+      setEditingAppId(null);
+      setEditAppSecret("");
+      setSuccess('Cập nhật App Secret thành công');
+    } catch (err) {
+      console.error("Failed to update appSecret", err);
+      setError('Không thể cập nhật App Secret');
+    }
+  };
+
+  const handleDeleteApp = async (id: string) => {
+    try {
+      await httpClient.delete(`/app/${id}`);
+      const res = await httpClient.get("/app");
+      setAppList(res.app || []);
+      setShowDeleteAppModal(false);
+      setSelectedApp(null);
+      setSuccess('Xóa app thành công');
+    } catch (err) {
+      console.error("Failed to delete app", err);
+      setError('Không thể xóa app');
     }
   };
 
@@ -191,7 +263,12 @@ export default function Shops() {
     setShowAddModal(false);
     setShowDeleteModal(false);
     setShowDetailsModal(false);
+    setShowAppListModal(false);
+    setShowDeleteAppModal(false);
     setSelectedShop(null);
+    setSelectedApp(null);
+    setEditingAppId(null);
+    setEditAppSecret("");
     setError('');
     setFormData({
       country: 'US',
@@ -272,13 +349,23 @@ export default function Shops() {
           </div>
           
           {canAdd && (
-            <button 
-              onClick={() => setShowAddModal(true)}
-              className="px-4 py-2 bg-brand-500 text-white rounded-lg hover:bg-brand-600 transition-colors flex items-center space-x-2"
-            >
-              <FaPlus className="h-4 w-4" />
-              <span>Thêm Shop</span>
-            </button>
+            <>
+              <button 
+                onClick={() => setShowAddModal(true)}
+                className="px-4 py-2 bg-brand-500 text-white rounded-lg hover:bg-brand-600 transition-colors flex items-center space-x-2"
+              >
+                <FaPlus className="h-4 w-4" />
+                <span>Thêm APP</span>
+              </button>
+              
+              <button 
+                onClick={handleOpenAppList}
+                className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors flex items-center space-x-2"
+              >
+                <FaKey className="h-4 w-4" />
+                <span>Danh sách APP</span>
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -628,12 +715,12 @@ export default function Shops() {
         </div>
       )}
 
-      {/* Add Shop Modal */}
+      {/* Add Shop Modal - Update with new form structure */}
       {showAddModal && (
         <Modal isOpen={showAddModal} onClose={closeModals} className="max-w-md p-6">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white vietnamese-text">
-              Thêm Shop Mới
+              Import App
             </h2>
             <button onClick={closeModals} className="text-gray-400 hover:text-gray-600">
               <FaTimes className="h-5 w-5" />
@@ -643,19 +730,25 @@ export default function Shops() {
           <form onSubmit={handleAddShop} className="space-y-4">
             <div>
               <Label>Quốc gia</Label>
-              <Select
-                options={countryOptions}
-                placeholder="Chọn quốc gia"
-                value={formData.country}
-                onChange={(value) => setFormData(prev => ({ ...prev, country: value }))}
-              />
+              <div className="relative">
+                <Select
+                  options={countryOptions}
+                  placeholder="Chọn quốc gia"
+                  value={formData.country}
+                  onChange={(value) => setFormData(prev => ({ ...prev, country: value }))}
+                  className="dark:bg-dark-900"
+                />
+                <span className="absolute text-gray-500 -translate-y-1/2 pointer-events-none right-3 top-1/2 dark:text-gray-400">
+                  <ChevronDownIcon />
+                </span>
+              </div>
             </div>
 
             <div>
               <Label>Service ID</Label>
               <Input
                 type="text"
-                placeholder="7172**********70150"
+                placeholder="ID: 7172**********70150"
                 value={formData.serviceId}
                 onChange={(e) => setFormData(prev => ({ ...prev, serviceId: e.target.value }))}
               />
@@ -705,21 +798,141 @@ export default function Shops() {
                 disabled={loading}
                 className="flex-1"
               >
-                {loading ? 'Đang thêm...' : 'Thêm Shop'}
+                {loading ? 'Đang thêm...' : 'Lưu thay đổi'}
               </Button>
             </div>
           </form>
         </Modal>
       )}
 
-      {/* Delete Confirmation Modal */}
-      {showDeleteModal && selectedShop && (
+      {/* App List Modal */}
+      {showAppListModal && (
+        <Modal isOpen={showAppListModal} onClose={closeModals} className="max-w-6xl p-6">
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+              Danh sách App
+            </h2>
+            <button onClick={closeModals} className="text-gray-400 hover:text-gray-600">
+              <FaTimes className="h-5 w-5" />
+            </button>
+          </div>
+
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader className="border-gray-100 dark:border-gray-800 border-y">
+                <TableRow>
+                  <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">STT</TableCell>
+                  <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">Tên App</TableCell>
+                  <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">App Key</TableCell>
+                  <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">App Secret</TableCell>
+                  <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">Trạng thái</TableCell>
+                  <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">Ngày tạo</TableCell>
+                  <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">Thao tác</TableCell>
+                </TableRow>
+              </TableHeader>
+              <TableBody className="divide-y divide-gray-100 dark:divide-gray-800">
+                {appList.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="py-12 text-center text-gray-500 dark:text-gray-400">
+                      Không có app nào
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  appList.map((app, idx) => {
+                    const isEditing = editingAppId === app.id;
+                    return (
+                      <TableRow key={app.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                        <TableCell className="py-3 text-gray-700 dark:text-gray-300">{idx + 1}</TableCell>
+                        <TableCell className="py-3 text-gray-700 dark:text-gray-300 font-medium">{app.appName}</TableCell>
+                        <TableCell className="py-3 text-gray-700 dark:text-gray-300 font-mono text-sm">{app.appKey}</TableCell>
+                        <TableCell className="py-3 text-gray-700 dark:text-gray-300">
+                          {isEditing ? (
+                            <input
+                              type="text"
+                              value={editAppSecret}
+                              onChange={e => setEditAppSecret(e.target.value)}
+                              className="border border-gray-300 dark:border-gray-600 rounded px-2 py-1 w-80 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                            />
+                          ) : (
+                            <span className="font-mono text-sm">{app.appSecret}</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="py-3">
+                          {app.isActive ? (
+                            <Badge size="sm" color="success">Hoạt động</Badge>
+                          ) : (
+                            <Badge size="sm" color="error">Không hoạt động</Badge>
+                          )}
+                        </TableCell>
+                        <TableCell className="py-3 text-gray-700 dark:text-gray-300">
+                          {new Date(app.createdAt).toLocaleDateString('vi-VN')}
+                        </TableCell>
+                        <TableCell className="py-3">
+                          <div className="flex items-center space-x-2">
+                            {isEditing ? (
+                              <>
+                                <button
+                                  className="text-green-600 hover:text-green-800 dark:text-green-400"
+                                  title="Lưu"
+                                  onClick={() => handleSaveAppSecret(app.id)}
+                                >
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                                    <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round"/>
+                                  </svg>
+                                </button>
+                                <button
+                                  className="text-gray-400 hover:text-gray-600 dark:text-gray-300"
+                                  title="Hủy"
+                                  onClick={handleCancelEdit}
+                                >
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                                    <path d="M6 18L18 6M6 6l12 12" strokeLinecap="round" strokeLinejoin="round"/>
+                                  </svg>
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                <button
+                                  className="text-blue-600 hover:text-blue-800 dark:text-blue-400"
+                                  title="Sửa"
+                                  onClick={() => handleEditAppSecret(app)}
+                                >
+                                  <FaEdit className="w-4 h-4" />
+                                </button>
+                                {(canDelete && app.isActive) && (
+                                  <button
+                                    onClick={() => {
+                                      setSelectedApp(app);
+                                      setShowDeleteAppModal(true);
+                                    }}
+                                    className="text-red-600 hover:text-red-800 dark:text-red-400"
+                                    title="Xóa"
+                                  >
+                                    <FaTrash className="w-4 h-4" />
+                                  </button>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </Modal>
+      )}
+
+      {/* Delete App Confirmation Modal */}
+      {showDeleteAppModal && selectedApp && canDelete && (
         <ConfirmDeleteModal
-          isOpen={showDeleteModal}
+          isOpen={showDeleteAppModal}
           onClose={closeModals}
-          onConfirm={() => handleDeleteShop(selectedShop.shopId)}
-          title="Xác nhận xóa shop"
-          message={`Bạn có chắc chắn muốn xóa shop "${selectedShop.shopName}"?`}
+          onConfirm={() => handleDeleteApp(selectedApp.id)}
+          title="Xác nhận xóa App"
+          message={`Bạn có chắc chắn muốn xóa App "${selectedApp.appName}"?`}
         />
       )}
 

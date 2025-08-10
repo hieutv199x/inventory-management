@@ -38,12 +38,21 @@ export async function PUT(
 
     // Check if user has permission to update roles in this shop
     const isAdmin = checkRole(user!.role, ['ADMIN']);
-    const hasShopPermission = await checkShopPermission(user!.id, existingRole.shopId, ['OWNER', 'MANAGER']);
+    const hasShopPermission = await checkShopPermission(user!.id, existingRole.shopId, ['OWNER', 'RESOURCE']);
 
     if (!isAdmin && !hasShopPermission) {
       return NextResponse.json(
         { error: 'Insufficient permissions to update roles in this shop' },
         { status: 403 }
+      );
+    }
+
+    // Validate role
+    const validRoles = ['OWNER', 'RESOURCE', 'ACCOUNTANT', 'SELLER'];
+    if (!validRoles.includes(role)) {
+      return NextResponse.json(
+        { error: 'Invalid role. Must be one of: OWNER, RESOURCE, ACCOUNTANT, SELLER' },
+        { status: 400 }
       );
     }
 
@@ -120,13 +129,13 @@ export async function DELETE(
       );
     }
 
-    // Check if user has permission to remove roles from this shop (Owner only, unless Admin)
+    // Check if user has permission to remove roles from this shop (Owner and Resource only, unless Admin)
     const isAdmin = checkRole(user!.role, ['ADMIN']);
-    const hasShopPermission = await checkShopPermission(user!.id, existingRole.shopId, ['OWNER']);
+    const hasShopPermission = await checkShopPermission(user!.id, existingRole.shopId, ['OWNER', 'RESOURCE']);
 
     if (!isAdmin && !hasShopPermission) {
       return NextResponse.json(
-        { error: 'Only shop owners or administrators can remove users from shops' },
+        { error: 'Only shop owners, resource managers, or administrators can remove users from shops' },
         { status: 403 }
       );
     }

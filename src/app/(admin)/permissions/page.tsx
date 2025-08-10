@@ -2,12 +2,15 @@
 import React, { useState, useEffect } from 'react';
 import { FaUsers, FaPlus, FaEdit, FaTrash, FaTimes, FaSearch } from 'react-icons/fa';
 import { userShopRoleApi, userApi, shopApi } from '@/lib/api-client';
+import { Modal } from '@/components/ui/modal';
+import Button from '@/components/ui/button/Button';
+import Label from '@/components/form/Label';
 
 interface UserShopRole {
   id: string;
   userId: string;
   shopId: string;
-  role: 'OWNER' | 'MANAGER' | 'STAFF' | 'VIEWER';
+  role: 'OWNER' | 'RESOURCE' | 'ACCOUNTANT' | 'SELLER';
   createdAt: string;
   user: {
     id: string;
@@ -44,7 +47,7 @@ export default function PermissionsPage() {
   const [formData, setFormData] = useState({
     userId: '',
     shopId: '',
-    role: 'STAFF' as UserShopRole['role']
+    role: 'SELLER' as UserShopRole['role']
   });
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -58,9 +61,28 @@ export default function PermissionsPage() {
 
   const roleColors = {
     OWNER: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
-    MANAGER: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
-    STAFF: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
-    VIEWER: 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'
+    RESOURCE: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200',
+    ACCOUNTANT: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
+    SELLER: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+  };
+
+  const roleDescriptions = {
+    OWNER: {
+      label: 'Owner - Chủ sở hữu',
+      description: 'Toàn quyền truy cập và sử dụng tất cả các tính năng của hệ thống'
+    },
+    RESOURCE: {
+      label: 'Resource - Quản lý Tài nguyên',
+      description: 'Kết nối và quản lý shop, thiết lập tài nguyên hệ thống (không được xóa shop)'
+    },
+    ACCOUNTANT: {
+      label: 'Accountant - Kế toán',
+      description: 'Quản lý tài chính, đối soát, báo cáo, quản lý đơn hàng và fulfill'
+    },
+    SELLER: {
+      label: 'Seller - Nhân viên bán hàng',
+      description: 'Quản lý sản phẩm, đơn hàng, listing, promotions và các hoạt động bán hàng'
+    }
   };
 
   // Fetch user roles with pagination and search
@@ -181,7 +203,7 @@ export default function PermissionsPage() {
       await userShopRoleApi.create(formData);
       setSuccess('Phân quyền thành công');
       setShowAssignModal(false);
-      setFormData({ userId: '', shopId: '', role: 'STAFF' });
+      setFormData({ userId: '', shopId: '', role: 'SELLER' });
       await fetchUserRoles(pagination.page, searchTerm, selectedShop);
     } catch (error: any) {
       setError(error.message);
@@ -238,7 +260,7 @@ export default function PermissionsPage() {
     setShowAssignModal(false);
     setShowEditModal(false);
     setSelectedRole(null);
-    setFormData({ userId: '', shopId: '', role: 'STAFF' });
+    setFormData({ userId: '', shopId: '', role: 'SELLER' });
     setError('');
   };
 
@@ -520,147 +542,189 @@ export default function PermissionsPage() {
 
       {/* Assign Role Modal */}
       {showAssignModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white vietnamese-text">Phân công người dùng vào cửa hàng</h2>
-              <button onClick={closeModals} className="text-gray-400 hover:text-gray-600">
-                <FaTimes className="h-5 w-5" />
-              </button>
+        <Modal isOpen={showAssignModal} onClose={closeModals} className="max-w-lg p-6">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white vietnamese-text">
+              Phân quyền người dùng vào cửa hàng
+            </h2>
+            <button onClick={closeModals} className="text-gray-400 hover:text-gray-600">
+              <FaTimes className="h-5 w-5" />
+            </button>
+          </div>
+
+          <form onSubmit={handleAssignRole} className="space-y-4">
+            <div>
+              <Label>Người dùng</Label>
+              <select
+                value={formData.userId}
+                onChange={(e) => setFormData(prev => ({ ...prev, userId: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white vietnamese-text"
+                required
+              >
+                <option value="">Chọn người dùng</option>
+                {users.map(user => (
+                  <option key={user.id} value={user.id}>
+                    {user.name} ({user.email})
+                  </option>
+                ))}
+              </select>
             </div>
 
-            <form onSubmit={handleAssignRole} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 vietnamese-text">
-                  Người dùng
-                </label>
-                <select
-                  value={formData.userId}
-                  onChange={(e) => setFormData(prev => ({ ...prev, userId: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-500 dark:bg-gray-700 dark:text-white vietnamese-text"
-                  required
-                >
-                  <option value="">Chọn người dùng</option>
-                  {users.map(user => (
-                    <option key={user.id} value={user.id}>
-                      {user.name} ({user.email})
-                    </option>
-                  ))}
-                </select>
-              </div>
+            <div>
+              <Label>Cửa hàng</Label>
+              <select
+                value={formData.shopId}
+                onChange={(e) => setFormData(prev => ({ ...prev, shopId: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white vietnamese-text"
+                required
+              >
+                <option value="">Chọn cửa hàng</option>
+                {shops.map(shop => (
+                  <option key={shop.id} value={shop.id}>
+                    {shop.shopName}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 vietnamese-text">
-                  Cửa hàng
-                </label>
-                <select
-                  value={formData.shopId}
-                  onChange={(e) => setFormData(prev => ({ ...prev, shopId: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-500 dark:bg-gray-700 dark:text-white vietnamese-text"
-                  required
-                >
-                  <option value="">Chọn cửa hàng</option>
-                  {shops.map(shop => (
-                    <option key={shop.id} value={shop.id}>
-                      {shop.shopName}
-                    </option>
-                  ))}
-                </select>
+            <div>
+              <Label>Vai trò và quyền hạn</Label>
+              <div className="space-y-3">
+                {Object.entries(roleDescriptions).map(([role, info]) => (
+                  <div 
+                    key={role}
+                    className={`p-3 border rounded-lg cursor-pointer transition-colors ${
+                      formData.role === role
+                        ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/20'
+                        : 'border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
+                    }`}
+                    onClick={() => setFormData(prev => ({ ...prev, role: role as UserShopRole['role'] }))}
+                  >
+                    <div className="flex items-center mb-2">
+                      <input
+                        type="radio"
+                        name="role"
+                        value={role}
+                        checked={formData.role === role}
+                        onChange={() => setFormData(prev => ({ ...prev, role: role as UserShopRole['role'] }))}
+                        className="mr-3 text-brand-500 focus:ring-brand-500"
+                      />
+                      <span className="font-medium text-gray-900 dark:text-white vietnamese-text">
+                        {info.label}
+                      </span>
+                    </div>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 ml-6 vietnamese-text">
+                      {info.description}
+                    </p>
+                  </div>
+                ))}
               </div>
+            </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 vietnamese-text">
-                  Quyền
-                </label>
-                <select
-                  value={formData.role}
-                  onChange={(e) => setFormData(prev => ({ ...prev, role: e.target.value as UserShopRole['role'] }))}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-500 dark:bg-gray-700 dark:text-white vietnamese-text"
-                >
-                  <option value="OWNER">Chủ sở hữu - Quyền truy cập đầy đủ tất cả tính năng</option>
-                  <option value="MANAGER">Quản lý - Có thể quản lý người dùng và kho hàng</option>
-                  <option value="STAFF">Nhân viên - Có thể quản lý kho hàng</option>
-                  <option value="VIEWER">Người xem - Chỉ xem được</option>
-                </select>
-              </div>
-
-              <div className="flex space-x-3 pt-4">
-                <button
-                  type="button"
-                  onClick={closeModals}
-                  className="flex-1 px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-200 dark:bg-gray-600 rounded-md hover:bg-gray-300 dark:hover:bg-gray-500 transition-colors vietnamese-text"
-                >
-                  Hủy
-                </button>
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="flex-1 px-4 py-2 bg-brand-500 text-white rounded-md hover:bg-brand-600 disabled:opacity-50 transition-colors vietnamese-text"
-                >
-                  {loading ? 'Đang phân công...' : 'Phân công quyền'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+            <div className="flex space-x-3 pt-4">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={closeModals}
+                className="flex-1"
+              >
+                Hủy
+              </Button>
+              <Button
+                type="submit"
+                disabled={loading}
+                className="flex-1"
+              >
+                {loading ? 'Đang phân quyền...' : 'Phân quyền'}
+              </Button>
+            </div>
+          </form>
+        </Modal>
       )}
 
       {/* Edit Role Modal */}
       {showEditModal && selectedRole && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white vietnamese-text">Sửa quyền người dùng</h2>
-              <button onClick={closeModals} className="text-gray-400 hover:text-gray-600">
-                <FaTimes className="h-5 w-5" />
-              </button>
-            </div>
-
-            <div className="mb-4 p-3 bg-gray-50 dark:bg-gray-700 rounded vietnamese-text">
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                Người dùng: <strong className="text-gray-900 dark:text-white">{selectedRole.user.name}</strong>
-              </p>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                Cửa hàng: <strong className="text-gray-900 dark:text-white">{selectedRole.shop.shopName}</strong>
-              </p>
-            </div>
-
-            <form onSubmit={handleUpdateRole} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 vietnamese-text">
-                  Quyền
-                </label>
-                <select
-                  value={formData.role}
-                  onChange={(e) => setFormData(prev => ({ ...prev, role: e.target.value as UserShopRole['role'] }))}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-500 dark:bg-gray-700 dark:text-white vietnamese-text"
-                >
-                  <option value="OWNER">Chủ sở hữu - Quyền truy cập đầy đủ tất cả tính năng</option>
-                  <option value="MANAGER">Quản lý - Có thể quản lý người dùng và kho hàng</option>
-                  <option value="STAFF">Nhân viên - Có thể quản lý kho hàng</option>
-                  <option value="VIEWER">Người xem - Chỉ xem được</option>
-                </select>
-              </div>
-
-              <div className="flex space-x-3 pt-4">
-                <button
-                  type="button"
-                  onClick={closeModals}
-                  className="flex-1 px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-200 dark:bg-gray-600 rounded-md hover:bg-gray-300 dark:hover:bg-gray-500 transition-colors vietnamese-text"
-                >
-                  Hủy
-                </button>
-                <button
-                  type="submit"
-                  disabled={loading || formData.role === selectedRole.role}
-                  className="flex-1 px-4 py-2 bg-brand-500 text-white rounded-md hover:bg-brand-600 disabled:opacity-50 transition-colors vietnamese-text"
-                >
-                  {loading ? 'Đang cập nhật...' : 'Cập nhật quyền'}
-                </button>
-              </div>
-            </form>
+        <Modal isOpen={showEditModal} onClose={closeModals} className="max-w-lg p-6">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white vietnamese-text">
+              Cập nhật quyền người dùng
+            </h2>
+            <button onClick={closeModals} className="text-gray-400 hover:text-gray-600">
+              <FaTimes className="h-5 w-5" />
+            </button>
           </div>
-        </div>
+
+          <div className="mb-4 p-3 bg-gray-50 dark:bg-gray-700 rounded vietnamese-text">
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              Người dùng: <strong className="text-gray-900 dark:text-white">{selectedRole.user.name}</strong>
+            </p>
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              Cửa hàng: <strong className="text-gray-900 dark:text-white">{selectedRole.shop.shopName}</strong>
+            </p>
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              Vai trò hiện tại: <span className={`px-2 py-1 text-xs font-semibold rounded-full ${roleColors[selectedRole.role]}`}>
+                {roleDescriptions[selectedRole.role].label}
+              </span>
+            </p>
+          </div>
+
+          <form onSubmit={handleUpdateRole} className="space-y-4">
+            <div>
+              <Label>Chọn vai trò mới</Label>
+              <div className="space-y-3">
+                {Object.entries(roleDescriptions).map(([role, info]) => (
+                  <div 
+                    key={role}
+                    className={`p-3 border rounded-lg cursor-pointer transition-colors ${
+                      formData.role === role
+                        ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/20'
+                        : 'border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
+                    }`}
+                    onClick={() => setFormData(prev => ({ ...prev, role: role as UserShopRole['role'] }))}
+                  >
+                    <div className="flex items-center mb-2">
+                      <input
+                        type="radio"
+                        name="role"
+                        value={role}
+                        checked={formData.role === role}
+                        onChange={() => setFormData(prev => ({ ...prev, role: role as UserShopRole['role'] }))}
+                        className="mr-3 text-brand-500 focus:ring-brand-500"
+                      />
+                      <span className="font-medium text-gray-900 dark:text-white vietnamese-text">
+                        {info.label}
+                      </span>
+                      {selectedRole.role === role && (
+                        <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">(Hiện tại)</span>
+                      )}
+                    </div>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 ml-6 vietnamese-text">
+                      {info.description}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex space-x-3 pt-4">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={closeModals}
+                className="flex-1"
+              >
+                Hủy
+              </Button>
+              <Button
+                type="submit"
+                disabled={loading || formData.role === selectedRole.role}
+                className="flex-1"
+              >
+                {loading ? 'Đang cập nhật...' : 'Cập nhật quyền'}
+              </Button>
+            </div>
+          </form>
+        </Modal>
       )}
     </div>
   );

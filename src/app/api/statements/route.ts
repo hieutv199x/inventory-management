@@ -48,11 +48,16 @@ export async function GET(request: NextRequest) {
           userId: currentUser.id,
         },
         select: {
-          shopId: true,
+          shop: {
+            select: {
+              id: true,
+              shopId: true,
+            },
+          }
         },
       });
 
-      const accessibleShopIds = userShopRoles.map((usr) => usr.shopId);
+      const accessibleShopIds = userShopRoles.map((usr) => usr.shop?.shopId);
 
       // If user has no shop assignments, return empty result
       if (accessibleShopIds.length === 0) {

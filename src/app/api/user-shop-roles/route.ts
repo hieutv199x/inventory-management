@@ -12,96 +12,65 @@ export async function GET(request: NextRequest) {
 
     const { user } = authResult;
     const { searchParams } = new URL(request.url);
-    const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '10');
+    const page = parseInt(searchParams.get('page') || '1', 10);
+    const limit = parseInt(searchParams.get('limit') || '10', 10);
     const search = searchParams.get('search') || '';
     const shopId = searchParams.get('shopId') || '';
 
     const skip = (page - 1) * limit;
 
-    // Build base where clause for permissions
-    let baseWhere: any = {};
+    // Build where clause
+    let whereClause: any = {};
 
-    // Add shop filter first
-    if (shopId) {
-      baseWhere.shopId = shopId;
+    // If user is not ADMIN, filter by shops they have access to
+    if (!checkRole(user!.role, ['ADMIN'])) {
+      const userShopRoles = await prisma.userShopRole.findMany({
+        where: {
+          userId: user!.id,
+          role: { in: ['OWNER'] } // Only owners and resource managers can view all roles
+        },
+        select: { shopId: true }
+      });
+
+      const accessibleShopIds = userShopRoles.map(role => role.shopId);
+      
+      if (accessibleShopIds.length === 0) {
+        return NextResponse.json({
+          userRoles: [],
+          pagination: { page, limit, total: 0, totalPages: 0 }
+        });
+      }
+
+      whereClause.shopId = { in: accessibleShopIds };
     }
 
-    // Check user permissions and add access restrictions
-    if (!checkRole(user!.role, ['ADMIN', 'MANAGER'])) {
-      // If not admin/manager, only show roles for shops they have access to
-      baseWhere.shop = {
-        userShopRoles: {
-          some: {
-            userId: user!.id,
-            role: { in: ['OWNER', 'MANAGER'] }
+    // Apply search filter
+    if (search) {
+      whereClause.OR = [
+        {
+          user: {
+            name: { contains: search, mode: 'insensitive' }
+          }
+        },
+        {
+          user: {
+            email: { contains: search, mode: 'insensitive' }
+          }
+        },
+        {
+          shop: {
+            shopName: { contains: search, mode: 'insensitive' }
           }
         }
-      };
+      ];
     }
 
-    // For search, we need to get all records first then filter (since count doesn't support complex relations)
-    let whereClause = baseWhere;
-    let searchFilter: any = {};
-
-    if (search) {
-      // Check if search matches any of the enum role values
-      const roleValues = ['OWNER', 'MANAGER', 'STAFF', 'VIEWER'];
-      const matchingRoles = roleValues.filter(role => 
-        role.toLowerCase().includes(search.toLowerCase())
-      );
-
-      searchFilter = {
-        OR: [
-          {
-            user: {
-              name: {
-                contains: search,
-                mode: 'insensitive' as const
-              }
-            }
-          },
-          {
-            user: {
-              email: {
-                contains: search,
-                mode: 'insensitive' as const
-              }
-            }
-          },
-          {
-            shop: {
-              shopName: {
-                contains: search,
-                mode: 'insensitive' as const
-              }
-            }
-          },
-          // For enum fields, use 'in' with matching values instead of 'contains'
-          ...(matchingRoles.length > 0 ? [{
-            role: {
-              in: matchingRoles as any[]
-            }
-          }] : [])
-        ].filter(Boolean) // Remove empty conditions
-      };
-
-      // Combine base where with search
-      if (Object.keys(baseWhere).length > 0) {
-        whereClause = {
-          AND: [
-            baseWhere,
-            searchFilter
-          ]
-        };
-      } else {
-        whereClause = searchFilter;
-      }
+    // Apply shop filter
+    if (shopId) {
+      whereClause.shopId = shopId;
     }
 
-    // Get total count and paginated results in parallel
     const [userRoles, total] = await Promise.all([
-      // Get paginated user roles with search
       prisma.userShopRole.findMany({
         where: whereClause,
         include: {
@@ -119,29 +88,18 @@ export async function GET(request: NextRequest) {
             }
           }
         },
-        orderBy: {
-          createdAt: 'desc'
-        },
+        orderBy: { createdAt: 'desc' },
         skip,
-        take: limit,
+        take: limit
       }),
-      
-      // Get total count - use a simpler approach for counting with search
-      prisma.userShopRole.count({
-        where: whereClause
-      })
+      prisma.userShopRole.count({ where: whereClause })
     ]);
 
     const totalPages = Math.ceil(total / limit);
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       userRoles,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages
-      }
+      pagination: { page, limit, total, totalPages }
     });
   } catch (error) {
     console.error('Error fetching user roles:', error);
@@ -165,14 +123,23 @@ export async function POST(request: NextRequest) {
 
     if (!userId || !shopId || !role) {
       return NextResponse.json(
-        { error: 'Missing required fields' },
+        { error: 'userId, shopId, and role are required' },
         { status: 400 }
       );
     }
 
-    // Check if user has permission to assign roles in this shop
+    // Validate role
+    const validRoles = ['OWNER', 'RESOURCE', 'ACCOUNTANT', 'SELLER'];
+    if (!validRoles.includes(role)) {
+      return NextResponse.json(
+        { error: 'Invalid role. Must be one of: OWNER, RESOURCE, ACCOUNTANT, SELLER' },
+        { status: 400 }
+      );
+    }
+
+    // Check if user has permission to assign roles to this shop
     const isAdmin = checkRole(user!.role, ['ADMIN']);
-    const hasShopPermission = await checkShopPermission(user!.id, shopId, ['OWNER', 'MANAGER']);
+    const hasShopPermission = await checkShopPermission(user!.id, shopId, ['OWNER', 'RESOURCE']);
 
     if (!isAdmin && !hasShopPermission) {
       return NextResponse.json(
@@ -181,24 +148,42 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if user is already assigned to this shop
-    const existingRole = await prisma.userShopRole.findUnique({
+    // Check if the user already has a role in this shop
+    const existingRole = await prisma.userShopRole.findFirst({
       where: {
-        userId_shopId: {
-          userId,
-          shopId
-        }
+        userId,
+        shopId
       }
     });
 
     if (existingRole) {
       return NextResponse.json(
-        { error: 'User is already assigned to this shop' },
+        { error: 'User already has a role in this shop' },
         { status: 400 }
       );
     }
 
-    const userRole = await prisma.userShopRole.create({
+    // Verify that both user and shop exist
+    const [targetUser, targetShop] = await Promise.all([
+      prisma.user.findUnique({ where: { id: userId } }),
+      prisma.shopAuthorization.findUnique({ where: { id: shopId } })
+    ]);
+
+    if (!targetUser) {
+      return NextResponse.json(
+        { error: 'User not found' },
+        { status: 404 }
+      );
+    }
+
+    if (!targetShop) {
+      return NextResponse.json(
+        { error: 'Shop not found' },
+        { status: 404 }
+      );
+    }
+
+    const newUserRole = await prisma.userShopRole.create({
       data: {
         userId,
         shopId,
@@ -221,7 +206,7 @@ export async function POST(request: NextRequest) {
       }
     });
 
-    return NextResponse.json({ userRole }, { status: 201 });
+    return NextResponse.json({ userRole: newUserRole });
   } catch (error) {
     console.error('Error creating user role:', error);
     return NextResponse.json(
