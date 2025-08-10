@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useEffect } from 'react';
-import { FaUserCircle, FaPlus, FaEdit, FaTrash, FaTimes, FaUsers, FaTable, FaTh, FaSearch } from 'react-icons/fa';
+import { FaUserCircle, FaPlus, FaEdit, FaTrash, FaTimes, FaUsers, FaTable, FaTh, FaSearch, FaUserSlash, FaUserCheck } from 'react-icons/fa';
 import { userApi } from '@/lib/api-client';
 
 interface User {
@@ -8,6 +8,7 @@ interface User {
   name: string;
   email: string;
   role: 'ADMIN' | 'MANAGER' | 'ACCOUNTANT' | 'SELLER' | 'RESOURCE';
+  isActive: boolean; // Add isActive property
   shops: {
     id: string;
     shopName: string;
@@ -189,6 +190,24 @@ export default function UserRolesPage() {
     try {
       await userApi.delete(userId);
       setSuccess('User deleted successfully');
+      await fetchUsers(pagination.page, searchTerm);
+    } catch (error: any) {
+      setError(error.message);
+    }
+  };
+
+  // Toggle user active status
+  const handleToggleUserStatus = async (userId: string, currentStatus: boolean) => {
+    const action = currentStatus ? 'deactivate' : 'activate';
+    const confirmMessage = currentStatus 
+      ? 'Bạn có chắc chắn muốn vô hiệu hóa tài khoản này? Người dùng sẽ không thể đăng nhập.'
+      : 'Bạn có chắc chắn muốn kích hoạt tài khoản này?';
+      
+    if (!confirm(confirmMessage)) return;
+
+    try {
+      await userApi.toggleStatus(userId, { isActive: !currentStatus });
+      setSuccess(`Tài khoản đã được ${currentStatus ? 'vô hiệu hóa' : 'kích hoạt'} thành công`);
       await fetchUsers(pagination.page, searchTerm);
     } catch (error: any) {
       setError(error.message);
@@ -403,16 +422,28 @@ export default function UserRolesPage() {
             </div>
           ) : (
             users.map((user) => (
-              <div key={user.id} className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow hover:shadow-md transition-shadow">
+              <div key={user.id} className={`bg-white dark:bg-gray-800 rounded-lg p-6 shadow hover:shadow-md transition-shadow ${!user.isActive ? 'opacity-60 border border-red-200 dark:border-red-800' : ''}`}>
                 {/* User Info */}
                 <div className="flex items-center space-x-3 mb-4">
-                  <div className="h-12 w-12 bg-brand-500 rounded-full flex items-center justify-center text-white font-medium text-lg">
+                  <div className={`h-12 w-12 rounded-full flex items-center justify-center text-white font-medium text-lg relative ${user.isActive ? 'bg-brand-500' : 'bg-gray-500'}`}>
                     {user.name?.charAt(0).toUpperCase() || 'U'}
+                    {!user.isActive && (
+                      <div className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center">
+                        <FaUserSlash className="w-2 h-2 text-white" />
+                      </div>
+                    )}
                   </div>
                   <div className="flex-1">
-                    <h3 className="text-lg font-medium text-gray-900 dark:text-white">
-                      {user.name}
-                    </h3>
+                    <div className="flex items-center space-x-2">
+                      <h3 className="text-lg font-medium text-gray-900 dark:text-white">
+                        {user.name}
+                      </h3>
+                      {!user.isActive && (
+                        <span className="px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">
+                          Vô hiệu hóa
+                        </span>
+                      )}
+                    </div>
                     <p className="text-sm text-gray-600 dark:text-gray-400">
                       {user.email}
                     </p>
@@ -465,6 +496,28 @@ export default function UserRolesPage() {
                     <FaEdit className="h-3 w-3" />
                     <span>Sửa</span>
                   </button>
+                  
+                  <button 
+                    onClick={() => handleToggleUserStatus(user.id, user.isActive)}
+                    className={`flex-1 px-3 py-1.5 text-xs font-medium border rounded transition-colors flex items-center justify-center space-x-1 ${
+                      user.isActive 
+                        ? 'text-orange-600 hover:text-orange-700 dark:text-orange-400 dark:hover:text-orange-300 border-orange-300 hover:bg-orange-50 dark:hover:bg-orange-900'
+                        : 'text-green-600 hover:text-green-700 dark:text-green-400 dark:hover:text-green-300 border-green-300 hover:bg-green-50 dark:hover:bg-green-900'
+                    }`}
+                  >
+                    {user.isActive ? (
+                      <>
+                        <FaUserSlash className="h-3 w-3" />
+                        <span>Vô hiệu</span>
+                      </>
+                    ) : (
+                      <>
+                        <FaUserCheck className="h-3 w-3" />
+                        <span>Kích hoạt</span>
+                      </>
+                    )}
+                  </button>
+                  
                   <button 
                     onClick={() => handleDeleteUser(user.id)}
                     className="flex-1 px-3 py-1.5 text-xs font-medium text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 border border-red-300 rounded hover:bg-red-50 dark:hover:bg-red-900 transition-colors flex items-center justify-center space-x-1"
@@ -497,6 +550,9 @@ export default function UserRolesPage() {
                     Quyền hệ thống
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    Trạng thái
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                     Phân công cửa hàng
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
@@ -507,7 +563,7 @@ export default function UserRolesPage() {
               <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                 {users.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
+                    <td colSpan={5} className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
                       {searchTerm 
                         ? `Không có người dùng nào khớp với "${searchTerm}". Hãy thử điều chỉnh tìm kiếm.`
                         : 'Không tìm thấy người dùng. Thêm người dùng để bắt đầu.'
@@ -516,11 +572,16 @@ export default function UserRolesPage() {
                   </tr>
                 ) : (
                   users.map((user) => (
-                    <tr key={user.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                    <tr key={user.id} className={`hover:bg-gray-50 dark:hover:bg-gray-700 ${!user.isActive ? 'opacity-60' : ''}`}>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center">
-                          <div className="h-10 w-10 bg-brand-500 rounded-full flex items-center justify-center text-white font-medium">
+                          <div className={`h-10 w-10 rounded-full flex items-center justify-center text-white font-medium relative ${user.isActive ? 'bg-brand-500' : 'bg-gray-500'}`}>
                             {user.name?.charAt(0).toUpperCase() || 'U'}
+                            {!user.isActive && (
+                              <div className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center">
+                                <FaUserSlash className="w-2 h-2 text-white" />
+                              </div>
+                            )}
                           </div>
                           <div className="ml-4">
                             <div className="text-sm font-medium text-gray-900 dark:text-white">
@@ -535,6 +596,15 @@ export default function UserRolesPage() {
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className={`px-2 py-1 text-xs font-semibold rounded-full ${systemRoleColors[user.role]}`}>
                           {user.role}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                          user.isActive 
+                            ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                            : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+                        }`}>
+                          {user.isActive ? 'Hoạt động' : 'Vô hiệu hóa'}
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
@@ -564,7 +634,7 @@ export default function UserRolesPage() {
                           )}
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-3">
                         <button 
                           onClick={() => openEditModal(user)}
                           className="text-brand-600 hover:text-brand-900 dark:text-brand-400 dark:hover:text-brand-300 inline-flex items-center space-x-1"
@@ -572,6 +642,28 @@ export default function UserRolesPage() {
                           <FaEdit className="h-3 w-3" />
                           <span>Sửa</span>
                         </button>
+                        
+                        <button 
+                          onClick={() => handleToggleUserStatus(user.id, user.isActive)}
+                          className={`inline-flex items-center space-x-1 ${
+                            user.isActive 
+                              ? 'text-orange-600 hover:text-orange-900 dark:text-orange-400 dark:hover:text-orange-300'
+                              : 'text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300'
+                          }`}
+                        >
+                          {user.isActive ? (
+                            <>
+                              <FaUserSlash className="h-3 w-3" />
+                              <span>Vô hiệu</span>
+                            </>
+                          ) : (
+                            <>
+                              <FaUserCheck className="h-3 w-3" />
+                              <span>Kích hoạt</span>
+                            </>
+                          )}
+                        </button>
+                        
                         <button 
                           onClick={() => handleDeleteUser(user.id)}
                           className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300 inline-flex items-center space-x-1"
@@ -657,7 +749,6 @@ export default function UserRolesPage() {
             </div>
 
             <form onSubmit={handleCreateUser} className="space-y-4">
-              {/* Name */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                   Tên
@@ -671,7 +762,6 @@ export default function UserRolesPage() {
                 />
               </div>
 
-              {/* Email */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                   Email
@@ -685,7 +775,6 @@ export default function UserRolesPage() {
                 />
               </div>
 
-              {/* Role */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                   Quyền hệ thống
@@ -704,7 +793,6 @@ export default function UserRolesPage() {
                 </select>
               </div>
 
-              {/* Password - Only for new users */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                   Mật khẩu
@@ -751,7 +839,6 @@ export default function UserRolesPage() {
             </div>
 
             <form onSubmit={handleUpdateUser} className="space-y-4">
-              {/* Name */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                   Tên
@@ -765,7 +852,6 @@ export default function UserRolesPage() {
                 />
               </div>
 
-              {/* Email */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                   Email
@@ -779,7 +865,6 @@ export default function UserRolesPage() {
                 />
               </div>
 
-              {/* Role */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                   Quyền hệ thống
@@ -798,7 +883,6 @@ export default function UserRolesPage() {
                 </select>
               </div>
 
-              {/* Password - Leave empty for unchanged */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                   Mật khẩu (để trống để giữ nguyên)

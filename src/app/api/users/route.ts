@@ -78,6 +78,7 @@ export async function GET(request: NextRequest) {
         name: true,
         email: true,
         role: true,
+        isActive: true,
         userShopRoles: {
           select: {
             id: true,
@@ -104,6 +105,7 @@ export async function GET(request: NextRequest) {
       name: user.name,
       email: user.email,
       role: user.role,
+      isActive: user.isActive,
       shops: user.userShopRoles.map((userShopRole) => ({
         id: userShopRole.shop.id,
         shopName: userShopRole.shop.shopName,

@@ -21,6 +21,9 @@ export const userApi = {
   }) => httpClient.put(`/users/${id}`, userData),
   
   delete: (id: string) => httpClient.delete(`/users/${id}`),
+
+  toggleStatus: (id: string, statusData: { isActive: boolean }) =>
+    httpClient.put(`/users/${id}/toggle-status`, statusData),
 };
 
 // User Shop Role API methods
