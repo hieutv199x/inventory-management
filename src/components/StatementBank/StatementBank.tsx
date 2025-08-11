@@ -108,6 +108,22 @@ export const StatementBank = () => {
     }
   };
 
+  const handleWithdrawalSync = async () => {
+    if (startDate && endDate) {
+      const statementTimeGe = Math.floor(new Date(startDate).getTime() / 1000);
+      const statementTimeLt = Math.floor(new Date(endDate).getTime() / 1000);
+      try {
+        await httpClient.get(
+          `/tiktok/Finance/SyncGetWithdrawals?statementTimeGe=${statementTimeGe}&statementTimeLt=${statementTimeLt}`
+        );
+      } catch (err) {
+        console.error("Sync API failed", err);
+      }
+    }
+  };
+
+  // Hàm đồng bộ dữ liệu báo cáo
+
   const handleStatementSync = async () => {
     if (startDate && endDate) {
       const statementTimeGe = Math.floor(new Date(startDate).getTime() / 1000);
@@ -197,8 +213,16 @@ export const StatementBank = () => {
             {loading ? "Đang tìm..." : "Tìm kiếm"}
           </Button>
           
-          <Button 
-            onClick={() => activeTab === "shops" ? handleStatementSync() : handlePaymentSync()}
+          <Button
+            onClick={async () => {
+              if (activeTab === "shops") {
+                await handleStatementSync();
+              } else {
+                await handlePaymentSync();
+                await handleWithdrawalSync();
+
+              }
+            }}
             disabled={!startDate || !endDate || loading}
             className="h-11"
           >

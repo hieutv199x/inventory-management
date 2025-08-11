@@ -81,7 +81,7 @@ export async function GET(request: NextRequest) {
                 console.error(`Error processing shop ${shop.shopId}:`, error);
             }
         }
-        return new Response(null, { status: 204 });
+        return NextResponse.json({ success: true });
     } catch (err: unknown) {
         console.error("Error syncing TikTok statements:", err);
         return NextResponse.json(

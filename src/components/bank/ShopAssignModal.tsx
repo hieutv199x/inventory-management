@@ -16,12 +16,6 @@ interface ShopAssignModalProps {
   onConfirm: (bankId: string, shopId: string) => void;
 }
 
-const mockShops = [
-  { id: '1', name: 'Shop Electronics' },
-  { id: '2', name: 'Shop Fashion' },
-  { id: '3', name: 'Shop Beauty' },
-  { id: '4', name: 'Shop Sports' }
-];
 
 export default function ShopAssignModal({ isOpen, onClose, bank, onConfirm }: ShopAssignModalProps) {
   const [isConfirming, setIsConfirming] = useState(false);

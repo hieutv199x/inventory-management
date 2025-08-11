@@ -29,7 +29,12 @@ export default function SelectShop({
 
     const fetchShops = useCallback(async () => {
         try {
-            const data = await httpClient.get("/tiktok/shop/get-shops");
+            
+            const params = new URLSearchParams({
+                    status: 'ACTIVE',
+                  });
+                  
+                  const data = await httpClient.get(`/tiktok/shop/get-shops?${params}`);
             // Giả sử API trả về một mảng các shop
             setShops(data.credentials || []);
         } catch (err) {

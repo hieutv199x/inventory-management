@@ -19,6 +19,7 @@ export async function GET(request: NextRequest) {
         }
 
         const shops = await prisma.shopAuthorization.findMany({
+            where: { status: 'ACTIVE' },
             include: { app: true },
         });
 
@@ -87,6 +88,7 @@ export async function GET(request: NextRequest) {
             }
         }
 
+        return NextResponse.json({ success: true });
     } catch (err: unknown) {
         console.error("Error syncing TikTok statements:", err);
         return NextResponse.json(

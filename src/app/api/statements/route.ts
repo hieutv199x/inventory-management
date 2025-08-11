@@ -94,13 +94,33 @@ export async function GET(request: NextRequest) {
       };
     }
 
-    // Get statements with user access control
+    // Lấy danh sách shopId active
+    const activeShops = await prisma.shopAuthorization.findMany({
+      where: { status: 'ACTIVE' }, // sửa lại nếu enum khác
+      select: { shopId: true },
+    });
+    const activeShopIds = activeShops.map(shop => shop.shopId);
+
+    // Lọc lại whereClause để chỉ lấy statement của shop active
+    if (whereClause.shopId) {
+      if (typeof whereClause.shopId === 'object' && whereClause.shopId.in) {
+        whereClause.shopId.in = whereClause.shopId.in.filter((id: string) => activeShopIds.includes(id));
+      } else if (!activeShopIds.includes(whereClause.shopId)) {
+        // Nếu shopId không active thì trả về rỗng
+        return NextResponse.json([]);
+      }
+    } else {
+      whereClause.shopId = { in: activeShopIds };
+    }
+
+    // Get statements với shop active
     const statements = await prisma.tikTokStatement.findMany({
       where: whereClause,
       include: {
         shop: {
           select: {
             shopName: true,
+            status: true,
           },
         },
       },
