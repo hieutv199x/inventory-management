@@ -64,9 +64,14 @@ export async function GET(request: NextRequest) {
       ];
     }
 
-    // Role-based filtering
+    // Role-based filtering - Use UserShopRole for permission checking
     if (!['ADMIN', 'MANAGER'].includes(currentUser.role)) {
-      whereClause.assignedUserId = currentUser.id;
+      // Get shops that the user has access to through UserShopRole
+      whereClause.userShopRoles = {
+        some: {
+          userId: currentUser.id,
+        },
+      };
     }
 
     // Get shops with search and pagination
