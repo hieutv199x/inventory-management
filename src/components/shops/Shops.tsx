@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useEffect, useCallback } from 'react';
-import { FaStore, FaPlus, FaEdit, FaTrash, FaTimes, FaSearch, FaEye, FaTh, FaList, FaKey } from 'react-icons/fa';
+import { FaStore, FaPlus, FaEdit, FaTrash, FaTimes, FaSearch, FaEye, FaTh, FaList, FaKey, FaCopy } from 'react-icons/fa';
 import { useAuth } from '@/context/authContext';
 import { httpClient } from '@/lib/http-client';
 import Badge from "@/components/ui/badge/Badge";
@@ -257,6 +257,25 @@ export default function Shops() {
     } catch (err) {
       console.error("Failed to delete app", err);
       setError('Không thể xóa app');
+    }
+  };
+
+  const handleCopyAuthUrl = async (serviceId: string, appName: string) => {
+    const authUrl = `https://services.tiktokshop.com/open/authorize?service_id=${serviceId}`;
+    
+    try {
+      await navigator.clipboard.writeText(authUrl);
+      setSuccess(`Đã sao chép URL ủy quyền cho app "${appName}"`);
+    } catch (err) {
+      console.error('Failed to copy to clipboard:', err);
+      // Fallback method for older browsers
+      const textArea = document.createElement('textarea');
+      textArea.value = authUrl;
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textArea);
+      setSuccess(`Đã sao chép URL ủy quyền cho app "${appName}"`);
     }
   };
 
@@ -808,7 +827,7 @@ export default function Shops() {
 
       {/* App List Modal */}
       {showAppListModal && (
-        <Modal isOpen={showAppListModal} onClose={closeModals} className="max-w-6xl p-6">
+        <Modal isOpen={showAppListModal} onClose={closeModals} className="max-w-7xl p-6">
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
               Danh sách App
@@ -824,6 +843,7 @@ export default function Shops() {
                 <TableRow>
                   <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">STT</TableCell>
                   <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">Tên App</TableCell>
+                  <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">Service ID</TableCell>
                   <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">App Key</TableCell>
                   <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">App Secret</TableCell>
                   <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">Trạng thái</TableCell>
@@ -834,7 +854,7 @@ export default function Shops() {
               <TableBody className="divide-y divide-gray-100 dark:divide-gray-800">
                 {appList.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="py-12 text-center text-gray-500 dark:text-gray-400">
+                    <TableCell colSpan={8} className="py-12 text-center text-gray-500 dark:text-gray-400">
                       Không có app nào
                     </TableCell>
                   </TableRow>
@@ -845,6 +865,7 @@ export default function Shops() {
                       <TableRow key={app.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
                         <TableCell className="py-3 text-gray-700 dark:text-gray-300">{idx + 1}</TableCell>
                         <TableCell className="py-3 text-gray-700 dark:text-gray-300 font-medium">{app.appName}</TableCell>
+                        <TableCell className="py-3 text-gray-700 dark:text-gray-300 font-mono text-sm">{app.appId}</TableCell>
                         <TableCell className="py-3 text-gray-700 dark:text-gray-300 font-mono text-sm">{app.appKey}</TableCell>
                         <TableCell className="py-3 text-gray-700 dark:text-gray-300">
                           {isEditing ? (
@@ -870,6 +891,13 @@ export default function Shops() {
                         </TableCell>
                         <TableCell className="py-3">
                           <div className="flex items-center space-x-2">
+                            <button
+                              onClick={() => handleCopyAuthUrl(app.appId, app.appName || 'Unknown App')}
+                              className="text-blue-600 hover:text-blue-800 dark:text-blue-400"
+                              title="Sao chép URL ủy quyền"
+                            >
+                              <FaCopy className="w-4 h-4" />
+                            </button>
                             {isEditing ? (
                               <>
                                 <button
@@ -894,7 +922,7 @@ export default function Shops() {
                             ) : (
                               <>
                                 <button
-                                  className="text-blue-600 hover:text-blue-800 dark:text-blue-400"
+                                  className="text-amber-600 hover:text-amber-800 dark:text-amber-400"
                                   title="Sửa"
                                   onClick={() => handleEditAppSecret(app)}
                                 >

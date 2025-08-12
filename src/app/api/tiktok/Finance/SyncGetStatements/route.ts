@@ -9,6 +9,7 @@ export async function GET(request: NextRequest) {
         const { searchParams } = new URL(request.url);
         const statementTimeGe = parseInt(searchParams.get("statementTimeGe") || "0", 10);
         const statementTimeLt = parseInt(searchParams.get("statementTimeLt") || "0", 10);
+        const shopId = searchParams.get("shopId"); // Add shopId parameter
 
         if (!statementTimeGe || !statementTimeLt) {
             return NextResponse.json(
@@ -16,13 +17,25 @@ export async function GET(request: NextRequest) {
                 { status: 400 }
             );
         }
-        // Lấy thông tin shop và app
+
+        // Build where clause for shop filtering
+        const whereClause: any = { status: "ACTIVE" };
+        
+        // Add shopId filter if provided
+        if (shopId) {
+            whereClause.shopId = shopId;
+        }
+
+        // Lấy thông tin shop và app với filter shopId
         const shops = await prisma.shopAuthorization.findMany({
-            where: { status: "ACTIVE" },
+            where: whereClause,
             include: {
                 app: true,
             },
         });
+
+        // Log which shops will be synced
+        console.log(`Syncing statements for ${shops.length} shop(s)${shopId ? ` (shopId: ${shopId})` : ''} from ${statementTimeGe} to ${statementTimeLt}`);
 
         for (const shop of shops) {
             try {
@@ -67,7 +80,7 @@ export async function GET(request: NextRequest) {
                         await prisma.tikTokStatement.upsert({
                             where: { statementId: statement.id }, // Giả sử có trường statement_id
                             update: { ...statement, shopId: shop.shopId },
-                            create: { 
+                            create: {
                                 ...statement, 
                                 shopId: shop.shopId, 
                                 statementId: statement.id!, 
@@ -81,7 +94,11 @@ export async function GET(request: NextRequest) {
                 console.error(`Error processing shop ${shop.shopId}:`, error);
             }
         }
-        return NextResponse.json({ success: true });
+        return NextResponse.json({ 
+            success: true, 
+            syncedShops: shops.length,
+            shopId: shopId || 'all'
+        });
     } catch (err: unknown) {
         console.error("Error syncing TikTok statements:", err);
         return NextResponse.json(
