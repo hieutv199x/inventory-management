@@ -52,6 +52,7 @@
     "request": "^2.88.2",
     "swiper": "^11.2.0",
     "tailwind-merge": "^2.6.0",
+    "xlsx": "^0.18.5",
     "zod": "^4.0.5"
   },
   "devDependencies": {

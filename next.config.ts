@@ -3,7 +3,17 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   /* config options here */
   images: {
-    domains: ["p16-oec-sg.ibyteimg.com"], // 👈 Thêm domain ở đây
+    // Allow TikTok image CDN hosts used by product images
+    domains: [
+      "p16-oec-sg.ibyteimg.com",
+      "p16-oec-va.ibyteimg.com",
+    ],
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "*.ibyteimg.com",
+      },
+    ],
   },
   webpack(config) {
     config.module.rules.push({

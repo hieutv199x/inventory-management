@@ -29,15 +29,15 @@ type NavItem = {
 
 // Sản phẩm (Products) Group
 const productItems: NavItem[] = [
-  // {
-  //   icon: <BoxCubeIcon />,
-  //   name: "Sản phẩm",
-  //   subItems: [
-  //     { name: "Danh sách sản phẩm", path: "/products" },
-  //     { name: "Thêm sản phẩm", path: "/products/add" }
-  //   ],
-  //   roles: ["ADMIN", "MANAGER", "SELLER"]
-  // },
+  {
+    icon: <BoxCubeIcon />,
+    name: "Sản phẩm",
+    subItems: [
+      { name: "Danh sách sản phẩm", path: "/products" },
+      //{ name: "Thêm sản phẩm", path: "/products/add" }
+    ],
+    roles: ["ADMIN", "MANAGER", "SELLER"]
+  },
   // {
   //   icon: <FaBoxOpen size={24} />,
   //   name: "Kho hàng",

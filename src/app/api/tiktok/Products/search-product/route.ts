@@ -59,6 +59,7 @@ export async function POST(req: NextRequest) {
         );
 
         const products = result.body?.data?.products || [];
+        let createdCount = 0;
         for (const product of products) {
             const productId = product.id!;
             const result = await client.api.ProductV202309Api.ProductsProductIdGet(productId, credentials.accessToken, "application/json", false, credentials.shopCipher);
@@ -68,6 +69,12 @@ export async function POST(req: NextRequest) {
             }
             const productDetail = result.body.data;
             if (!productDetail) continue;
+
+            // Skip if product already exists (create-only behavior)
+            const existed = await prisma.product.findUnique({ where: { productId } });
+            if (existed) {
+                continue;
+            }
             const brand = productDetail.brand;
             const audit = productDetail.audit;
             // Tạo hoặc cập nhật Brand
@@ -96,9 +103,8 @@ export async function POST(req: NextRequest) {
                 });
             }
 
-            const productRecord = await prisma.product.upsert({
-                where: { productId: productId },
-                create: {
+            const productRecord = await prisma.product.create({
+                data: {
                     productId,
                     shopId: shop_id,
                     title: productDetail.title ?? "",
@@ -112,20 +118,10 @@ export async function POST(req: NextRequest) {
                     shippingInsuranceRequirement: productDetail.shippingInsuranceRequirement ?? "",
                     brandId: brandRecord?.id ?? null,
                     auditId: auditRecord?.id ?? null,
-                },
-                update: {
-                    title: productDetail.title ?? "",
-                    description: productDetail.description ?? "",
-                    status: productDetail.status ?? "",
-                    isNotForSale: productDetail.isNotForSale ?? false,
-                    isCodAllowed: productDetail.isCodAllowed ?? false,
-                    isPreOwned: productDetail.isPreOwned ?? false,
-                    updateTime: productDetail.updateTime ?? 0,
-                    shippingInsuranceRequirement: productDetail.shippingInsuranceRequirement ?? "",
-                    brandId: brandRecord?.id ?? null,
-                    auditId: auditRecord?.id ?? null,
-                },
+                }
             });
+
+            createdCount += 1;
 
             const productDbId = productRecord.id;
 
@@ -354,7 +350,7 @@ export async function POST(req: NextRequest) {
 
         }
 
-        return NextResponse.json({ message: 'Synced successfully', count: products.length });
+    return NextResponse.json({ message: 'Synced successfully', count: createdCount });
     } catch (err: any) {
         console.error('Sync failed:', err);
         return NextResponse.json({ error: err.message || 'Unknown error' }, { status: 500 });

@@ -41,20 +41,28 @@ export async function GET(req: NextRequest) {
             ];
         }
 
-        if (startDate || endDate) {
-            filters.createdAt = {};
-            if (startDate) {
-                const sDate = new Date(startDate);
-                if (!isNaN(sDate.getTime())) {
-                    filters.createdAt.gte = sDate;
+        // Date filtering by product createTime (Unix seconds)
+        if (startDate && endDate) {
+            const parseDate = (val: string): Date | null => {
+                const d = new Date(val);
+                if (!isNaN(d.getTime())) return d;
+                // Try dd/MM/yyyy
+                const m = val.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+                if (m) {
+                    const [, dd, mm, yyyy] = m;
+                    const parsed = new Date(Number(yyyy), Number(mm) - 1, Number(dd));
+                    return isNaN(parsed.getTime()) ? null : parsed;
                 }
-            }
-            if (endDate) {
-                const eDate = new Date(endDate);
-                if (!isNaN(eDate.getTime())) {
-                    eDate.setHours(23, 59, 59, 999);
-                    filters.createdAt.lte = eDate;
-                }
+                return null;
+            };
+
+            const sDate = parseDate(startDate);
+            const eDate = parseDate(endDate);
+            if (sDate && eDate) {
+                eDate.setHours(23, 59, 59, 999);
+                const sTs = Math.floor(sDate.getTime() / 1000);
+                const eTs = Math.floor(eDate.getTime() / 1000);
+                (filters as Prisma.ProductWhereInput).createTime = { gte: sTs, lte: eTs };
             }
         }
 
@@ -80,7 +88,7 @@ export async function GET(req: NextRequest) {
                 categories: true,
             },
             orderBy: {
-                createdAt: 'desc'
+                createTime: 'desc'
             }
         });
         const uniqueShopIds = [...new Set(products.map((p) => p.shopId))];

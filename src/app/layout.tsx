@@ -5,6 +5,7 @@ import "./globals.css";
 import { SidebarProvider } from '@/context/SidebarContext';
 import { ThemeProvider } from '@/context/ThemeContext';
 import { AuthProvider } from "../context/authContext";
+import { ToastProvider } from "@/context/ToastContext";
 
 // Configure Inter font with Vietnamese subset
 const inter = Inter({ 
@@ -40,7 +41,9 @@ export default function RootLayout({
       <body className={`${inter.className} antialiased`}>
       <AuthProvider>
         <ThemeProvider>
-          <SidebarProvider>{children}</SidebarProvider>
+          <ToastProvider>
+            <SidebarProvider>{children}</SidebarProvider>
+          </ToastProvider>
         </ThemeProvider>
       </AuthProvider>
       </body>

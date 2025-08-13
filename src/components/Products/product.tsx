@@ -8,6 +8,7 @@ import Select from "@/components/form/Select";
 import DatePicker from "@/components/form/date-picker";
 import {Table, TableBody, TableCell, TableHeader, TableRow} from "@/components/ui/table";
 import Image from "next/image";
+import { useToast } from "@/context/ToastContext";
 
 interface Product {
     id: string;
@@ -15,7 +16,7 @@ interface Product {
     title: string;
     description: string;
     status: string;
-    createdAt: string;
+    createTime: number;
     shopId:string,
     shopName:string;
     images: {
@@ -35,6 +36,7 @@ interface Product {
 }
 
 export const Product = () => {
+    const toast = useToast();
 
     const optionsListing = [
         { label: "UNKNOWN", value: "UNKNOWN" },
@@ -44,12 +46,13 @@ export const Product = () => {
     ];
     const optionStatus = [
         { label: "All", value: "All" },
-        { label: "Live", value: "Live" },
-        { label: "Reviewing", value: "Reviewing" },
-        { label: "Failed", value: "Failed" },
-        { label: "Frozen", value: "Frozen" },
-        { label: "Deactivated", value: "Deactivated" },
-        { label: "Deleted", value: "Deleted" },
+        { label: "DRAFT", value: "DRAFT" },
+        { label: "PENDING", value: "PENDING" },
+        { label: "ACTIVATE", value: "ACTIVATE" },
+        { label: "SELLER_DEACTIVATED", value: "SELLER_DEACTIVATED" },
+        { label: "PLATFORM_DEACTIVATED", value: "PLATFORM_DEACTIVATED" },
+        { label: "FREEZE", value: "FREEZE" },
+        { label: "DELETED", value: "DELETED" },
     ];
 
     const [filters, setFilters] = useState({
@@ -63,6 +66,10 @@ export const Product = () => {
     const [products, setProducts] = useState<Product[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    // Pagination state
+    const [pageSize, setPageSize] = useState<number>(10);
+    const [currentPage, setCurrentPage] = useState<number>(1);
+    const [exporting, setExporting] = useState<boolean>(false);
 
 
     const handleFilterChange = (field: keyof typeof filters, value: string | null) => {
@@ -79,8 +86,11 @@ export const Product = () => {
             if (filters.status) params.append('status', filters.status);
             if (filters.listingQuality) params.append('listingQuality', filters.listingQuality);
             if (filters.keyword) params.append('keyword', filters.keyword);
-            if (filters.startDate) params.append('startDate', filters.startDate);
-            if (filters.endDate) params.append('endDate', filters.endDate);
+            // Only apply date filter when both start and end are selected
+            if (filters.startDate && filters.endDate) {
+                params.append('startDate', filters.startDate);
+                params.append('endDate', filters.endDate);
+            }
 
             const response = await fetch(`/api/tiktok/Products/GetProduct?${params.toString()}`);
 
@@ -116,7 +126,7 @@ export const Product = () => {
         return priceNumber.toLocaleString('vi-VN');
     };
 
-    const handlerProduct = async () => {
+    const handlerSyncProduct = async () => {
         try {
             const response = await fetch('/api/tiktok/Products/search-product', {
                 method: 'POST',
@@ -124,7 +134,7 @@ export const Product = () => {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    shop_id: '7496303591743326543',
+                    shop_id: filters.shopId,
                     status: 'ALL',
                     page_size: 100,
                 }),
@@ -134,15 +144,94 @@ export const Product = () => {
 
             if (!response.ok) {
                 console.error('Error:', result.error || 'Unknown error');
-                alert(`Lỗi: ${result.error || 'Unknown error'}`);
+                toast.error(result.error || 'Unknown error');
                 return;
             }
 
             console.log('✅ Synced products:', result);
-            alert(`Đồng bộ thành công ${result.count} sản phẩm!`);
+            toast.success(`Đồng bộ thành công ${result.count} sản phẩm!`);
+            // Optionally refresh list
+            fetchProducts();
         } catch (err) {
             console.error('❌ Sync failed:', err);
-            alert('Gặp lỗi khi đồng bộ sản phẩm');
+            toast.error('Gặp lỗi khi đồng bộ sản phẩm');
+        }
+    };
+
+    // Reset to first page when filters or pageSize change, or when products are refreshed
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [filters, pageSize]);
+
+    // Derived pagination values
+    const totalItems = products.length;
+    const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+    const startIndex = (currentPage - 1) * pageSize;
+    const endIndex = Math.min(startIndex + pageSize, totalItems);
+    const paginatedProducts = products.slice(startIndex, endIndex);
+
+    const handlePageChange = (delta: number) => {
+        setCurrentPage((prev) => Math.min(Math.max(prev + delta, 1), totalPages));
+    };
+
+    const handlePageSizeChange = (val: string | null) => {
+        const num = parseInt(val || "10", 10);
+        setPageSize(Number.isNaN(num) ? 10 : num);
+    };
+
+    const formatUnixToDate = (ts?: number) => {
+        if (!ts) return "N/A";
+        const ms = ts < 1e12 ? ts * 1000 : ts; // handle seconds vs ms
+        return new Date(ms).toLocaleDateString("vi-VN");
+    };
+
+    const stripHtml = (html?: string) => (html || "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+
+    const handleExport = async () => {
+        try {
+            if (products.length === 0) {
+                toast.info("Không có sản phẩm để xuất");
+                return;
+            }
+            setExporting(true);
+            // Prepare data for Excel: export all filtered products, not just current page
+            const rows = products.map((p) => ({
+                ProductID: p.productId,
+                Title: p.title,
+                Shop: p.shopName || "",
+                Status: p.status,
+                Price: p.skus?.[0]?.price?.salePrice ? `${p.skus[0].price.salePrice} ${p.skus[0].price.currency}` : "",
+                CreationDate: formatUnixToDate(p.createTime),
+                Image: p.images?.[0]?.urls?.[0] || "",
+                Description: stripHtml(p.description),
+            }));
+
+            const XLSX = await import("xlsx");
+            const ws = XLSX.utils.json_to_sheet(rows);
+            // Auto width
+            const colWidths = Object.keys(rows[0] || {}).map((key) => ({ wch: Math.min(Math.max(key.length, 20), 60) }));
+            // refine widths by content length
+            rows.forEach((r) => {
+                Object.entries(r).forEach(([k, v], idx) => {
+                    const len = String(v ?? "").length;
+                    if (colWidths[idx]) colWidths[idx].wch = Math.min(Math.max(colWidths[idx].wch, len + 2), 80);
+                });
+            });
+            // @ts-ignore - SheetJS uses non-typed property here
+            ws["!cols"] = colWidths;
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Products");
+
+            const now = new Date();
+            const pad = (n: number) => n.toString().padStart(2, "0");
+            const filename = `Products_${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}.xlsx`;
+            XLSX.writeFile(wb, filename);
+            toast.success("Xuất Excel thành công");
+        } catch (e) {
+            console.error("Export failed", e);
+            toast.error("Xuất Excel thất bại");
+        } finally {
+            setExporting(false);
         }
     };
     return (
@@ -155,13 +244,15 @@ export const Product = () => {
                 </div>
                 <div className="flex items-start w-full gap-3 sm:justify-end">
                     <div className="flex items-center gap-2">
-                        <button onClick={handlerProduct} className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-theme-sm font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200">
+                        <button onClick={handlerSyncProduct} className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-theme-sm font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200">
                             Sync Products
                         </button>
                         <button
-                            className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-theme-sm font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200"
+                            onClick={handleExport}
+                            disabled={exporting || isLoading}
+                            className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-theme-sm font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 disabled:opacity-50 disabled:cursor-not-allowed dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200"
                         >
-                            Export products
+                            {exporting ? "Exporting..." : "Export products"}
                         </button>
 
                         <button
@@ -327,22 +418,32 @@ export const Product = () => {
                                 <TableRow><TableCell colSpan={6} className="py-5 text-center text-gray-500">No products found with the selected filters.</TableCell></TableRow>
                             ) : (
                                 // 4. SỬA LẠI CÁCH RENDER DỮ LIỆU CHO ĐÚNG CẤU TRÚC
-                                products.map((product) => {
-                                    const imageUrl = product.images?.[0]?.urls?.[0];
+                                paginatedProducts.map((product) => {
+                                    // Ensure a safe image src; Next/Image must not get empty string
+                                    const firstUrl = product.images?.[0]?.urls?.[0];
+                                    const imageUrl = firstUrl && firstUrl.trim() !== "" ? firstUrl : undefined;
                                     return (
                                         <TableRow key={product.id}>
                                             <TableCell className="py-3">
                                                 <div className="flex items-center gap-3">
                                                     <div className="h-[50px] w-[50px] overflow-hidden rounded-md bg-gray-100 dark:bg-gray-800">
-                                                        <Image
-                                                            width={50}
-                                                            height={50}
-                                                            src={imageUrl} // Sử dụng URL hoặc ảnh dự phòng
-                                                            className="object-cover h-full w-full"
-                                                            alt={product.title}
-                                                            // Thêm onError để xử lý ảnh lỗi
-                                                            onError={(e) => { (e.target as HTMLImageElement).src = "/images/placeholder-product.png"; }}
-                                                        />
+                                                        {imageUrl ? (
+                                                            <Image
+                                                                width={50}
+                                                                height={50}
+                                                                src={imageUrl}
+                                                                className="object-cover h-full w-full"
+                                                                alt={product.title}
+                                                            />
+                                                        ) : (
+                                                            <Image
+                                                                width={50}
+                                                                height={50}
+                                                                src="/images/product/product-01.jpg"
+                                                                className="object-cover h-full w-full"
+                                                                alt="placeholder"
+                                                            />
+                                                        )}
                                                     </div>
                                                     <p className="font-medium text-gray-800 text-theme-sm dark:text-white/90 max-w-[250px] truncate">{product.title}</p>
                                                 </div>
@@ -381,11 +482,11 @@ export const Product = () => {
                                                 </Badge>
                                             </TableCell>
                                             <TableCell className="py-3 text-gray-500 text-theme-sm dark:text-gray-400">
-                                                {new Date(product.createdAt).toLocaleDateString()}
+                                                {formatUnixToDate(product.createTime)}
                                             </TableCell>
                                             <TableCell className="py-3">
                                                 <div className="flex items-center gap-2">
-                                                    <button className="text-blue-500 hover:text-blue-600">View</button>
+                                                    {/* <button className="text-blue-500 hover:text-blue-600">View</button> */}
                                                 </div>
                                             </TableCell>
                                         </TableRow>
@@ -395,7 +496,51 @@ export const Product = () => {
                         </TableBody>
                     </Table>
                 </div>
+                {/* Pagination controls */}
+                <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex items-center gap-2">
+                        <span className="text-sm text-gray-600 dark:text-gray-400">Rows per page:</span>
+                        <div className="w-28">
+                            {/* Reuse existing Select component */}
+                            <Select
+                                options={[
+                                    { label: "10", value: "10" },
+                                    { label: "20", value: "20" },
+                                    { label: "50", value: "50" },
+                                    { label: "100", value: "100" },
+                                ]}
+                                onChange={handlePageSizeChange}
+                                enablePlaceholder={false}
+                                value={String(pageSize)}
+                                className="dark:bg-dark-900"
+                            />
+                        </div>
+                    </div>
 
+                    <div className="flex items-center justify-between gap-3 w-full sm:w-auto">
+                        <span className="text-sm text-gray-600 dark:text-gray-400">
+                            Showing {totalItems === 0 ? 0 : startIndex + 1}-{endIndex} of {totalItems}
+                        </span>
+
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={() => handlePageChange(-1)}
+                                disabled={currentPage <= 1}
+                                className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-theme-sm font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 disabled:opacity-50 disabled:hover:bg-white disabled:cursor-not-allowed dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200"
+                            >
+                                Prev
+                            </button>
+                            <span className="text-sm text-gray-600 dark:text-gray-400">Page {currentPage} of {totalPages}</span>
+                            <button
+                                onClick={() => handlePageChange(1)}
+                                disabled={currentPage >= totalPages}
+                                className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-theme-sm font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 disabled:opacity-50 disabled:hover:bg-white disabled:cursor-not-allowed dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200"
+                            >
+                                Next
+                            </button>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
 
