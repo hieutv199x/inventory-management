@@ -37,6 +37,9 @@ export async function GET(request: NextRequest) {
         // Log which shops will be synced
         console.log(`Syncing statements for ${shops.length} shop(s)${shopId ? ` (shopId: ${shopId})` : ''} from ${statementTimeGe} to ${statementTimeLt}`);
 
+        let totalStatementsSynced = 0;
+        const shopResults = [];
+
         for (const shop of shops) {
             try {
                 const credentials = {
@@ -61,43 +64,37 @@ export async function GET(request: NextRequest) {
                     },
                 });
 
-                const result = await client.api.FinanceV202309Api.StatementsGet(
-                    "statement_time",
-                    credentials.accessToken,
-                    "application/json",
-                    statementTimeLt,
-                    "PAID",
-                    50,
-                    "",
-                    "ASC",
-                    statementTimeGe,
-                    credentials.shopCipher
-                );
-                console.log('response: ', JSON.stringify(result, null, 2));
-                // Lưu dữ liệu vào DB
-                if (result?.body.data?.statements && Array.isArray(result.body.data.statements)) {
-                    for (const statement of result.body.data.statements) {
-                        await prisma.tikTokStatement.upsert({
-                            where: { statementId: statement.id }, // Giả sử có trường statement_id
-                            update: { ...statement, shopId: shop.shopId },
-                            create: {
-                                ...statement, 
-                                shopId: shop.shopId, 
-                                statementId: statement.id!, 
-                                statementTime: statement.statementTime ?? 0 
-                            },
-                        });
-                    }
-                }
-            }
-            catch (error) {
+                // Fetch all pages of statements for this shop
+                const allStatements = await fetchAllStatements(client, credentials, statementTimeGe, statementTimeLt);
+                console.log(`Fetched ${allStatements.length} statements for shop ${shop.shopId}`);
+
+                // Sync statements in batches
+                const syncedCount = await syncStatementsToDatabase(allStatements, shop.shopId);
+                totalStatementsSynced += syncedCount;
+
+                shopResults.push({
+                    shopId: shop.shopId,
+                    shopName: shop.shopName,
+                    statementsProcessed: allStatements.length,
+                    statementsSynced: syncedCount
+                });
+
+            } catch (error) {
                 console.error(`Error processing shop ${shop.shopId}:`, error);
+                shopResults.push({
+                    shopId: shop.shopId,
+                    shopName: shop.shopName,
+                    error: error instanceof Error ? error.message : 'Unknown error'
+                });
             }
         }
+
         return NextResponse.json({ 
-            success: true, 
+            success: true,
+            totalStatementsSynced,
             syncedShops: shops.length,
-            shopId: shopId || 'all'
+            shopId: shopId || 'all',
+            shopResults
         });
     } catch (err: unknown) {
         console.error("Error syncing TikTok statements:", err);
@@ -105,5 +102,157 @@ export async function GET(request: NextRequest) {
             { error: err instanceof Error ? err.message : "Internal Server Error" },
             { status: 500 }
         );
+    } finally {
+        await prisma.$disconnect();
     }
+}
+
+async function fetchAllStatements(client: any, credentials: any, statementTimeGe: number, statementTimeLt: number) {
+    let allStatements = [];
+    const pageSize = 50;
+    let nextPageToken = "";
+
+    try {
+        // Get first page
+        const result = await client.api.FinanceV202309Api.StatementsGet(
+            "statement_time",
+            credentials.accessToken,
+            "application/json",
+            statementTimeLt,
+            "PAID",
+            pageSize,
+            nextPageToken,
+            "ASC",
+            statementTimeGe,
+            credentials.shopCipher
+        );
+
+        if (result?.body.data?.statements && Array.isArray(result.body.data.statements)) {
+            allStatements.push(...result.body.data.statements);
+            nextPageToken = result.body.data.nextPageToken;
+
+            // Continue fetching all pages
+            while (nextPageToken) {
+                try {
+                    console.log(`Fetching next page of statements with token: ${nextPageToken}`);
+                    
+                    const nextPageResult = await client.api.FinanceV202309Api.StatementsGet(
+                        "statement_time",
+                        credentials.accessToken,
+                        "application/json",
+                        statementTimeLt,
+                        "PAID",
+                        pageSize,
+                        nextPageToken,
+                        "ASC",
+                        statementTimeGe,
+                        credentials.shopCipher
+                    );
+
+                    if (nextPageResult?.body.data?.statements && Array.isArray(nextPageResult.body.data.statements)) {
+                        allStatements.push(...nextPageResult.body.data.statements);
+                        console.log(`Fetched ${nextPageResult.body.data.statements.length} more statements. Total: ${allStatements.length}`);
+                    }
+
+                    nextPageToken = nextPageResult.body?.data?.nextPageToken;
+                    
+                    // Add delay to avoid rate limiting
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                    
+                } catch (paginationError) {
+                    console.error('Error fetching next page of statements:', paginationError);
+                    break;
+                }
+            }
+        }
+    } catch (error) {
+        console.error('Error fetching statements:', error);
+    }
+
+    return allStatements;
+}
+
+async function syncStatementsToDatabase(statements: any[], shopId: string) {
+    const BATCH_SIZE = 100;
+    let totalSynced = 0;
+
+    console.log(`Starting sync of ${statements.length} statements for shop ${shopId} in batches of ${BATCH_SIZE}`);
+
+    // Process statements in batches
+    for (let i = 0; i < statements.length; i += BATCH_SIZE) {
+        const batch = statements.slice(i, i + BATCH_SIZE);
+        const syncedCount = await processStatementBatch(batch, shopId);
+        totalSynced += syncedCount;
+        console.log(`Processed ${Math.min(i + BATCH_SIZE, statements.length)} of ${statements.length} statements for shop ${shopId}. Synced: ${syncedCount}`);
+    }
+
+    console.log(`Statement sync completed for shop ${shopId}. Total synced: ${totalSynced}`);
+    return totalSynced;
+}
+
+async function processStatementBatch(statements: any[], shopId: string) {
+    let syncedCount = 0;
+
+    try {
+        await prisma.$transaction(async (tx) => {
+            // Get existing statement IDs
+            const statementIds = statements.map(s => s.id).filter(Boolean);
+            const existingStatements = await tx.tikTokStatement.findMany({
+                where: { statementId: { in: statementIds } },
+                select: { statementId: true }
+            });
+            
+            const existingStatementIds = new Set(existingStatements.map(s => s.statementId));
+
+            // Separate new statements from updates
+            const newStatements = [];
+            const updateStatements = [];
+
+            for (const statement of statements) {
+                if (!statement.id) continue;
+
+                const statementData = {
+                    ...statement,
+                    shopId: shopId,
+                    statementId: statement.id,
+                    statementTime: statement.statementTime ?? 0
+                };
+
+                if (existingStatementIds.has(statement.id)) {
+                    updateStatements.push(statementData);
+                } else {
+                    newStatements.push(statementData);
+                }
+            }
+
+            // Batch create new statements
+            if (newStatements.length > 0) {
+                await tx.tikTokStatement.createMany({
+                    data: newStatements,
+                });
+                syncedCount += newStatements.length;
+            }
+
+            // Batch update existing statements
+            if (updateStatements.length > 0) {
+                const updatePromises = updateStatements.map(statement => 
+                    tx.tikTokStatement.update({
+                        where: { statementId: statement.statementId },
+                        data: statement,
+                    })
+                );
+                await Promise.all(updatePromises);
+                syncedCount += updateStatements.length;
+            }
+
+        }, {
+            maxWait: 30000,
+            timeout: 60000,
+        });
+
+    } catch (error) {
+        console.error(`Error processing statement batch for shop ${shopId}:`, error);
+    }
+
+    return syncedCount;
 }

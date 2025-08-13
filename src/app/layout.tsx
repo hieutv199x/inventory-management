@@ -25,6 +25,8 @@ const roboto = Roboto({
 export const metadata: Metadata = {
   title: "9Connect - Quản lý cửa hàng",
   description: "Hệ thống quản lý cửa hàng và phân quyền người dùng",
+  themeColor: '#2563eb',
+  viewport: 'width=device-width, initial-scale=1',
 };
 
 const outfit = Outfit({
