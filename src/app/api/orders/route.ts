@@ -16,6 +16,7 @@ export async function POST(req: NextRequest) {
             status,
             page = 1,
             pageSize = 20,
+            fields, // New parameter for field selection
         } = await req.json();
 
         const where: any = {};
@@ -32,28 +33,69 @@ export async function POST(req: NextRequest) {
 
         where.shopId = shopFilter;
 
-        // Get orders based on the constructed where clause
         const skip = (page - 1) * pageSize;
+
+        // Determine what to select based on fields parameter
+        const selectFields = fields ? {
+            id: true,
+            orderId: true,
+            buyerEmail: true,
+            status: true,
+            createTime: true,
+            trackingNumber: true,
+            payment: {
+                select: {
+                    totalAmount: true,
+                    currency: true,
+                }
+            },
+            recipientAddress: {
+                select: {
+                    name: true,
+                    phoneNumber: true,
+                }
+            },
+            shop: {
+                select: {
+                    shopName: true,
+                    shopId: true,
+                }
+            },
+            _count: {
+                select: {
+                    lineItems: true
+                }
+            }
+        } : {
+            // Full selection for detailed view
+            id: true,
+            orderId: true,
+            buyerEmail: true,
+            status: true,
+            createTime: true,
+            updateTime: true,
+            trackingNumber: true,
+            lineItems: true,
+            payment: true,
+            recipientAddress: {
+                include: {
+                    districtInfo: true,
+                }
+            },
+            packages: true,
+            shop: {
+                select: {
+                    id: true,
+                    shopName: true,
+                    shopId: true,
+                }
+            }
+        };
 
         const [orders, total] = await Promise.all([
             prisma.tikTokOrder.findMany({
                 where,
-                include: {
-                    lineItems: true,
-                    payment: true,
-                    recipientAddress: {
-                        include: {
-                            districtInfo: true,
-                        }
-                    },
-                    packages: true,
-                    shop: {
-                        select: {
-                            shopName: true,
-                            shopId: true,
-                        }
-                    }
-                },
+                select: selectFields,
                 orderBy: {
                     createTime: 'desc',
                 },
@@ -63,8 +105,15 @@ export async function POST(req: NextRequest) {
             prisma.tikTokOrder.count({ where }),
         ]);
 
+        // Transform data for field selection response
+        const transformedOrders = fields ? orders.map(order => ({
+            ...order,
+            lineItemsCount: order._count?.lineItems || 0,
+            _count: undefined, // Remove the count object from response
+        })) : orders;
+
         return NextResponse.json({
-            orders,
+            orders: transformedOrders,
             pagination: {
                 total,
                 page,

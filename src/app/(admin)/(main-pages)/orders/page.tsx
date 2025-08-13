@@ -23,15 +23,21 @@ interface Order {
         shopName?: string;
         shopId: string;
     };
+    lineItemsCount?: number;
 }
 
 interface LineItem {
     id: string;
+    productId: string;
     productName: string;
+    skuId: string;
     skuName?: string;
+    sellerSku?: string;
     salePrice: string;
+    originalPrice?: string;
     currency: string;
     displayStatus?: string;
+    skuImage?: string; // Added skuImage field
 }
 
 interface Payment {
@@ -97,6 +103,7 @@ export default function OrdersPage() {
                 createTimeLt: dateTo ? Math.floor(new Date(dateTo).getTime() / 1000) : undefined,
                 page,
                 pageSize: pagination.pageSize,
+                fields: 'orderId,buyerEmail,status,createTime,trackingNumber,payment.totalAmount,payment.currency,recipientAddress.name,recipientAddress.phoneNumber,shop.shopName,shop.shopId,lineItemsCount' // Only necessary fields
             });
 
             setOrders(response.orders || []);
@@ -105,6 +112,16 @@ export default function OrdersPage() {
             console.error('Error fetching orders:', error);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const fetchOrderDetail = async (orderId: string) => {
+        try {
+            const response = await httpClient.get(`/orders/${orderId}`);
+            return response.order;
+        } catch (error) {
+            console.error('Error fetching order detail:', error);
+            throw error;
         }
     };
 
@@ -155,9 +172,19 @@ export default function OrdersPage() {
         }
     };
 
-    const openOrderModal = (order: Order) => {
+    const openOrderModal = async (order: Order) => {
         setSelectedOrder(order);
         setShowOrderModal(true);
+        
+        try {
+            // Fetch detailed order information
+            const detailedOrder = await fetchOrderDetail(order.orderId);
+            setSelectedOrder(detailedOrder);
+        } catch (error) {
+            console.error('Failed to load order details:', error);
+            alert('Failed to load order details');
+            closeOrderModal();
+        }
     };
 
     const closeOrderModal = () => {
@@ -320,77 +347,114 @@ export default function OrdersPage() {
                     <table className="min-w-full divide-y divide-gray-200">
                         <thead className="bg-gray-50">
                             <tr>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order ID</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Products</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tracking</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Account/Seller</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order Info</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
-                            {filteredOrders.map((order) => (
+                            {filteredOrders.map((order, index) => (
                                 <tr key={order.id} className="hover:bg-gray-50">
-                                    <td className="px-6 py-4 whitespace-nowrap">
-                                        <div className="font-mono text-sm font-medium text-gray-900">
-                                            {order.orderId}
-                                        </div>
-                                        <div className="text-xs text-gray-500">
-                                            {order.shop.shopName || order.shop.shopId}
-                                        </div>
-                                    </td>
+                                    {/* ID - Mã thứ tự của sản phẩm */}
                                     <td className="px-6 py-4 whitespace-nowrap">
                                         <div className="text-sm font-medium text-gray-900">
-                                            {order.recipientAddress?.name || 'N/A'}
-                                        </div>
-                                        <div className="text-sm text-gray-500 truncate max-w-32">
-                                            {order.buyerEmail}
+                                            #{((pagination.page - 1) * pagination.pageSize) + index + 1}
                                         </div>
                                     </td>
+
+                                    {/* Account/Seller - Thông tin tên shop, seller vận hành */}
+                                    <td className="px-6 py-4 whitespace-nowrap">
+                                        <div className="flex flex-col">
+                                            <div className="text-sm font-medium text-gray-900">
+                                                {order.shop.shopName || 'N/A'}
+                                            </div>
+                                            <div className="text-xs text-gray-500">
+                                                Shop ID: {order.shop.shopId}
+                                            </div>
+                                        </div>
+                                    </td>
+
+                                    {/* Order - Mã đơn hàng tiktok, thời gian đặt hàng, trạng thái đơn hàng */}
                                     <td className="px-6 py-4">
-                                        <div className="text-sm text-gray-900">
-                                            {order.lineItems.slice(0, 1).map((item) => (
-                                                <div key={item.id} className="truncate max-w-48">
-                                                    {item.productName}
-                                                </div>
-                                            ))}
-                                            {order.lineItems.length > 1 && (
+                                        <div className="flex flex-col space-y-1">
+                                            <div className="font-mono text-sm font-medium text-gray-900">
+                                                {order.orderId}
+                                            </div>
+                                            <div className="text-xs text-gray-600">
+                                                {formatTimestamp(order.createTime)}
+                                            </div>
+                                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full w-fit ${getStatusColor(order.status)}`}>
+                                                {order.status}
+                                            </span>
+                                        </div>
+                                    </td>
+
+                                    {/* Order Info - Thông tin nhận hàng và thanh toán của khách hàng */}
+                                    <td className="px-6 py-4">
+                                        <div className="flex flex-col space-y-1">
+                                            <div className="text-sm font-medium text-gray-900">
+                                                {order.recipientAddress?.name || 'N/A'}
+                                            </div>
+                                            <div className="text-xs text-gray-500 truncate max-w-48">
+                                                {order.recipientAddress?.phoneNumber || 'N/A'}
+                                            </div>
+                                            <div className="text-xs text-gray-500 truncate max-w-48">
+                                                {order.buyerEmail}
+                                            </div>
+                                            <div className="text-xs text-blue-600">
+                                                {order.lineItemsCount || order.lineItems?.length || 0} item(s)
+                                            </div>
+                                        </div>
+                                    </td>
+
+                                    {/* Price - Các chi phí của đơn hàng */}
+                                    <td className="px-6 py-4 whitespace-nowrap">
+                                        <div className="flex flex-col space-y-1">
+                                            <div className="text-sm font-medium text-gray-900">
+                                                {order.payment?.totalAmount ? 
+                                                    `${parseInt(order.payment.totalAmount).toLocaleString()} ${order.payment.currency}` : 
+                                                    'N/A'
+                                                }
+                                            </div>
+                                            {order.payment?.subTotal && (
                                                 <div className="text-xs text-gray-500">
-                                                    +{order.lineItems.length - 1} more item(s)
+                                                    Subtotal: {parseInt(order.payment.subTotal).toLocaleString()} {order.payment.currency}
+                                                </div>
+                                            )}
+                                            {order.trackingNumber && (
+                                                <div className="text-xs font-mono text-blue-600">
+                                                    Track: {order.trackingNumber}
                                                 </div>
                                             )}
                                         </div>
                                     </td>
+
+                                    {/* Actions - Chat trò chuyện (support) khách hàng */}
                                     <td className="px-6 py-4 whitespace-nowrap">
-                                        <div className="text-sm font-medium text-gray-900">
-                                            {order.payment?.totalAmount ? 
-                                                `${parseInt(order.payment.totalAmount).toLocaleString()} ${order.payment.currency}` : 
-                                                'N/A'
-                                            }
+                                        <div className="flex flex-col space-y-2">
+                                            <button 
+                                                onClick={() => openOrderModal(order)}
+                                                className="inline-flex items-center px-2 py-1 text-xs font-medium text-blue-600 hover:text-blue-900 border border-blue-300 rounded hover:bg-blue-50"
+                                            >
+                                                <Eye className="h-3 w-3 mr-1" />
+                                                View Details
+                                            </button>
+                                            <button 
+                                                className="inline-flex items-center px-2 py-1 text-xs font-medium text-green-600 hover:text-green-900 border border-green-300 rounded hover:bg-green-50"
+                                                onClick={() => {
+                                                    // TODO: Implement customer support chat
+                                                    alert('Customer support chat feature will be implemented');
+                                                }}
+                                            >
+                                                <svg className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                                                </svg>
+                                                Chat Support
+                                            </button>
                                         </div>
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap">
-                                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(order.status)}`}>
-                                            {order.status}
-                                        </span>
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                        {formatTimestamp(order.createTime)}
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-900">
-                                        <div className="truncate max-w-24">
-                                            {order.trackingNumber || 'N/A'}
-                                        </div>
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                        <button 
-                                            onClick={() => openOrderModal(order)}
-                                            className="text-blue-600 hover:text-blue-900 flex items-center"
-                                        >
-                                            <Eye className="h-4 w-4" />
-                                        </button>
                                     </td>
                                 </tr>
                             ))}
@@ -448,12 +512,12 @@ export default function OrdersPage() {
 
             {/* Order Detail Modal */}
             {showOrderModal && selectedOrder && (
-                <Modal isOpen={showOrderModal} onClose={closeOrderModal} className="max-w-4xl max-h-[80vh] overflow-hidden">
-                    <div className="flex flex-col h-full">
+                <Modal isOpen={showOrderModal} onClose={closeOrderModal} className="max-w-6xl max-h-[90vh] overflow-hidden">
+                    <div className="flex flex-col max-h-[90vh]">
                         {/* Modal Header - Fixed */}
-                        <div className="flex items-center justify-between p-6 border-b">
+                        <div className="flex items-center justify-between p-6 border-b flex-shrink-0">
                             <h3 className="text-lg leading-6 font-medium text-gray-900">
-                                Order Details - {selectedOrder.orderId}
+                                Order Details - {selectedOrder?.orderId}
                             </h3>
                             <button
                                 onClick={closeOrderModal}
@@ -464,140 +528,245 @@ export default function OrdersPage() {
                         </div>
 
                         {/* Modal Body - Scrollable */}
-                        <div className="flex-1 overflow-y-auto p-6">
-                            {/* Order Status Badge */}
-                            <div className="mb-6">
-                                <span className={`inline-flex px-3 py-1 text-sm font-semibold rounded-full ${getStatusColor(selectedOrder.status)}`}>
-                                    {selectedOrder.status}
-                                </span>
-                            </div>
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                {/* Order Information */}
-                                <div className="space-y-4">
-                                    <h4 className="text-md font-semibold text-gray-900 flex items-center">
-                                        <Package className="h-5 w-5 mr-2" />
-                                        Order Information
-                                    </h4>
-                                    <div className="bg-gray-50 p-4 rounded-lg space-y-2">
-                                        <div className="flex justify-between">
-                                            <span className="text-sm text-gray-600">Order ID:</span>
-                                            <span className="text-sm font-mono font-medium">{selectedOrder.orderId}</span>
-                                        </div>
-                                        <div className="flex justify-between">
-                                            <span className="text-sm text-gray-600">Shop:</span>
-                                            <span className="text-sm">{selectedOrder.shop.shopName || selectedOrder.shop.shopId}</span>
-                                        </div>
-                                        <div className="flex justify-between">
-                                            <span className="text-sm text-gray-600">Created:</span>
-                                            <span className="text-sm">{formatTimestamp(selectedOrder.createTime)}</span>
-                                        </div>
-                                        {selectedOrder.updateTime && (
-                                            <div className="flex justify-between">
-                                                <span className="text-sm text-gray-600">Updated:</span>
-                                                <span className="text-sm">{formatTimestamp(selectedOrder.updateTime)}</span>
-                                            </div>
-                                        )}
-                                        {selectedOrder.trackingNumber && (
-                                            <div className="flex justify-between">
-                                                <span className="text-sm text-gray-600">Tracking:</span>
-                                                <span className="text-sm font-mono">{selectedOrder.trackingNumber}</span>
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-
-                                {/* Customer Information */}
-                                <div className="space-y-4">
-                                    <h4 className="text-md font-semibold text-gray-900 flex items-center">
-                                        <User className="h-5 w-5 mr-2" />
-                                        Customer Information
-                                    </h4>
-                                    <div className="bg-gray-50 p-4 rounded-lg space-y-2">
-                                        <div className="flex justify-between">
-                                            <span className="text-sm text-gray-600">Name:</span>
-                                            <span className="text-sm">{selectedOrder.recipientAddress?.name || 'N/A'}</span>
-                                        </div>
-                                        <div className="flex justify-between">
-                                            <span className="text-sm text-gray-600">Email:</span>
-                                            <span className="text-sm">{selectedOrder.buyerEmail}</span>
-                                        </div>
-                                        <div className="flex justify-between">
-                                            <span className="text-sm text-gray-600">Phone:</span>
-                                            <span className="text-sm">{selectedOrder.recipientAddress?.phoneNumber || 'N/A'}</span>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Delivery Address */}
-                            {selectedOrder.recipientAddress && (
-                                <div className="mt-6">
-                                    <h4 className="text-md font-semibold text-gray-900 flex items-center mb-4">
-                                        <MapPin className="h-5 w-5 mr-2" />
-                                        Delivery Address
-                                    </h4>
+                        <div className="flex-1 overflow-y-auto p-6 min-h-0">
+                            {/* (1) Thông tin chung */}
+                            <div className="mb-8">
+                                <h2 className="text-xl font-bold text-gray-900 mb-4">1. Thông tin chung</h2>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                    {/* ID */}
                                     <div className="bg-gray-50 p-4 rounded-lg">
-                                        <p className="text-sm text-gray-800">{selectedOrder.recipientAddress.fullAddress}</p>
+                                        <h4 className="text-md font-semibold text-gray-900 mb-2">ID</h4>
+                                        <p className="text-sm text-gray-800">
+                                            #{orders.findIndex(o => o.id === selectedOrder?.id) + 1}
+                                        </p>
                                     </div>
-                                </div>
-                            )}
 
-                            {/* Payment Information */}
-                            {selectedOrder.payment && (
-                                <div className="mt-6">
-                                    <h4 className="text-md font-semibold text-gray-900 flex items-center mb-4">
-                                        <CreditCard className="h-5 w-5 mr-2" />
-                                        Payment Information
-                                    </h4>
-                                    <div className="bg-gray-50 p-4 rounded-lg space-y-2">
-                                        <div className="flex justify-between">
-                                            <span className="text-sm text-gray-600">Subtotal:</span>
-                                            <span className="text-sm">{selectedOrder.payment.subTotal ? `${parseInt(selectedOrder.payment.subTotal).toLocaleString()} ${selectedOrder.payment.currency}` : 'N/A'}</span>
-                                        </div>
-                                        <div className="flex justify-between font-semibold">
-                                            <span className="text-sm text-gray-900">Total Amount:</span>
-                                            <span className="text-sm text-gray-900">{selectedOrder.payment.totalAmount ? `${parseInt(selectedOrder.payment.totalAmount).toLocaleString()} ${selectedOrder.payment.currency}` : 'N/A'}</span>
+                                    {/* Account/Seller */}
+                                    <div className="bg-gray-50 p-4 rounded-lg">
+                                        <h4 className="text-md font-semibold text-gray-900 mb-2">Account/Seller</h4>
+                                        <div className="space-y-1">
+                                            <p className="text-sm text-gray-800">{selectedOrder?.shop.shopName || 'N/A'}</p>
+                                            <p className="text-xs text-gray-600">Shop ID: {selectedOrder?.shop.shopId}</p>
                                         </div>
                                     </div>
-                                </div>
-                            )}
 
-                            {/* Order Items */}
-                            <div className="mt-6">
-                                <h4 className="text-md font-semibold text-gray-900 flex items-center mb-4">
-                                    <Truck className="h-5 w-5 mr-2" />
-                                    Order Items ({selectedOrder.lineItems.length})
-                                </h4>
-                                <div className="space-y-3">
-                                    {selectedOrder.lineItems.map((item) => (
-                                        <div key={item.id} className="bg-gray-50 p-4 rounded-lg">
-                                            <div className="flex justify-between items-start">
-                                                <div className="flex-1">
-                                                    <h5 className="text-sm font-medium text-gray-900">{item.productName}</h5>
-                                                    {item.skuName && (
-                                                        <p className="text-xs text-gray-600 mt-1">SKU: {item.skuName}</p>
-                                                    )}
-                                                    {item.displayStatus && (
-                                                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full mt-2 ${getStatusColor(item.displayStatus)}`}>
-                                                            {item.displayStatus}
-                                                        </span>
-                                                    )}
+                                    {/* Order */}
+                                    <div className="bg-gray-50 p-4 rounded-lg">
+                                        <h4 className="text-md font-semibold text-gray-900 mb-2">Order</h4>
+                                        <div className="space-y-1">
+                                            <p className="text-sm font-mono text-gray-800">{selectedOrder?.orderId}</p>
+                                            <p className="text-xs text-gray-600">{formatTimestamp(selectedOrder?.createTime)}</p>
+                                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(selectedOrder?.status)}`}>
+                                                {selectedOrder?.status}
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    {/* Order Info */}
+                                    <div className="bg-gray-50 p-4 rounded-lg">
+                                        <h4 className="text-md font-semibold text-gray-900 mb-2">Order Info</h4>
+                                        <div className="space-y-1">
+                                            <p className="text-sm text-gray-800">{selectedOrder?.recipientAddress?.name || 'N/A'}</p>
+                                            <p className="text-xs text-gray-500">{selectedOrder?.recipientAddress?.phoneNumber || 'N/A'}</p>
+                                            <p className="text-xs text-gray-500">{selectedOrder?.buyerEmail}</p>
+                                            <p className="text-xs text-blue-600">{selectedOrder?.lineItems?.length} item(s)</p>
+                                        </div>
+                                    </div>
+
+                                    {/* Price */}
+                                    <div className="bg-gray-50 p-4 rounded-lg">
+                                        <h4 className="text-md font-semibold text-gray-900 mb-2">Price</h4>
+                                        <div className="space-y-1">
+                                            <p className="text-sm font-medium text-gray-900">
+                                                {selectedOrder?.payment?.totalAmount ? 
+                                                    `${parseInt(selectedOrder?.payment.totalAmount).toLocaleString()} ${selectedOrder?.payment.currency}` : 
+                                                    'N/A'
+                                                }
+                                            </p>
+                                            {selectedOrder?.payment?.subTotal && (
+                                                <p className="text-xs text-gray-600">
+                                                    Subtotal: {parseInt(selectedOrder?.payment.subTotal).toLocaleString()} {selectedOrder?.payment.currency}
+                                                </p>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* Actions */}
+                                    <div className="bg-gray-50 p-4 rounded-lg">
+                                        <h4 className="text-md font-semibold text-gray-900 mb-2">Actions</h4>
+                                        <button 
+                                            className="inline-flex items-center px-3 py-2 text-sm font-medium text-green-600 hover:text-green-900 border border-green-300 rounded hover:bg-green-50"
+                                            onClick={() => {
+                                                // TODO: Implement customer support chat
+                                                alert('Customer support chat feature will be implemented');
+                                            }}
+                                        >
+                                            <svg className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                                            </svg>
+                                            Chat Support
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* (2) Thông tin sản phẩm */}
+                            <div className="mb-8">
+                                <h2 className="text-xl font-bold text-gray-900 mb-4">2. Thông tin sản phẩm</h2>
+                                <div className="space-y-6">
+                                    {selectedOrder?.lineItems?.map((item) => (
+                                        <div key={item.id} className="border border-gray-200 rounded-lg p-6">
+                                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                                {/* Left column */}
+                                                <div className="space-y-4">
+                                                    {/* Image */}
+                                                    <div className="bg-gray-50 p-4 rounded-lg">
+                                                        <h4 className="text-md font-semibold text-gray-900 mb-2">Image</h4>
+                                                        <div className="w-24 h-24 bg-gray-200 rounded-lg flex items-center justify-center overflow-hidden">
+                                                            {item.skuImage ? (
+                                                                <img 
+                                                                    src={item.skuImage} 
+                                                                    alt={item.productName}
+                                                                    className="w-full h-full object-cover"
+                                                                    onError={(e) => {
+                                                                        e.currentTarget.style.display = 'none';
+                                                                        e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                                                                    }}
+                                                                />
+                                                            ) : null}
+                                                            <Package className={`h-8 w-8 text-gray-400 ${item.skuImage ? 'hidden' : ''}`} />
+                                                        </div>
+                                                        <p className="text-xs text-gray-500 mt-2">Ảnh dùng cho Get Label</p>
+                                                    </div>
                                                 </div>
-                                                <div className="text-right">
-                                                    <p className="text-sm font-semibold text-gray-900">
-                                                        {parseInt(item.salePrice).toLocaleString()} {item.currency}
-                                                    </p>
+
+                                                {/* Right column */}
+                                                <div className="space-y-4">
+                                                    {/* Product Details */}
+                                                    <div className="bg-gray-50 p-4 rounded-lg space-y-2">
+                                                        <div className="flex justify-between">
+                                                            <span className="text-sm font-medium text-gray-700">Seller SKU:</span>
+                                                            <span className="text-sm text-gray-800">{item.sellerSku || 'N/A'}</span>
+                                                        </div>
+                                                        <div className="flex justify-between">
+                                                            <span className="text-sm font-medium text-gray-700">Product name:</span>
+                                                            <span className="text-sm text-gray-800">{item.productName}</span>
+                                                        </div>
+                                                        <div className="flex justify-between">
+                                                            <span className="text-sm font-medium text-gray-700">TikTokshop SKU:</span>
+                                                            <span className="text-sm text-gray-800">{item.skuId}</span>
+                                                        </div>
+                                                        <div className="flex justify-between">
+                                                            <span className="text-sm font-medium text-gray-700">Variant SKU:</span>
+                                                            <span className="text-sm text-gray-800">{item.skuName || 'N/A'}</span>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Variant Details */}
+                                                    <div className="bg-gray-50 p-4 rounded-lg">
+                                                        <h4 className="text-md font-semibold text-gray-900 mb-2">Variant Details</h4>
+                                                        <div className="space-y-2">
+                                                            <div className="flex justify-between">
+                                                                <span className="text-sm text-gray-600">Màu sắc (Color):</span>
+                                                                <span className="text-sm text-gray-800">N/A</span>
+                                                            </div>
+                                                            <div className="flex justify-between">
+                                                                <span className="text-sm text-gray-600">Kiểu dáng (Type):</span>
+                                                                <span className="text-sm text-gray-800">N/A</span>
+                                                            </div>
+                                                            <div className="flex justify-between">
+                                                                <span className="text-sm text-gray-600">Kích thước (Size):</span>
+                                                                <span className="text-sm text-gray-800">N/A</span>
+                                                            </div>
+                                                            <div className="flex justify-between">
+                                                                <span className="text-sm text-gray-600">Số lượng (Quantity):</span>
+                                                                <span className="text-sm text-gray-800">1</span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Pricing */}
+                                                    <div className="bg-gray-50 p-4 rounded-lg space-y-2">
+                                                        <div className="flex justify-between">
+                                                            <span className="text-sm font-medium text-gray-700">Original Price:</span>
+                                                            <span className="text-sm text-gray-800">{item.originalPrice ? `${parseInt(item.originalPrice).toLocaleString()} ${item.currency}` : 'N/A'}</span>
+                                                        </div>
+                                                        <div className="flex justify-between">
+                                                            <span className="text-sm font-medium text-gray-700">Sale Price:</span>
+                                                            <span className="text-sm font-semibold text-green-600">{parseInt(item.salePrice).toLocaleString()} {item.currency}</span>
+                                                        </div>
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
                                     ))}
                                 </div>
                             </div>
+
+                            {/* (3) Thông tin fulfill */}
+                            <div className="mb-8">
+                                <h2 className="text-xl font-bold text-gray-900 mb-4">3. Thông tin fulfill</h2>
+                                <div className="bg-gray-50 p-6 rounded-lg">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        <div className="space-y-4">
+                                            <div className="flex justify-between">
+                                                <span className="text-sm font-medium text-gray-700">Fulfill service:</span>
+                                                <span className="text-sm text-gray-800">N/A</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span className="text-sm font-medium text-gray-700">Mã đơn fulfill:</span>
+                                                <span className="text-sm text-gray-800">N/A</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span className="text-sm font-medium text-gray-700">Tracking number:</span>
+                                                <span className="text-sm font-mono text-gray-800">{selectedOrder?.trackingNumber || 'N/A'}</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span className="text-sm font-medium text-gray-700">Tracking URL:</span>
+                                                <span className="text-sm text-blue-600">
+                                                    {selectedOrder?.trackingNumber ? (
+                                                        <a href="#" className="hover:underline">View Tracking</a>
+                                                    ) : 'N/A'}
+                                                </span>
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-4">
+                                            <div className="flex justify-between">
+                                                <span className="text-sm font-medium text-gray-700">Nhân viên fulfill:</span>
+                                                <span className="text-sm text-gray-800">N/A</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span className="text-sm font-medium text-gray-700">Trạng thái đẩy sang fulfill lúc:</span>
+                                                <span className="text-sm text-gray-800">N/A</span>
+                                            </div>
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-sm font-medium text-gray-700">Cập nhật:</span>
+                                                <button className="px-3 py-1 text-sm bg-orange-500 text-white rounded hover:bg-orange-600">
+                                                    Update Fulfill
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Delivery Address (Additional Info) */}
+                            {selectedOrder?.recipientAddress && (
+                                <div className="mb-6">
+                                    <h4 className="text-md font-semibold text-gray-900 flex items-center mb-4">
+                                        <MapPin className="h-5 w-5 mr-2" />
+                                        Delivery Address
+                                    </h4>
+                                    <div className="bg-gray-50 p-4 rounded-lg">
+                                        <p className="text-sm text-gray-800">{selectedOrder?.recipientAddress.fullAddress}</p>
+                                    </div>
+                                </div>
+                            )}
                         </div>
 
                         {/* Modal Footer - Fixed */}
-                        <div className="border-t px-6 py-3 flex justify-end">
+                        <div className="border-t px-6 py-3 flex justify-end flex-shrink-0">
                             <button
                                 onClick={closeOrderModal}
                                 className="inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
