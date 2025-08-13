@@ -90,9 +90,55 @@ export async function POST(req: NextRequest) {
             body
         );
 
-        // If sync is true, store the data in database
+        // If sync is true, store the data in database and fetch all pages
         if (sync && result.body?.data?.orders) {
-            await syncOrdersToDatabase(result.body.data.orders, shop_id);
+            let allOrders = [...result.body.data.orders];
+            let nextPageToken = result.body.data.nextPageToken;
+
+            // Continue fetching all pages if there are more
+            while (nextPageToken) {
+                try {
+                    console.log(`Fetching next page with token: ${nextPageToken}`);
+                    
+                    const nextPageResult = await client.api.OrderV202309Api.OrdersSearchPost(
+                        page_size,
+                        credentials.accessToken,
+                        "application/json",
+                        sort_direction,
+                        nextPageToken, // Use the token for next page
+                        sort_by,
+                        credentials.shopCipher,
+                        body
+                    );
+
+                    if (nextPageResult.body?.data?.orders) {
+                        allOrders.push(...nextPageResult.body.data.orders);
+                        console.log(`Fetched ${nextPageResult.body.data.orders.length} more orders. Total: ${allOrders.length}`);
+                    }
+
+                    // Update token for next iteration
+                    nextPageToken = nextPageResult.body?.data?.nextPageToken;
+                    
+                    // Add a small delay to avoid rate limiting
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                    
+                } catch (paginationError) {
+                    console.error('Error fetching next page:', paginationError);
+                    break; // Stop pagination on error but continue with orders we have
+                }
+            }
+
+            console.log(`Total orders to sync: ${allOrders.length}`);
+            await syncOrdersToDatabase(allOrders, shop_id);
+            
+            // Return modified result with total count information
+            return NextResponse.json({
+                ...result.body,
+                syncInfo: {
+                    totalOrdersSynced: allOrders.length,
+                    pagesProcessed: Math.ceil(allOrders.length / page_size)
+                }
+            });
         }
 
         return NextResponse.json(result.body);
@@ -108,15 +154,37 @@ export async function POST(req: NextRequest) {
 }
 
 async function syncOrdersToDatabase(orders: any[], shopId: string) {
-    for (const order of orders) {
-        try {
-            // Ensure createTime is always available - use current timestamp as fallback
-            const createTime = order.createTime || Math.floor(Date.now() / 1000);
+    const BATCH_SIZE = 100;
+    console.log(`Starting sync of ${orders.length} orders in batches of ${BATCH_SIZE}`);
+
+    // Process orders in batches
+    for (let i = 0; i < orders.length; i += BATCH_SIZE) {
+        const batch = orders.slice(i, i + BATCH_SIZE);
+        await processBatch(batch, shopId);
+        console.log(`Processed ${Math.min(i + BATCH_SIZE, orders.length)} of ${orders.length} orders`);
+    }
+
+    console.log('Sync completed');
+}
+
+async function processBatch(orders: any[], shopId: string) {
+    try {
+        await prisma.$transaction(async (tx) => {
+            // Collect existing order IDs to determine which are new vs updates
+            const orderIds = orders.map(o => o.id);
+            const existingOrders = await tx.tikTokOrder.findMany({
+                where: { orderId: { in: orderIds } },
+                select: { id: true, orderId: true }
+            });
             
-            // Upsert order
-            const savedOrder = await prisma.tikTokOrder.upsert({
-                where: { orderId: order.id },
-                create: {
+            const existingOrderMap = new Map(existingOrders.map(o => [o.orderId, o.id]));
+            const newOrders = [];
+            const updateOrders = [];
+
+            // Separate new orders from updates
+            for (const order of orders) {
+                const createTime = order.createTime || Math.floor(Date.now() / 1000);
+                const orderData = {
                     orderId: order.id,
                     buyerEmail: order.buyerEmail || "",
                     buyerMessage: order.buyerMessage || "",
@@ -149,25 +217,66 @@ async function syncOrdersToDatabase(orders: any[], shopId: string) {
                     userId: order.userId,
                     warehouseId: order.warehouseId,
                     shopId: shopId,
-                },
-                update: {
-                    status: order.status || "UNKNOWN",
-                    updateTime: order.updateTime,
-                    deliveryTime: order.deliveryTime,
-                    paidTime: order.paidTime,
-                    trackingNumber: order.trackingNumber,
-                    buyerMessage: order.buyerMessage || "",
-                    paymentMethodName: order.paymentMethodName,
-                    shippingProvider: order.shippingProvider,
-                }
-            });
+                };
 
-            // Sync line items
-            if (order.lineItems) {
-                for (const item of order.lineItems) {
-                    await prisma.tikTokOrderLineItem.upsert({
-                        where: { lineItemId: item.id },
-                        create: {
+                if (existingOrderMap.has(order.id)) {
+                    updateOrders.push({
+                        ...orderData,
+                        dbId: existingOrderMap.get(order.id)
+                    });
+                } else {
+                    newOrders.push(orderData);
+                }
+            }
+
+            // Batch create new orders
+            if (newOrders.length > 0) {
+                await tx.tikTokOrder.createMany({
+                    data: newOrders
+                });
+            }
+
+            // Batch update existing orders
+            if (updateOrders.length > 0) {
+                const updatePromises = updateOrders.map(order => 
+                    tx.tikTokOrder.update({
+                        where: { id: order.dbId },
+                        data: {
+                            status: order.status,
+                            updateTime: order.updateTime,
+                            deliveryTime: order.deliveryTime,
+                            paidTime: order.paidTime,
+                            trackingNumber: order.trackingNumber,
+                            buyerMessage: order.buyerMessage,
+                            paymentMethodName: order.paymentMethodName,
+                            shippingProvider: order.shippingProvider,
+                        }
+                    })
+                );
+                await Promise.all(updatePromises);
+            }
+
+            // Get all order IDs after insert/update
+            const allOrders = await tx.tikTokOrder.findMany({
+                where: { orderId: { in: orderIds } },
+                select: { id: true, orderId: true }
+            });
+            const orderIdMap = new Map(allOrders.map(o => [o.orderId, o.id]));
+
+            // Process line items in batches
+            const allLineItems = [];
+            const allPayments = [];
+            const allAddresses = [];
+            const allPackages = [];
+
+            for (const order of orders) {
+                const dbOrderId = orderIdMap.get(order.id);
+                if (!dbOrderId) continue;
+
+                // Collect line items
+                if (order.lineItems) {
+                    for (const item of order.lineItems) {
+                        allLineItems.push({
                             lineItemId: item.id,
                             productId: item.productId,
                             productName: item.productName,
@@ -189,25 +298,15 @@ async function syncOrdersToDatabase(orders: any[], shopId: string) {
                             shippingProviderName: item.shippingProviderName,
                             trackingNumber: item.trackingNumber,
                             rtsTime: item.rtsTime,
-                            orderId: savedOrder.id,
-                        },
-                        update: {
-                            displayStatus: item.displayStatus,
-                            packageStatus: item.packageStatus,
-                            salePrice: item.salePrice,
-                            trackingNumber: item.trackingNumber,
-                            productName: item.productName,
-                            skuName: item.skuName || "",
-                        }
-                    });
+                            orderId: dbOrderId,
+                        });
+                    }
                 }
-            }
 
-            // Sync payment information
-            if (order.payment) {
-                await prisma.tikTokOrderPayment.upsert({
-                    where: { orderId: savedOrder.id },
-                    create: {
+                // Collect payments
+                if (order.payment) {
+                    allPayments.push({
+                        orderId: dbOrderId,
                         currency: order.payment.currency,
                         originalTotalProductPrice: order.payment.originalTotalProductPrice,
                         originalShippingFee: order.payment.originalShippingFee,
@@ -220,24 +319,13 @@ async function syncOrdersToDatabase(orders: any[], shopId: string) {
                         shippingFeeCofundedDiscount: order.payment.shippingFeeCofundedDiscount,
                         shippingFeePlatformDiscount: order.payment.shippingFeePlatformDiscount,
                         shippingFeeSellerDiscount: order.payment.shippingFeeSellerDiscount,
-                        orderId: savedOrder.id,
-                    },
-                    update: {
-                        totalAmount: order.payment.totalAmount,
-                        subTotal: order.payment.subTotal,
-                        tax: order.payment.tax,
-                        shippingFee: order.payment.shippingFee,
-                        originalTotalProductPrice: order.payment.originalTotalProductPrice,
-                        originalShippingFee: order.payment.originalShippingFee,
-                    }
-                });
-            }
+                    });
+                }
 
-            // Sync recipient address
-            if (order.recipientAddress) {
-                const recipientAddress = await prisma.tikTokOrderRecipientAddress.upsert({
-                    where: { orderId: savedOrder.id },
-                    create: {
+                // Collect addresses
+                if (order.recipientAddress) {
+                    allAddresses.push({
+                        orderId: dbOrderId,
                         addressDetail: order.recipientAddress.addressDetail,
                         addressLine1: order.recipientAddress.addressLine1,
                         addressLine2: order.recipientAddress.addressLine2 || "",
@@ -252,64 +340,101 @@ async function syncOrdersToDatabase(orders: any[], shopId: string) {
                         phoneNumber: order.recipientAddress.phoneNumber,
                         postalCode: order.recipientAddress.postalCode || "",
                         regionCode: order.recipientAddress.regionCode,
-                        orderId: savedOrder.id,
-                    },
-                    update: {
-                        addressDetail: order.recipientAddress.addressDetail,
-                        addressLine1: order.recipientAddress.addressLine1,
-                        addressLine2: order.recipientAddress.addressLine2 || "",
-                        addressLine3: order.recipientAddress.addressLine3 || "",
-                        addressLine4: order.recipientAddress.addressLine4 || "",
-                        fullAddress: order.recipientAddress.fullAddress,
-                        firstName: order.recipientAddress.firstName || "",
-                        lastName: order.recipientAddress.lastName || "",
-                        name: order.recipientAddress.name,
-                        phoneNumber: order.recipientAddress.phoneNumber,
-                        postalCode: order.recipientAddress.postalCode || "",
-                    }
-                });
-
-                // Sync district info
-                if (order.recipientAddress.districtInfo) {
-                    // Delete existing districts and recreate
-                    await prisma.tikTokAddressDistrict.deleteMany({
-                        where: { recipientAddressId: recipientAddress.id }
+                        districtInfo: order.recipientAddress.districtInfo || [],
                     });
+                }
 
-                    for (const district of order.recipientAddress.districtInfo) {
-                        await prisma.tikTokAddressDistrict.create({
-                            data: {
-                                addressLevel: district.addressLevel,
-                                addressLevelName: district.addressLevelName,
-                                addressName: district.addressName,
-                                recipientAddressId: recipientAddress.id,
-                            }
+                // Collect packages
+                if (order.packages) {
+                    for (const pkg of order.packages) {
+                        allPackages.push({
+                            orderId: dbOrderId,
+                            packageId: pkg.id,
                         });
                     }
                 }
             }
 
-            // Sync packages
-            if (order.packages) {
-                for (const pkg of order.packages) {
-                    await prisma.tikTokOrderPackage.upsert({
-                        where: {
-                            orderId_packageId: {
-                                orderId: savedOrder.id,
-                                packageId: pkg.id
-                            }
-                        },
-                        create: {
-                            packageId: pkg.id,
-                            orderId: savedOrder.id,
-                        },
-                        update: {}
+            // Batch upsert line items
+            if (allLineItems.length > 0) {
+                // Delete existing line items for these orders first
+                await tx.tikTokOrderLineItem.deleteMany({
+                    where: { orderId: { in: Array.from(orderIdMap.values()) } }
+                });
+                // Insert all line items
+                await tx.tikTokOrderLineItem.createMany({
+                    data: allLineItems
+                });
+            }
+
+            // Batch upsert payments
+            if (allPayments.length > 0) {
+                await tx.tikTokOrderPayment.deleteMany({
+                    where: { orderId: { in: Array.from(orderIdMap.values()) } }
+                });
+                await tx.tikTokOrderPayment.createMany({
+                    data: allPayments
+                });
+            }
+
+            // Batch upsert addresses and districts
+            if (allAddresses.length > 0) {
+                // Delete existing addresses first
+                await tx.tikTokOrderRecipientAddress.deleteMany({
+                    where: { orderId: { in: Array.from(orderIdMap.values()) } }
+                });
+
+                // Insert new addresses
+                const addressInserts = allAddresses.map(({ districtInfo, ...address }) => address);
+                await tx.tikTokOrderRecipientAddress.createMany({
+                    data: addressInserts
+                });
+
+                // Handle district info
+                const newAddresses = await tx.tikTokOrderRecipientAddress.findMany({
+                    where: { orderId: { in: Array.from(orderIdMap.values()) } },
+                    select: { id: true, orderId: true }
+                });
+                const addressIdMap = new Map(newAddresses.map(a => [a.orderId, a.id]));
+
+                const allDistricts = [];
+                for (const address of allAddresses) {
+                    const addressId = addressIdMap.get(address.orderId);
+                    if (addressId && address.districtInfo.length > 0) {
+                        for (const district of address.districtInfo) {
+                            allDistricts.push({
+                                addressLevel: district.addressLevel,
+                                addressLevelName: district.addressLevelName,
+                                addressName: district.addressName,
+                                recipientAddressId: addressId,
+                            });
+                        }
+                    }
+                }
+
+                if (allDistricts.length > 0) {
+                    await tx.tikTokAddressDistrict.createMany({
+                        data: allDistricts
                     });
                 }
             }
 
-        } catch (error) {
-            console.error(`Error syncing order ${order.id}:`, error);
-        }
+            // Batch upsert packages
+            if (allPackages.length > 0) {
+                await tx.tikTokOrderPackage.deleteMany({
+                    where: { orderId: { in: Array.from(orderIdMap.values()) } }
+                });
+                await tx.tikTokOrderPackage.createMany({
+                    data: allPackages
+                });
+            }
+        }, {
+            maxWait: 30000,
+            timeout: 60000,
+        });
+
+    } catch (error) {
+        console.error('Error processing batch:', error);
+        throw error;
     }
 }
