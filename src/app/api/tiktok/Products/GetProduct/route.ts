@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma, PrismaClient } from "@prisma/client";
+import { getUserWithShopAccess, getActiveShopIds, validateShopAccess } from "@/lib/auth";
 
 const prisma = new PrismaClient();
 
 export async function GET(req: NextRequest) {
     try {
+        const { user, accessibleShopIds, isAdmin } = await getUserWithShopAccess(req, prisma);
+        const activeShopIds = await getActiveShopIds(prisma);
+
         const { searchParams } = req.nextUrl;
 
         const shopId = searchParams.get("shopId");
@@ -16,9 +20,41 @@ export async function GET(req: NextRequest) {
 
         const filters: Prisma.ProductWhereInput = {};
 
-        if (shopId) {
-            filters.shopId = shopId;
+        // Validate shop access
+        const { shopFilter, hasAccess } = validateShopAccess(shopId, isAdmin, accessibleShopIds, activeShopIds);
+        
+        if (!hasAccess) {
+            return NextResponse.json([]);
         }
+
+        filters.shopId = shopFilter;
+
+        // Get active shops only
+        const activeShops = await prisma.shopAuthorization.findMany({
+            where: { status: 'ACTIVE' },
+            select: { shopId: true },
+        });
+        const activeShopIdsFromDb = activeShops.map(shop => shop.shopId);
+
+        // Filter to only include active shops
+        if (filters.shopId) {
+            if (
+                typeof filters.shopId === 'object' &&
+                filters.shopId.in &&
+                Array.isArray(filters.shopId.in)
+            ) {
+                filters.shopId.in = filters.shopId.in.filter((id: string) => activeShopIdsFromDb.includes(id));
+            } else if (
+                typeof filters.shopId === 'string' &&
+                !activeShopIdsFromDb.includes(filters.shopId)
+            ) {
+                // If shopId is not active, return empty result
+                return NextResponse.json([]);
+            }
+        } else {
+            filters.shopId = { in: activeShopIdsFromDb };
+        }
+
         if (status && status.toLowerCase() !== 'all') {
             filters.status = status.toUpperCase();
         }
@@ -111,6 +147,9 @@ export async function GET(req: NextRequest) {
 
     } catch (error: unknown) {
         console.error("Error in product GET API:", error);
+        if (error instanceof Error && (error.message === 'Authentication required' || error.message === 'User not found')) {
+            return NextResponse.json({ error: error.message }, { status: 401 });
+        }
         const message = error instanceof Error ? error.message : "An unknown server error occurred.";
         return NextResponse.json({ error: message }, { status: 500 });
     } finally {

@@ -4,11 +4,14 @@ import {
     Order202309GetOrderListRequestBody,
     TikTokShopNodeApiClient,
 } from "@/nodejs_sdk";
+import { getUserWithShopAccess, getActiveShopIds } from "@/lib/auth";
 
 const prisma = new PrismaClient();
 
 export async function POST(req: NextRequest) {
     try {
+        const { user, accessibleShopIds, isAdmin } = await getUserWithShopAccess(req, prisma);
+
         const {
             shop_id,
             sort_by = "create_time",
@@ -25,10 +28,19 @@ export async function POST(req: NextRequest) {
             );
         }
 
+        // Check user access to the requested shop
+        if (!isAdmin && !accessibleShopIds.includes(shop_id)) {
+            return NextResponse.json(
+                { error: "Access denied: You don't have permission to access this shop" },
+                { status: 403 }
+            );
+        }
+
         // Lấy thông tin shop và app
         const credentials = await prisma.shopAuthorization.findUnique({
             where: {
                 shopId: shop_id,
+                status: 'ACTIVE', // Only allow active shops
             },
             include: {
                 app: true,
@@ -36,7 +48,7 @@ export async function POST(req: NextRequest) {
         });
 
         if (!credentials) {
-            return NextResponse.json({ error: "Shop not found" }, { status: 404 });
+            return NextResponse.json({ error: "Shop not found or inactive" }, { status: 404 });
         }
 
         const app_key = credentials.app.appKey;
@@ -86,7 +98,12 @@ export async function POST(req: NextRequest) {
         return NextResponse.json(result.body);
     } catch (err: any) {
         console.error("Error getting orders:", err);
+        if (err.message === 'Authentication required' || err.message === 'User not found') {
+            return NextResponse.json({ error: err.message }, { status: 401 });
+        }
         return NextResponse.json({ error: err.message || "Internal error" }, { status: 500 });
+    } finally {
+        await prisma.$disconnect();
     }
 }
 

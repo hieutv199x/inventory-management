@@ -1,19 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import jwt from 'jsonwebtoken';
 import { prisma } from '@/lib/prisma';
-
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
-
-const verifyToken = (request: NextRequest) => {
-  const authHeader = request.headers.get('Authorization');
-  const token = authHeader?.replace('Bearer ', '');
-  
-  if (!token) {
-    throw new Error('Authentication required');
-  }
-  
-  return jwt.verify(token, JWT_SECRET) as any;
-};
+import { verifyToken } from '@/lib/auth';
 
 export async function PUT(
   request: NextRequest,

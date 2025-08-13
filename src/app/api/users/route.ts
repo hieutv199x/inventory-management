@@ -1,24 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
-import { validateToken, checkRole } from "@/lib/auth-middleware";
+import { verifyToken } from "@/lib/auth";
 
 // Get all users (Admin and Manager only)
 export async function GET(request: NextRequest) {
   try {
-    // Validate token and get user
-    const authResult = await validateToken(request);
-    if (authResult.error) {
+    const decoded = verifyToken(request);
+
+    // Get current user
+    const currentUser = await prisma.user.findUnique({
+      where: { id: decoded.userId },
+    });
+
+    if (!currentUser) {
       return NextResponse.json(
-        { error: authResult.error },
-        { status: authResult.status }
+        { error: "User not found" },
+        { status: 404 }
       );
     }
 
-    const { user } = authResult;
-
     // Check if user has permission (Admin or Manager only)
-    if (!checkRole(user!.role, ["ADMIN", "MANAGER"])) {
+    if (!["ADMIN", "MANAGER"].includes(currentUser.role)) {
       return NextResponse.json(
         { error: "Insufficient permissions" },
         { status: 403 }
@@ -126,29 +129,40 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error("Error fetching users:", error);
+    if (error instanceof Error && error.message === "Authentication required") {
+      return NextResponse.json(
+        { error: "Authentication required" },
+        { status: 401 }
+      );
+    }
     return NextResponse.json(
       { error: "Failed to fetch users" },
       { status: 500 }
     );
+  } finally {
+    await prisma.$disconnect();
   }
 }
 
 // Create new user (Admin only)
 export async function POST(request: NextRequest) {
   try {
-    // Validate token and get user
-    const authResult = await validateToken(request);
-    if (authResult.error) {
+    const decoded = verifyToken(request);
+
+    // Get current user
+    const currentUser = await prisma.user.findUnique({
+      where: { id: decoded.userId },
+    });
+
+    if (!currentUser) {
       return NextResponse.json(
-        { error: authResult.error },
-        { status: authResult.status }
+        { error: "User not found" },
+        { status: 404 }
       );
     }
 
-    const { user: currentUser } = authResult;
-
     // Check if user has permission (Admin only)
-    if (!checkRole(currentUser!.role, ["ADMIN"])) {
+    if (!["ADMIN"].includes(currentUser.role)) {
       return NextResponse.json(
         { error: "Only administrators can create users" },
         { status: 403 }
@@ -197,9 +211,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ user: newUser }, { status: 201 });
   } catch (error) {
     console.error("Error creating user:", error);
+    if (error instanceof Error && error.message === "Authentication required") {
+      return NextResponse.json(
+        { error: "Authentication required" },
+        { status: 401 }
+      );
+    }
     return NextResponse.json(
       { error: "Failed to create user" },
       { status: 500 }
     );
+  } finally {
+    await prisma.$disconnect();
   }
 }

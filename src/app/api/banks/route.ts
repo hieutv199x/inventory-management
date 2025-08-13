@@ -1,19 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import jwt from 'jsonwebtoken';
-import { prisma } from '@/lib/prisma';
+import { PrismaClient } from '@prisma/client';
+import { verifyToken } from '@/lib/auth';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
-
-const verifyToken = (request: NextRequest) => {
-  const authHeader = request.headers.get('Authorization');
-  const token = authHeader?.replace('Bearer ', '');
-  
-  if (!token) {
-    throw new Error('Authentication required');
-  }
-  
-  return jwt.verify(token, JWT_SECRET) as any;
-};
+const prisma = new PrismaClient();
 
 export async function GET(request: NextRequest) {
   try {
@@ -142,12 +131,17 @@ export async function GET(request: NextRequest) {
         totalPages,
       },
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error fetching banks:', error);
+    if (error.message === 'Authentication required') {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+    }
     return NextResponse.json(
       { error: 'Failed to fetch banks' },
       { status: 500 }
     );
+  } finally {
+    await prisma.$disconnect();
   }
 }
 
@@ -236,11 +230,16 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(formattedBanks);
 
-  } catch (error) {
-    console.error('Import banks error:', error);
+  } catch (error: any) {
+    console.error('Error creating bank:', error);
+    if (error.message === 'Authentication required') {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+    }
     return NextResponse.json(
-      { message: 'Failed to import banks' },
+      { error: 'Failed to create bank' },
       { status: 500 }
     );
+  } finally {
+    await prisma.$disconnect();
   }
 }

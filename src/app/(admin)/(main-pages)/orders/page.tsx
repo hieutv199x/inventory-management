@@ -90,7 +90,7 @@ export default function OrdersPage() {
     const fetchOrders = async (page = 1) => {
         setLoading(true);
         try {
-            const response = await httpClient.post('/tiktok/Orders/stored-orders', {
+            const response = await httpClient.post('/orders', {
                 shopId: selectedShop,
                 status: selectedStatus,
                 createTimeGe: dateFrom ? Math.floor(new Date(dateFrom).getTime() / 1000) : undefined,

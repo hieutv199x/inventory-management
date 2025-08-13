@@ -9,6 +9,7 @@ import DatePicker from "@/components/form/date-picker";
 import {Table, TableBody, TableCell, TableHeader, TableRow} from "@/components/ui/table";
 import Image from "next/image";
 import { useToast } from "@/context/ToastContext";
+import { httpClient } from "@/lib/http-client";
 
 interface Product {
     id: string;
@@ -92,14 +93,7 @@ export const Product = () => {
                 params.append('endDate', filters.endDate);
             }
 
-            const response = await fetch(`/api/tiktok/Products/GetProduct?${params.toString()}`);
-
-            if (!response.ok) {
-                const errorResult = await response.json();
-                throw new Error(errorResult.error || 'Failed to fetch products');
-            }
-
-            const result = await response.json();
+            const result = await httpClient.get(`/tiktok/Products/GetProduct?${params.toString()}`);
             // API trả về một mảng trực tiếp, không có key 'data'
             setProducts(result || []);
         } catch (err) {

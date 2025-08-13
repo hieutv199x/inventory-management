@@ -1,90 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
-import jwt from 'jsonwebtoken';
+import { getUserWithShopAccess, validateShopAccess, getActiveShopIds } from '@/lib/auth';
 
 const prisma = new PrismaClient();
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
-
-const verifyToken = (request: NextRequest) => {
-  const authHeader = request.headers.get('Authorization');
-  const token = authHeader?.replace('Bearer ', '');
-
-  if (!token) {
-    throw new Error('Authentication required');
-  }
-
-  return jwt.verify(token, JWT_SECRET) as any;
-};
 
 export async function GET(request: NextRequest) {
   try {
-    const decoded = verifyToken(request);
-
-    // Get current user
-    const currentUser = await prisma.user.findUnique({
-      where: { id: decoded.userId },
-    });
-
-    if (!currentUser) {
-      return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
-      );
-    }
+    const { user, accessibleShopIds, isAdmin } = await getUserWithShopAccess(request, prisma);
 
     const { searchParams } = new URL(request.url);
     const shopId = searchParams.get('shop_id');
     const startDate = searchParams.get('start_date');
     const endDate = searchParams.get('end_date');
 
+    const activeShopIds = await getActiveShopIds(prisma);
+
     // Build where clause based on user permissions
     let whereClause: any = {};
 
-    // If user is not ADMIN or MANAGER, filter by user shop roles
-    if (!['ADMIN', 'MANAGER'].includes(currentUser.role)) {
-      // Get shops that the user has access to through UserShopRole
-      const userShopRoles = await prisma.userShopRole.findMany({
-        where: {
-          userId: currentUser.id,
-        },
-        select: {
-          shop: {
-            select: {
-              id: true,
-              shopId: true,
-            },
-          }
-        },
-      });
-
-      const accessibleShopIds = userShopRoles.map((usr) => usr.shop?.shopId);
-
-      // If user has no shop assignments, return empty result
-      if (accessibleShopIds.length === 0) {
-        return NextResponse.json([]);
-      }
-
-      // If specific shop is requested (not 'all'), check if user has access to it
-      if (shopId && shopId !== 'all') {
-        if (accessibleShopIds.includes(shopId)) {
-          whereClause.shopId = shopId;
-        } else {
-          // User doesn't have access to the requested shop
-          return NextResponse.json([]);
-        }
-      } else {
-        // shopId is 'all' or not provided, filter by accessible shops
-        whereClause.shopId = {
-          in: accessibleShopIds,
-        };
-      }
-    } else {
-      // Admin/Manager can access all shops
-      if (shopId && shopId !== 'all') {
-        whereClause.shopId = shopId;
-      }
-      // If shopId is 'all' or not provided, don't add shopId filter (get all shops)
+    // Handle 'all' parameter for shopId
+    const requestedShopId = shopId === 'all' ? null : shopId;
+    
+    const { shopFilter, hasAccess } = validateShopAccess(requestedShopId, isAdmin, accessibleShopIds, activeShopIds);
+    
+    if (!hasAccess) {
+      return NextResponse.json([]);
     }
+
+    whereClause.shopId = shopFilter;
 
     // Add date range filter if provided
     if (startDate && endDate) {
@@ -92,25 +35,6 @@ export async function GET(request: NextRequest) {
         gte: parseInt(startDate),
         lte: parseInt(endDate),
       };
-    }
-
-    // Lấy danh sách shopId active
-    const activeShops = await prisma.shopAuthorization.findMany({
-      where: { status: 'ACTIVE' }, // sửa lại nếu enum khác
-      select: { shopId: true },
-    });
-    const activeShopIds = activeShops.map(shop => shop.shopId);
-
-    // Lọc lại whereClause để chỉ lấy statement của shop active
-    if (whereClause.shopId) {
-      if (typeof whereClause.shopId === 'object' && whereClause.shopId.in) {
-        whereClause.shopId.in = whereClause.shopId.in.filter((id: string) => activeShopIds.includes(id));
-      } else if (!activeShopIds.includes(whereClause.shopId)) {
-        // Nếu shopId không active thì trả về rỗng
-        return NextResponse.json([]);
-      }
-    } else {
-      whereClause.shopId = { in: activeShopIds };
     }
 
     // Get statements với shop active
@@ -132,6 +56,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(statements);
   } catch (error) {
     console.error('Error fetching statements:', error);
+    if (error instanceof Error && (error.message === 'Authentication required' || error.message === 'User not found')) {
+      return NextResponse.json({ error: error.message }, { status: 401 });
+    }
     return NextResponse.json(
       { error: 'Failed to fetch statements' },
       { status: 500 }

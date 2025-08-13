@@ -1,19 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import jwt from 'jsonwebtoken';
 import { prisma } from '@/lib/prisma';
-
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
-
-const verifyToken = (request: NextRequest) => {
-  const authHeader = request.headers.get('Authorization');
-  const token = authHeader?.replace('Bearer ', '');
-  
-  if (!token) {
-    throw new Error('Authentication required');
-  }
-  
-  return jwt.verify(token, JWT_SECRET) as any;
-};
+import { verifyToken } from '@/lib/auth';
 
 export async function PUT(
   request: NextRequest,
@@ -112,6 +99,9 @@ export async function PUT(
 
   } catch (error) {
     console.error('Assign bank error:', error);
+    if (error instanceof Error && error.message === 'Authentication required') {
+      return NextResponse.json({ message: 'Authentication required' }, { status: 401 });
+    }
     return NextResponse.json(
       { message: 'Failed to assign bank' },
       { status: 500 }
@@ -165,6 +155,9 @@ export async function DELETE(
 
   } catch (error) {
     console.error('Delete shop error:', error);
+    if (error instanceof Error && error.message === 'Authentication required') {
+      return NextResponse.json({ message: 'Authentication required' }, { status: 401 });
+    }
     return NextResponse.json(
       { message: 'Failed to delete shop' },
       { status: 500 }
