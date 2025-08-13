@@ -341,6 +341,7 @@ export const Product = () => {
                                 <DatePicker
                                     id="start-date-picker"
                                     label="Start Date"
+                                    value={filters.startDate ?? undefined}
                                     placeholder="dd/MM/yyyy"
                                     onChange={(_, dateStr) => handleFilterChange('startDate', dateStr)}
                                 />
@@ -349,6 +350,7 @@ export const Product = () => {
                                 <DatePicker
                                     id="end-date-picker"
                                     label="End Date"
+                                    value={filters.endDate ?? undefined}
                                     placeholder="dd/MM/yyyy"
                                     onChange={(_, dateStr) => handleFilterChange('endDate', dateStr)}
                                 />

@@ -288,18 +288,15 @@ export default function OrdersPage() {
                             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
                             <span className="ml-2">Search</span>
                         </button>
-                    </div>
-                </div>
-
-                <div className="flex justify-end">
-                    <button
+                        <button
                         onClick={syncOrders}
                         disabled={syncing || !selectedShop}
-                        className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 disabled:opacity-50 flex items-center"
+                        className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 disabled:opacity-50 flex items-center justify-center"
                     >
                         {syncing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <RefreshCw className="h-4 w-4 mr-2" />}
                         Sync Orders
                     </button>
+                    </div>
                 </div>
             </div>
 
