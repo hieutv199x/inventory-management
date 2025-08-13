@@ -7,17 +7,14 @@ import { useSidebar } from "../context/SidebarContext";
 import { useAuth } from "../context/authContext";
 import {
   BoxCubeIcon,
-  CalenderIcon,
   ChevronDownIcon,
-  GridIcon,
   HorizontaLDots,
-  PieChartIcon,
   PlugInIcon,
   BankIcon,
   GroupIcon,
-  SettingsIcon,
 } from "../icons/index";
-import { FaMoneyCheckAlt, FaUsersCog, FaChartLine, FaBoxOpen, FaWarehouse } from "react-icons/fa";
+import { FaMoneyCheckAlt, FaUsersCog } from "react-icons/fa";
+import { AiOutlineShopping } from "react-icons/ai";
 
 type NavItem = {
   name: string;
@@ -32,27 +29,15 @@ const productItems: NavItem[] = [
   {
     icon: <BoxCubeIcon />,
     name: "Sản phẩm",
-    subItems: [
-      { name: "Danh sách sản phẩm", path: "/products" },
-      //{ name: "Thêm sản phẩm", path: "/products/add" }
-    ],
+    path: "/products",
     roles: ["ADMIN", "MANAGER", "SELLER"]
   },
-  // {
-  //   icon: <FaBoxOpen size={24} />,
-  //   name: "Kho hàng",
-  //   subItems: [
-  //     { name: "Tổng quan kho", path: "/inventory" },
-  //     { name: "Quản lý kho", path: "/warehouse" }
-  //   ],
-  //   roles: ["ADMIN", "MANAGER", "SELLER"]
-  // },
-  // {
-  //   icon: <CalenderIcon />,
-  //   name: "Lịch",
-  //   path: "/calendar",
-  //   roles: ["ADMIN", "MANAGER", "ACCOUNTANT", "SELLER"]
-  // }
+  {
+    icon: <AiOutlineShopping size={24}/>,
+    name: "Đơn hàng",
+    path: "/orders",
+    roles: ["ADMIN", "MANAGER", "SELLER"]
+  },
 ];
 
 // Tài chính (Finance) Group

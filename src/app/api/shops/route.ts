@@ -38,9 +38,13 @@ export async function GET(request: NextRequest) {
 
     // Admin/Manager can see all shops
     const shops = await prisma.shopAuthorization.findMany({
+      where: {
+        status: 'ACTIVE'
+      },
       select: {
         id: true,
-        shopName: true
+        shopId: true,
+        shopName: true,
       },
       orderBy: {
         shopName: 'asc'

@@ -122,6 +122,9 @@ model ShopAuthorization {
   // Opposite relation for UserShopRole
   userShopRoles UserShopRole[]
 
+  // Opposite relation for TikTokOrder
+  tiktokOrders TikTokOrder[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -389,4 +392,209 @@ model TikTokWithdrawal {
   shopId        String
   shop          ShopAuthorization @relation(fields: [shopId], references: [shopId])
 
+}
+
+model TikTokOrder {
+  id                               String   @id @default(auto()) @map("_id") @db.ObjectId
+  orderId                          String   @unique // "id" field from API
+  
+  // Basic order information
+  buyerEmail                       String
+  buyerMessage                     String?
+  cancelOrderSlaTime               Int?
+  collectionTime                   Int?
+  commercePlatform                 String?
+  createTime                       Int
+  updateTime                       Int?
+  
+  // Delivery information
+  deliveryOptionId                 String?
+  deliveryOptionName               String?
+  deliveryTime                     Int?
+  deliveryType                     String?
+  fulfillmentType                  String?
+  
+  // Order flags
+  hasUpdatedRecipientAddress       Boolean  @default(false)
+  isCod                           Boolean  @default(false)
+  isOnHoldOrder                   Boolean  @default(false)
+  isReplacementOrder              Boolean  @default(false)
+  isSampleOrder                   Boolean  @default(false)
+  
+  // Order metadata
+  orderType                       String?
+  paidTime                        Int?
+  paymentMethodName               String?
+  status                          String
+  
+  // Shipping information
+  shippingProvider                String?
+  shippingProviderId              String?
+  shippingType                    String?
+  trackingNumber                  String?
+  
+  // SLA times
+  rtsSlaTime                      Int?
+  rtsTime                         Int?
+  ttsSlaTime                      Int?
+  
+  // User and warehouse
+  userId                          String?
+  warehouseId                     String?
+  
+  // Shop relation
+  shopId                          String
+  shop                            ShopAuthorization @relation(fields: [shopId], references: [shopId])
+  
+  // Related data
+  lineItems                       TikTokOrderLineItem[]
+  packages                        TikTokOrderPackage[]
+  payment                         TikTokOrderPayment?
+  recipientAddress                TikTokOrderRecipientAddress?
+  
+  createdAt                       DateTime @default(now())
+  updatedAt                       DateTime @updatedAt
+  
+  @@map("tiktok_orders")
+}
+
+model TikTokOrderLineItem {
+  id                    String   @id @default(auto()) @map("_id") @db.ObjectId
+  lineItemId            String   @unique // "id" field from API
+  
+  // Product information
+  productId             String
+  productName           String
+  skuId                 String
+  skuName               String?
+  skuType               String?
+  sellerSku             String?
+  skuImage              String?
+  
+  // Pricing information
+  currency              String
+  originalPrice         String
+  salePrice             String
+  sellerDiscount        String?
+  platformDiscount      String?
+  
+  // Status and metadata
+  displayStatus         String?
+  isGift                Boolean  @default(false)
+  
+  // Package and shipping
+  packageId             String?
+  packageStatus         String?
+  shippingProviderId    String?
+  shippingProviderName  String?
+  trackingNumber        String?
+  rtsTime               Int?
+  
+  // Order relation
+  orderId               String   @db.ObjectId
+  order                 TikTokOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  
+  @@map("tiktok_order_line_items")
+}
+
+model TikTokOrderPayment {
+  id                                    String   @id @default(auto()) @map("_id") @db.ObjectId
+  
+  // Payment amounts
+  currency                              String
+  originalTotalProductPrice             String?
+  originalShippingFee                   String?
+  subTotal                              String?
+  totalAmount                           String?
+  tax                                   String?
+  
+  // Discounts
+  sellerDiscount                        String?
+  platformDiscount                      String?
+  
+  // Shipping fees
+  shippingFee                           String?
+  shippingFeeCofundedDiscount          String?
+  shippingFeePlatformDiscount          String?
+  shippingFeeSellerDiscount            String?
+  
+  // Order relation
+  orderId                               String   @unique @db.ObjectId
+  order                                 TikTokOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  
+  createdAt                             DateTime @default(now())
+  updatedAt                             DateTime @updatedAt
+  
+  @@map("tiktok_order_payments")
+}
+
+model TikTokOrderRecipientAddress {
+  id                        String   @id @default(auto()) @map("_id") @db.ObjectId
+  
+  // Address details
+  addressDetail             String?
+  addressLine1              String?
+  addressLine2              String?
+  addressLine3              String?
+  addressLine4              String?
+  fullAddress               String?
+  postalCode                String?
+  regionCode                String?
+  
+  // Name information
+  firstName                 String?
+  firstNameLocalScript      String?
+  lastName                  String?
+  lastNameLocalScript       String?
+  name                      String?
+  
+  // Contact information
+  phoneNumber               String?
+  
+  // Order relation
+  orderId                   String   @unique @db.ObjectId
+  order                     TikTokOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  
+  // District information
+  districtInfo              TikTokAddressDistrict[]
+  
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+  
+  @@map("tiktok_order_recipient_addresses")
+}
+
+model TikTokAddressDistrict {
+  id                        String   @id @default(auto()) @map("_id") @db.ObjectId
+  
+  addressLevel              String   // "L0", "L1", "L2", "L3"
+  addressLevelName          String   // "Country", "province", "city", "ward"
+  addressName               String
+  
+  // Recipient address relation
+  recipientAddressId        String   @db.ObjectId
+  recipientAddress          TikTokOrderRecipientAddress @relation(fields: [recipientAddressId], references: [id], onDelete: Cascade)
+  
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+  
+  @@map("tiktok_address_districts")
+}
+
+model TikTokOrderPackage {
+  id                        String   @id @default(auto()) @map("_id") @db.ObjectId
+  packageId                 String   // "id" field from packages array
+  
+  // Order relation
+  orderId                   String   @db.ObjectId
+  order                     TikTokOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+  
+  @@unique([orderId, packageId])
+  @@map("tiktok_order_packages")
 }
