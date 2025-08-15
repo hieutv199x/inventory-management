@@ -90,7 +90,7 @@ export default function ConversationsPage() {
             const response = await httpClient.post('/tiktok/CustomerService/sync-conversations', {
                 shop_id: selectedShop,
                 sync: true,
-                page_size: 50,
+                page_size: 20,
             });
 
             alert(`Synced ${response.syncInfo?.totalConversationsSynced || 0} conversations successfully`);

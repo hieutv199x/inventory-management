@@ -10,6 +10,7 @@ import {Table, TableBody, TableCell, TableHeader, TableRow} from "@/components/u
 import Image from "next/image";
 import { useToast } from "@/context/ToastContext";
 import { httpClient } from "@/lib/http-client";
+import { Loader2, Search, RefreshCw, Eye, Package, Calendar, User, X, MapPin, CreditCard, Truck } from 'lucide-react';
 
 interface Product {
     id: string;
@@ -232,9 +233,10 @@ export const Product = () => {
         <div>
             <div className="flex flex-col gap-5 mb-6 sm:flex-row sm:justify-between">
                 <div className="w-full">
-                    <h3 className="text-lg font-semibold text-gray-800 dark:text-white/90">
-                        Product list
-                    </h3>
+                    <div className="mb-6">
+                        <h1 className="text-2xl font-bold text-gray-900 dark:text-white/90">Products Management</h1>
+                        <p className="text-gray-600 dark:text-gray-400">Manage and sync TikTok products</p>
+                    </div>
                 </div>
                 <div className="flex items-start w-full gap-3 sm:justify-end">
                     <div className="flex items-center gap-2">
@@ -258,6 +260,51 @@ export const Product = () => {
                     </div>
                 </div>
             </div>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+                <div className="bg-white p-6 rounded-lg shadow-sm border dark:border-gray-800 dark:bg-white/[0.03]">
+                    <div className="flex items-center">
+                        <Package className="h-8 w-8 text-blue-600" />
+                        <div className="ml-4">
+                            <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Products</p>
+                            <p className="text-2xl font-semibold text-gray-900 dark:text-white/90">{products.length}</p>
+                        </div>
+                    </div>
+                </div>
+                <div className="bg-white p-6 rounded-lg shadow-sm border dark:border-gray-800 dark:bg-white/[0.03]">
+                    <div className="flex items-center">
+                        <Calendar className="h-8 w-8 text-green-600" />
+                        <div className="ml-4">
+                            <p className="text-sm font-medium text-gray-600 dark:text-gray-400">ACTIVATE</p>
+                            <p className="text-2xl font-semibold text-gray-900 dark:text-white/90">
+                                {products.filter(p => p.status === 'ACTIVATE').length}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                <div className="bg-white p-6 rounded-lg shadow-sm border dark:border-gray-800 dark:bg-white/[0.03]">
+                    <div className="flex items-center">
+                        <RefreshCw className="h-8 w-8 text-yellow-600" />
+                        <div className="ml-4">
+                            <p className="text-sm font-medium text-gray-600 dark:text-gray-400">SELLER_DEACTIVATED</p>
+                            <p className="text-2xl font-semibold text-gray-900 dark:text-white/90">
+                                {products.filter(p => p.status === 'SELLER_DEACTIVATED').length}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                <div className="bg-white p-6 rounded-lg shadow-sm border dark:border-gray-800 dark:bg-white/[0.03]">
+                    <div className="flex items-center">
+                        <User className="h-8 w-8 text-red-600" />
+                        <div className="ml-4">
+                            <p className="text-sm font-medium text-gray-600 dark:text-gray-400">PLATFORM_DEACTIVATED</p>
+                            <p className="text-2xl font-semibold text-gray-900 dark:text-white/90">
+                                {products.filter(p => p.status === 'PLATFORM_DEACTIVATED').length}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
 
             <div className="rounded-2xl border border-gray-200 bg-white px-5 pb-5 pt-5 dark:border-gray-800 dark:bg-white/[0.03] sm:px-6 sm:pt-6">
                 <div className="flex items-start justify-between w-full gap-2 px-3 py-3 border-b border-gray-200 dark:border-gray-800 sm:gap-4 lg:justify-normal lg:border-b-0 lg:px-0 lg:pb-4">

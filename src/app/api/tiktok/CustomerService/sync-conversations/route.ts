@@ -11,7 +11,7 @@ export async function POST(req: NextRequest) {
         
         const {
             shop_id,
-            page_size = 50,
+            page_size = 20,
             sync = false
         } = await req.json();
 
@@ -84,10 +84,11 @@ async function fetchAllConversations(client: any, credentials: any, pageSize: nu
     try {
         // Get first page
         const result = await client.api.CustomerServiceV202309Api.ConversationsGet(
+            pageSize,
             credentials.accessToken,
             "application/json",
-            pageSize,
             nextPageToken,
+            "en",
             credentials.shopCipher
         );
 

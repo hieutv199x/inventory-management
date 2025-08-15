@@ -164,11 +164,11 @@ export default function OrdersPage() {
 
     const getStatusColor = (status: string) => {
         switch (status.toLowerCase()) {
-            case 'completed': return 'bg-green-100 text-green-800';
-            case 'cancelled': return 'bg-red-100 text-red-800';
-            case 'processing': return 'bg-yellow-100 text-yellow-800';
-            case 'shipped': return 'bg-blue-100 text-blue-800';
-            default: return 'bg-gray-100 text-gray-800';
+            case 'completed': return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-400';
+            case 'cancelled': return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-400';
+            case 'processing': return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-400';
+            case 'shipped': return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-400';
+            default: return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-400';
         }
     };
 
@@ -201,52 +201,69 @@ export default function OrdersPage() {
     );
 
     return (
-        <div className="p-6">
+        <div>
             {/* Header */}
-            <div className="mb-6">
-                <h1 className="text-2xl font-bold text-gray-900">Orders Management</h1>
-                <p className="text-gray-600">Manage and sync TikTok orders</p>
+            <div className="flex flex-col gap-5 mb-6 sm:flex-row sm:justify-between">
+                <div className="w-full">
+                    <div className="mb-6">
+                        <h1 className="text-2xl font-bold text-gray-900 dark:text-white/90">Orders Management</h1>
+                        <p className="text-gray-600 dark:text-gray-400">Manage and sync TikTok orders</p>
+                    </div>
+                </div>
+                <div className="flex items-start w-full gap-3 sm:justify-end">
+                    <div className="flex items-center gap-2">
+                        <button
+                        onClick={syncOrders}
+                        disabled={syncing}
+                        className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 disabled:opacity-50 flex items-center justify-center hover:shadow-lg transition duration-200"
+                    >
+                        {syncing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+                        Sync Orders
+                    </button>
+                    </div>
+                </div>
+                
             </div>
 
             {/* Stats Cards */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
-                <div className="bg-white p-6 rounded-lg shadow-sm border">
+                <div className="bg-white p-6 rounded-lg shadow-sm border dark:border-gray-800 dark:bg-white/[0.03]">
                     <div className="flex items-center">
                         <Package className="h-8 w-8 text-blue-600" />
                         <div className="ml-4">
-                            <p className="text-sm font-medium text-gray-600">Total Orders</p>
-                            <p className="text-2xl font-semibold text-gray-900">{pagination.total}</p>
+                            <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Orders</p>
+                            <p className="text-2xl font-semibold text-gray-900 dark:text-white/90">{pagination.total}</p>
                         </div>
                     </div>
                 </div>
-                <div className="bg-white p-6 rounded-lg shadow-sm border">
+                <div className="bg-white p-6 rounded-lg shadow-sm border dark:border-gray-800 dark:bg-white/[0.03]">
                     <div className="flex items-center">
                         <Calendar className="h-8 w-8 text-green-600" />
                         <div className="ml-4">
-                            <p className="text-sm font-medium text-gray-600">Completed</p>
-                            <p className="text-2xl font-semibold text-gray-900">
+                            <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Completed</p>
+                            <p className="text-2xl font-semibold text-gray-900 dark:text-white/90">
                                 {orders.filter(o => o.status.toLowerCase() === 'completed').length}
                             </p>
                         </div>
                     </div>
                 </div>
-                <div className="bg-white p-6 rounded-lg shadow-sm border">
+                <div className="bg-white p-6 rounded-lg shadow-sm border dark:border-gray-800 dark:bg-white/[0.03]">
                     <div className="flex items-center">
                         <RefreshCw className="h-8 w-8 text-yellow-600" />
                         <div className="ml-4">
-                            <p className="text-sm font-medium text-gray-600">Processing</p>
-                            <p className="text-2xl font-semibold text-gray-900">
+                            <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Processing</p>
+                            <p className="text-2xl font-semibold text-gray-900 dark:text-white/90">
                                 {orders.filter(o => o.status.toLowerCase() === 'processing').length}
                             </p>
                         </div>
                     </div>
                 </div>
-                <div className="bg-white p-6 rounded-lg shadow-sm border">
+                <div className="bg-white p-6 rounded-lg shadow-sm border dark:border-gray-800 dark:bg-white/[0.03]">
                     <div className="flex items-center">
                         <User className="h-8 w-8 text-red-600" />
                         <div className="ml-4">
-                            <p className="text-sm font-medium text-gray-600">Cancelled</p>
-                            <p className="text-2xl font-semibold text-gray-900">
+                            <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Cancelled</p>
+                            <p className="text-2xl font-semibold text-gray-900 dark:text-white/90">
                                 {orders.filter(o => o.status.toLowerCase() === 'cancelled').length}
                             </p>
                         </div>
@@ -255,25 +272,25 @@ export default function OrdersPage() {
             </div>
 
             {/* Filters */}
-            <div className="bg-white p-6 rounded-lg shadow-sm border mb-6">
+            <div className="bg-white p-6 rounded-lg shadow-sm border mb-6 dark:border-gray-800 dark:bg-white/[0.03]">
                 <div className="grid grid-cols-1 md:grid-cols-6 gap-4 mb-4">
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Search</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-2 dark:text-gray-400">Search</label>
                         <input
                             type="text"
                             placeholder="Search orders..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white"
                         />
                     </div>
                     
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Shop</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-2 dark:text-gray-400">Shop</label>
                         <select
                             value={selectedShop}
                             onChange={(e) => setSelectedShop(e.target.value)}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white"
                         >
                             <option value="">All Shops</option>
                             {shops.map((shop) => (
@@ -285,11 +302,11 @@ export default function OrdersPage() {
                     </div>
 
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-2 dark:text-gray-400">Status</label>
                         <select
                             value={selectedStatus}
                             onChange={(e) => setSelectedStatus(e.target.value)}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white"
                         >
                             <option value="">All Status</option>
                             <option value="COMPLETED">Completed</option>
@@ -300,52 +317,45 @@ export default function OrdersPage() {
                     </div>
 
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">From Date</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-2 dark:text-gray-400">From Date</label>
                         <input
                             type="datetime-local"
                             value={dateFrom}
                             onChange={(e) => setDateFrom(e.target.value)}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white"
                         />
                     </div>
 
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">To Date</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-2 dark:text-gray-400">To Date</label>
                         <input
                             type="datetime-local"
                             value={dateTo}
                             onChange={(e) => setDateTo(e.target.value)}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white"
                         />
                     </div>
 
-                    <div className="flex flex-col gap-2">
+                    <div className="flex items-end">
                         <div></div> {/* Spacer for alignment */}
                         <button
                             onClick={handleSearch}
                             disabled={loading}
-                            className="w-full bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center"
+                            className="w-full bg-blue-600 text-white px-3 py-3 rounded-md hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center hover:shadow-lg transition duration-200"
                         >
                             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
                             <span className="ml-2">Search</span>
                         </button>
-                        <button
-                        onClick={syncOrders}
-                        disabled={syncing || !selectedShop}
-                        className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 disabled:opacity-50 flex items-center justify-center"
-                    >
-                        {syncing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <RefreshCw className="h-4 w-4 mr-2" />}
-                        Sync Orders
-                    </button>
+                        
                     </div>
                 </div>
             </div>
 
             {/* Orders Table */}
-            <div className="bg-white rounded-lg shadow-sm border overflow-hidden">
+            <div className="bg-white rounded-lg shadow-sm border dark:border-gray-800 dark:bg-white/[0.03]">
                 <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-50">
+                        <thead className="bg-gray-50 dark:border-gray-800 dark:bg-white/[0.03]">
                             <tr>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Account/Seller</th>
@@ -355,12 +365,12 @@ export default function OrdersPage() {
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                             </tr>
                         </thead>
-                        <tbody className="bg-white divide-y divide-gray-200">
+                        <tbody className="bg-white divide-y divide-gray-200 dark:divide-gray-700 dark:border-gray-800 dark:bg-white/[0.03]">
                             {filteredOrders.map((order, index) => (
-                                <tr key={order.id} className="hover:bg-gray-50">
+                                <tr key={order.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
                                     {/* ID - Mã thứ tự của sản phẩm */}
                                     <td className="px-6 py-4 whitespace-nowrap">
-                                        <div className="text-sm font-medium text-gray-900">
+                                        <div className="text-sm font-medium text-gray-900 dark:text-gray-400">
                                             #{((pagination.page - 1) * pagination.pageSize) + index + 1}
                                         </div>
                                     </td>
@@ -368,10 +378,10 @@ export default function OrdersPage() {
                                     {/* Account/Seller - Thông tin tên shop, seller vận hành */}
                                     <td className="px-6 py-4 whitespace-nowrap">
                                         <div className="flex flex-col">
-                                            <div className="text-sm font-medium text-gray-900">
+                                            <div className="text-sm font-medium text-gray-900 dark:text-gray-400">
                                                 {order.shop.shopName || 'N/A'}
                                             </div>
-                                            <div className="text-xs text-gray-500">
+                                            <div className="text-xs text-gray-500 dark:text-gray-400">
                                                 Shop ID: {order.shop.shopId}
                                             </div>
                                         </div>
@@ -380,10 +390,10 @@ export default function OrdersPage() {
                                     {/* Order - Mã đơn hàng tiktok, thời gian đặt hàng, trạng thái đơn hàng */}
                                     <td className="px-6 py-4">
                                         <div className="flex flex-col space-y-1">
-                                            <div className="font-mono text-sm font-medium text-gray-900">
+                                            <div className="font-mono text-sm font-medium text-gray-900 dark:text-gray-400">
                                                 {order.orderId}
                                             </div>
-                                            <div className="text-xs text-gray-600">
+                                            <div className="text-xs text-gray-600 dark:text-gray-400">
                                                 {formatTimestamp(order.createTime)}
                                             </div>
                                             <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full w-fit ${getStatusColor(order.status)}`}>
@@ -395,16 +405,16 @@ export default function OrdersPage() {
                                     {/* Order Info - Thông tin nhận hàng và thanh toán của khách hàng */}
                                     <td className="px-6 py-4">
                                         <div className="flex flex-col space-y-1">
-                                            <div className="text-sm font-medium text-gray-900">
+                                            <div className="text-sm font-medium text-gray-900 dark:text-gray-400">
                                                 {order.recipientAddress?.name || 'N/A'}
                                             </div>
-                                            <div className="text-xs text-gray-500 truncate max-w-48">
+                                            <div className="text-xs text-gray-500 truncate max-w-48 dark:text-gray-400">
                                                 {order.recipientAddress?.phoneNumber || 'N/A'}
                                             </div>
-                                            <div className="text-xs text-gray-500 truncate max-w-48">
+                                            <div className="text-xs text-gray-500 truncate max-w-48 dark:text-gray-400">
                                                 {order.buyerEmail}
                                             </div>
-                                            <div className="text-xs text-blue-600">
+                                            <div className="text-xs text-blue-600 dark:text-blue-400">
                                                 {order.lineItemsCount || order.lineItems?.length || 0} item(s)
                                             </div>
                                         </div>
@@ -413,19 +423,19 @@ export default function OrdersPage() {
                                     {/* Price - Các chi phí của đơn hàng */}
                                     <td className="px-6 py-4 whitespace-nowrap">
                                         <div className="flex flex-col space-y-1">
-                                            <div className="text-sm font-medium text-gray-900">
+                                            <div className="text-sm font-medium text-gray-900 dark:text-gray-400">
                                                 {order.payment?.totalAmount ? 
                                                     `${parseInt(order.payment.totalAmount).toLocaleString()} ${order.payment.currency}` : 
                                                     'N/A'
                                                 }
                                             </div>
                                             {order.payment?.subTotal && (
-                                                <div className="text-xs text-gray-500">
+                                                <div className="text-xs text-gray-500 font-mono">
                                                     Subtotal: {parseInt(order.payment.subTotal).toLocaleString()} {order.payment.currency}
                                                 </div>
                                             )}
                                             {order.trackingNumber && (
-                                                <div className="text-xs font-mono text-blue-600">
+                                                <div className="text-xs font-mono text-blue-600 truncate max-w-48">
                                                     Track: {order.trackingNumber}
                                                 </div>
                                             )}
@@ -437,13 +447,13 @@ export default function OrdersPage() {
                                         <div className="flex flex-col space-y-2">
                                             <button 
                                                 onClick={() => openOrderModal(order)}
-                                                className="inline-flex items-center px-2 py-1 text-xs font-medium text-blue-600 hover:text-blue-900 border border-blue-300 rounded hover:bg-blue-50"
+                                                className="inline-flex items-center px-2 py-1 text-xs font-medium text-blue-600 hover:text-blue-900 border border-blue-300 rounded hover:bg-blue-50 dark:border-blue-800 dark:bg-blue-900 dark:text-blue-400 dark:hover:bg-blue-700"
                                             >
                                                 <Eye className="h-3 w-3 mr-1" />
                                                 View Details
                                             </button>
                                             <button 
-                                                className="inline-flex items-center px-2 py-1 text-xs font-medium text-green-600 hover:text-green-900 border border-green-300 rounded hover:bg-green-50"
+                                                className="inline-flex items-center px-2 py-1 text-xs font-medium text-green-600 hover:text-green-900 border border-green-300 rounded hover:bg-green-50 dark:border-green-800 dark:bg-green-900 dark:text-green-400 dark:hover:bg-green-700"
                                                 onClick={() => {
                                                     // TODO: Implement customer support chat
                                                     alert('Customer support chat feature will be implemented');
@@ -463,26 +473,26 @@ export default function OrdersPage() {
                 </div>
 
                 {/* Pagination */}
-                <div className="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6">
+                <div className="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6 dark:border-gray-800 dark:bg-white/[0.03]">
                     <div className="flex-1 flex justify-between sm:hidden">
                         <button
                             onClick={() => fetchOrders(pagination.page - 1)}
                             disabled={pagination.page <= 1}
-                            className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
+                            className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 dark:border-gray-800 dark:bg-white/[0.03] dark:text-gray-400 dark:hover:bg-gray-700"
                         >
                             Previous
                         </button>
                         <button
                             onClick={() => fetchOrders(pagination.page + 1)}
                             disabled={pagination.page >= pagination.totalPages}
-                            className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
+                            className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 dark:border-gray-800 dark:bg-white/[0.03] dark:text-gray-400 dark:hover:bg-gray-700"
                         >
                             Next
                         </button>
                     </div>
                     <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
                         <div>
-                            <p className="text-sm text-gray-700">
+                            <p className="text-sm text-gray-700 dark:text-gray-400">
                                 Showing <span className="font-medium">{((pagination.page - 1) * pagination.pageSize) + 1}</span> to{' '}
                                 <span className="font-medium">{Math.min(pagination.page * pagination.pageSize, pagination.total)}</span> of{' '}
                                 <span className="font-medium">{pagination.total}</span> results
@@ -493,14 +503,14 @@ export default function OrdersPage() {
                                 <button
                                     onClick={() => fetchOrders(pagination.page - 1)}
                                     disabled={pagination.page <= 1}
-                                    className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
+                                    className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-800 dark:bg-white/[0.03] dark:text-gray-400 dark:hover:bg-gray-700"
                                 >
                                     Previous
                                 </button>
                                 <button
                                     onClick={() => fetchOrders(pagination.page + 1)}
                                     disabled={pagination.page >= pagination.totalPages}
-                                    className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
+                                    className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-800 dark:bg-white/[0.03] dark:text-gray-400 dark:hover:bg-gray-700"
                                 >
                                     Next
                                 </button>
