@@ -125,6 +125,9 @@ model ShopAuthorization {
   // Opposite relation for TikTokOrder
   tiktokOrders TikTokOrder[]
 
+  // Customer service relations
+  conversations     TikTokConversation[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -597,4 +600,77 @@ model TikTokOrderPackage {
   
   @@unique([orderId, packageId])
   @@map("tiktok_order_packages")
+}
+
+model TikTokConversation {
+  id                String   @id @default(auto()) @map("_id") @db.ObjectId
+  conversationId    String   @unique // "id" field from API
+  participantCount  Int
+  canSendMessage    Boolean
+  unreadCount       Int
+  createTime        Int
+  
+  // Shop relation
+  shopId            String
+  shop              ShopAuthorization @relation(fields: [shopId], references: [shopId])
+  
+  // Related data
+  participants      TikTokConversationParticipant[]
+  messages          TikTokConversationMessage[]
+  latestMessage     TikTokConversationMessage? @relation("LatestMessage")
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  @@map("tiktok_conversations")
+}
+
+model TikTokConversationParticipant {
+  id                String   @id @default(auto()) @map("_id") @db.ObjectId
+  imUserId          String   // "im_user_id" from API
+  userId            String?  // "user_id" from API
+  role              String   // "BUYER", "SELLER", etc.
+  nickname          String
+  avatar            String?
+  buyerPlatform     String?  // "TIKTOK_SHOP", etc.
+  
+  // Conversation relation
+  conversationId    String   @db.ObjectId
+  conversation      TikTokConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  
+  // Messages sent by this participant
+  sentMessages      TikTokConversationMessage[] @relation("MessageSender")
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  @@unique([conversationId, imUserId])
+  @@map("tiktok_conversation_participants")
+}
+
+model TikTokConversationMessage {
+  id                String   @id @default(auto()) @map("_id") @db.ObjectId
+  messageId         String   @unique // "id" field from API
+  type              String   // "TEXT", "IMAGE", "ORDER", etc.
+  content           String   // JSON string containing message content
+  createTime        Int
+  isVisible         Boolean
+  messageIndex      String?  // "index" field from API
+  
+  // Conversation relation
+  conversationId    String   @db.ObjectId
+  conversation      TikTokConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  
+  // Sender relation
+  senderId          String?  @db.ObjectId
+  sender            TikTokConversationParticipant? @relation("MessageSender", fields: [senderId], references: [id])
+  
+  // Latest message relation (one-to-one)
+  isLatestFor       TikTokConversation? @relation("LatestMessage", fields: [isLatestForId], references: [id])
+  isLatestForId     String? @unique @db.ObjectId
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  @@map("tiktok_conversation_messages")
 }
