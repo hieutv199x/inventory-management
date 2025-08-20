@@ -5,6 +5,7 @@ import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useSidebar } from "../context/SidebarContext";
 import { useAuth } from "../context/authContext";
+import { useLanguage } from '@/context/LanguageContext';
 import {
   BoxCubeIcon,
   ChevronDownIcon,
@@ -16,6 +17,7 @@ import {
 import { FaMoneyCheckAlt, FaUsersCog } from "react-icons/fa";
 import { AiOutlineShopping } from "react-icons/ai";
 import { MessageCircle } from "lucide-react";
+import { LanguageSwitcher } from '@/components/ui/LanguageSwitcher';
 
 type NavItem = {
   name: string;
@@ -29,13 +31,13 @@ type NavItem = {
 const productItems: NavItem[] = [
   {
     icon: <BoxCubeIcon />,
-    name: "Sản phẩm",
+    name: "nav.products",
     path: "/products",
     roles: ["ADMIN", "MANAGER", "SELLER"]
   },
   {
     icon: <AiOutlineShopping size={24}/>,
-    name: "Đơn hàng",
+    name: "nav.orders",
     path: "/orders",
     roles: ["ADMIN", "MANAGER", "SELLER"]
   },
@@ -45,19 +47,19 @@ const productItems: NavItem[] = [
 const financeItems: NavItem[] = [
   {
     icon: <BankIcon />, 
-    name: "Quản lý bank", 
+    name: "nav.bank", 
     path: "/bank",
     roles: ["ADMIN", "ACCOUNTANT"]
   },
   { 
     icon: <FaMoneyCheckAlt size={24}/>, 
-    name: "Tiền về", 
+    name: "nav.revenue", 
     path: "/statement",
     roles: ["ADMIN", "MANAGER", "ACCOUNTANT", "SELLER"]
   },
   {
     icon: <PlugInIcon />,
-    name: "Kết nối Shop",
+    name: "nav.connect_shop",
     path: "/shops",
     roles: ["ADMIN", "MANAGER", "SELLER"]
   }
@@ -67,25 +69,26 @@ const financeItems: NavItem[] = [
 const accountItems: NavItem[] = [
   {
     icon: <MessageCircle />,
-    name: "Chat",
+    name: "nav.chat",
     path: "/chat",
     roles: ["ADMIN", "MANAGER", "SELLER"]
   },
   {
     icon: <GroupIcon />,
-    name: "Quản lý user",
+    name: "nav.user_management",
     path: "/user-roles",
     roles: ["ADMIN", "MANAGER"]
   },
   {
     icon: <FaUsersCog size={24}/>,
-    name: "Phân quyền shop",
+    name: "nav.shop_permissions",
     path: "/permissions",
     roles: ["ADMIN", "MANAGER"]
   }
 ];
 
 const AppSidebar: React.FC = () => {
+  const { t } = useLanguage();
   const { isExpanded, isMobileOpen, isHovered, setIsHovered } = useSidebar();
   const { user } = useAuth();
   const pathname = usePathname();
@@ -164,7 +167,7 @@ const AppSidebar: React.FC = () => {
                   {nav.icon}
                 </span>
                 {(isExpanded || isHovered || isMobileOpen) && (
-                  <span className={`menu-item-text`}>{nav.name}</span>
+                  <span className={`menu-item-text`}>{t(nav.name)}</span>
                 )}
                 {(isExpanded || isHovered || isMobileOpen) && (
                   <ChevronDownIcon
@@ -195,7 +198,7 @@ const AppSidebar: React.FC = () => {
                     {nav.icon}
                   </span>
                   {(isExpanded || isHovered || isMobileOpen) && (
-                    <span className={`menu-item-text`}>{nav.name}</span>
+                    <span className={`menu-item-text`}>{t(nav.name)}</span>
                   )}
                 </Link>
               )
@@ -391,11 +394,15 @@ const AppSidebar: React.FC = () => {
       <div className="flex flex-col overflow-y-auto duration-300 ease-linear no-scrollbar">
         <nav className="mb-6">
           <div className="flex flex-col gap-4">
-            {renderMenuSection("Sản phẩm", productItems, "product")}
-            {renderMenuSection("Tài chính", financeItems, "finance")}
-            {renderMenuSection("Tài khoản", accountItems, "account")}
+            {renderMenuSection(t("nav.products"), productItems, "product")}
+            {renderMenuSection("Finance", financeItems, "finance")}
+            {renderMenuSection("Management", accountItems, "account")}
           </div>
         </nav>
+      </div>
+      {/* Language Switcher */}
+      <div className="mt-auto pb-6">
+        <LanguageSwitcher />
       </div>
     </aside>
   );

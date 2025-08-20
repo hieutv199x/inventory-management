@@ -6,6 +6,7 @@ import { useSidebar } from "@/context/SidebarContext";
 import Image from "next/image";
 import Link from "next/link";
 import React, { useState, useEffect, useRef } from "react";
+import { LanguageSwitcher } from "@/components/ui/LanguageSwitcher";
 
 const AppHeader: React.FC = () => {
   const [isApplicationMenuOpen, setApplicationMenuOpen] = useState(false);
@@ -165,11 +166,11 @@ const AppHeader: React.FC = () => {
             <ThemeToggleButton />
             {/* <!-- Dark Mode Toggler --> */}
 
-           <NotificationDropdown /> 
-            {/* <!-- Notification Menu Area --> */}          </div>
+            <NotificationDropdown />
+            {/* <!-- Notification Menu Area --> */}
+          </div>
           {/* <!-- User Area --> */}
-          <UserDropdown /> 
-    
+          <UserDropdown />
         </div>
       </div>
     </header>

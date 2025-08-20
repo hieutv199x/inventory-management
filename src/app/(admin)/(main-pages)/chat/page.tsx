@@ -16,6 +16,8 @@ import {
 } from 'lucide-react';
 import { httpClient } from '@/lib/http-client';
 import { format } from 'date-fns';
+import { LanguageSwitcher } from '@/components/ui/LanguageSwitcher';
+import { useLanguage } from '@/context/LanguageContext';
 
 interface ShopGroup {
     shopId: string;
@@ -54,6 +56,7 @@ interface Message {
 }
 
 export default function ChatPage() {
+    const { t } = useLanguage();
     const [shopGroups, setShopGroups] = useState<ShopGroup[]>([]);
     const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
     const [messages, setMessages] = useState<Message[]>([]);
@@ -149,23 +152,25 @@ export default function ChatPage() {
             <div className="bg-white border-b px-6 py-4 flex-shrink-0">
                 <div className="flex items-center justify-between">
                     <div>
-                        <h1 className="text-2xl font-bold text-gray-900">Customer Chat</h1>
+                        <h1 className="text-2xl font-bold text-gray-900">{t('chat.title')}</h1>
                         <p className="text-gray-600">
                             {shopGroups.length} shops • {totalUnreadCount} unread messages
                         </p>
                     </div>
-                    <button
-                        onClick={fetchConversations}
-                        disabled={loading}
-                        className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
-                    >
-                        {loading ? (
-                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                        ) : (
-                            <RefreshCw className="h-4 w-4 mr-2" />
-                        )}
-                        Refresh
-                    </button>
+                    <div className="flex items-center space-x-3">
+                        <button
+                            onClick={fetchConversations}
+                            disabled={loading}
+                            className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+                        >
+                            {loading ? (
+                                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                            ) : (
+                                <RefreshCw className="h-4 w-4 mr-2" />
+                            )}
+                            Refresh
+                        </button>
+                    </div>
                 </div>
             </div>
 

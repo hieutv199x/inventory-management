@@ -6,6 +6,7 @@ import { SidebarProvider } from '@/context/SidebarContext';
 import { ThemeProvider } from '@/context/ThemeContext';
 import { AuthProvider } from "../context/authContext";
 import { ToastProvider } from "@/context/ToastContext";
+import { LanguageProvider } from '@/context/LanguageContext';
 
 // Configure Inter font with Vietnamese subset
 const inter = Inter({ 
@@ -42,11 +43,13 @@ export default function RootLayout({
     <html lang="vi" className={`${inter.variable} ${roboto.variable}`}>
       <body className={`${inter.className} antialiased`}>
       <AuthProvider>
-        <ThemeProvider>
-          <ToastProvider>
-            <SidebarProvider>{children}</SidebarProvider>
-          </ToastProvider>
-        </ThemeProvider>
+        <LanguageProvider>
+          <ThemeProvider>
+            <ToastProvider>
+              <SidebarProvider>{children}</SidebarProvider>
+            </ToastProvider>
+          </ThemeProvider>
+        </LanguageProvider>
       </AuthProvider>
       </body>
     </html>
