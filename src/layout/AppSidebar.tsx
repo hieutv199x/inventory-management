@@ -15,6 +15,7 @@ import {
 } from "../icons/index";
 import { FaMoneyCheckAlt, FaUsersCog } from "react-icons/fa";
 import { AiOutlineShopping } from "react-icons/ai";
+import { MessageCircle } from "lucide-react";
 
 type NavItem = {
   name: string;
@@ -64,6 +65,12 @@ const financeItems: NavItem[] = [
 
 // Tài khoản (Accounts) Group - Only for ADMIN and MANAGER
 const accountItems: NavItem[] = [
+  {
+    icon: <MessageCircle />,
+    name: "Chat",
+    path: "/chat",
+    roles: ["ADMIN", "MANAGER", "SELLER"]
+  },
   {
     icon: <GroupIcon />,
     name: "Quản lý user",
