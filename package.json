@@ -11,7 +11,15 @@
     "prisma:generate": "prisma generate",
     "prisma:push": "prisma db push",
     "prisma:seed": "tsx prisma/seed.ts",
-    "fix-users": "tsx prisma/fix-users-v2.ts"
+    "fix-users": "tsx prisma/fix-users-v2.ts",
+    "validate-schema": "npx tsx src/scripts/validate-schema.ts",
+    "db:validate": "npm run validate-schema",
+    "migrate-data": "npx tsx src/scripts/migrate-existing-data.ts",
+    "db:migrate": "npm run migrate-data",
+    "verify-migration": "npx tsx src/scripts/verify-specific-migration.ts",
+    "debug-migration": "npx tsx src/scripts/debug-migration.ts",
+    "simple-migrate": "npx tsx src/scripts/simple-migration.ts",
+    "cleanup": "npx tsx src/scripts/cleanup-conflicts.ts"
   },
   "dependencies": {
     "@fullcalendar/core": "^6.1.15",
@@ -50,6 +58,7 @@
     "react-dropzone": "^14.3.5",
     "react-icons": "^5.5.0",
     "request": "^2.88.2",
+    "superagent": "^10.2.3",
     "swiper": "^11.2.0",
     "tailwind-merge": "^2.6.0",
     "xlsx": "^0.18.5",

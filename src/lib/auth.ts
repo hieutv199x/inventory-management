@@ -26,6 +26,7 @@ export const getUserWithShopAccess = async (request: NextRequest, prisma: Prisma
                 include: {
                     shop: {
                         select: {
+                            id: true,
                             shopId: true,
                         }
                     }
@@ -38,7 +39,10 @@ export const getUserWithShopAccess = async (request: NextRequest, prisma: Prisma
         throw new Error('User not found');
     }
 
-    const accessibleShopIds = currentUser.userShopRoles.map(role => role.shop?.shopId).filter(Boolean) as string[];
+    // Get accessible shop IDs (now using the unified shopId field)
+    const accessibleShopIds = currentUser.userShopRoles
+        .map(role => role.shop?.shopId)
+        .filter(Boolean) as string[];
 
     return {
         user: currentUser,

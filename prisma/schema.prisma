@@ -15,6 +15,20 @@ enum Role {
   SELLER
 }
 
+enum Channel {
+  TIKTOK
+  AMAZON
+  SHOPIFY
+  ALIBABA_1688
+}
+
+enum AuthorizationStatus {
+  ACTIVE    // Đang hoạt động
+  EXPIRED   // Đã hết hạn (cần refresh)
+  REVOKED   // Đã bị thu hồi
+  INACTIVE  // Không hoạt động
+}
+
 model UserShopRole {
   id        String   @id @default(cuid()) @map("_id") @db.String
   userId    String   @db.ObjectId
@@ -75,88 +89,120 @@ model VerificationToken {
   expires    DateTime
 }
 
-model TikTokApp {
+model ChannelApp {
   id        String   @id @default(auto()) @map("_id") @db.ObjectId
-  appName   String   // Tên gợi nhớ cho ứng dụng, ví dụ: "App Bán Hàng Chính"
+  appName   String   // Descriptive name for the app
+  channel   Channel  // Which channel this app belongs to
   appId     String
-  appKey    String   @unique // App Key từ TikTok, phải là duy nhất
-  appSecret String   // App Secret từ TikTok
+  appKey    String   @unique // Unique key for the app
+  appSecret String   // App secret
+  
+  // Channel-specific configuration (JSON string)
+  config    String?  // Store channel-specific settings as JSON
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   isActive  Boolean  @default(true)
 
-  // Một ứng dụng có thể có nhiều sự ủy quyền từ các shop khác nhau.
+  // Relations to unified authorization
   authorizations ShopAuthorization[]
+  
+  @@map("channel_apps")
 }
 
+// Remove TikTokApp - migrate to ChannelApp
+
+// Rename and expand ShopAuthorization to support all channels
 model ShopAuthorization {
   id         String  @id @default(auto()) @map("_id") @db.ObjectId
+  
+  // Universal shop identification
+  shopId     String  @unique // Universal shop ID (TikTok shop ID, Amazon seller ID, etc.)
+  shopName   String? // Name of the shop/store
+  
+  // Legacy fields (for migration compatibility)
+  shopCipher String? // TikTok shopCipher (will be moved to channelData)
+  region     String? // TikTok region (will be moved to channelData)
+  
+  // Channel-specific identifiers (JSON object) - make optional for migration
+  channelData String? // Store channel-specific data as JSON
+  // Examples:
+  // TikTok: {"shopCipher": "xxx", "region": "VN"}
+  // Amazon: {"marketplaceId": "xxx", "sellerId": "xxx", "region": "US"}
+  // Shopify: {"shopDomain": "mystore.myshopify.com"}
+  // Alibaba: {"memberId": "xxx"}
 
-  // --- Thông tin định danh của Shop từ TikTok ---
-  shopId     String  @unique // ID của shop (ví dụ: "751..."), phải là duy nhất
-  shopCipher String  @unique // Cipher của shop, dùng cho một số API
-  shopName   String? // Tên của shop
-  region     String? // Khu vực của shop (ví dụ: "VN")
+  // Authorization tokens and credentials
+  accessToken  String   // Primary access token
+  refreshToken String?  // Refresh token (if applicable)
+  expiresIn    Int?     // Token expiration time in seconds
+  scope        String?  // Granted permissions/scopes
+  
+  // Additional credentials for channels that need them (JSON)
+  credentials  String?  // Store additional credentials as JSON
+  // Examples:
+  // Amazon: {"secretKey": "xxx", "mwsAuthToken": "xxx"}
+  // Others can store additional auth data here
 
-  // --- Dữ liệu ủy quyền (TOKEN NẰM Ở ĐÂY) ---
-  accessToken  String   // Access Token của riêng shop này
-  refreshToken String   // Refresh Token của riêng shop này
-  expiresIn    Int      // Thời gian sống của access token (tính bằng giây)
-  scope        String?  // Các quyền được cấp, ví dụ: "orders,products"
+  status    AuthorizationStatus @default(ACTIVE)
 
-  // --- Trạng thái và Mối quan hệ ---
-  status    AuthorizationStatus @default(ACTIVE) // Trạng thái của token (sử dụng Enum để an toàn hơn)
-
-  // Liên kết tới ứng dụng đã ủy quyền cho shop này
-  appId String    @db.ObjectId
-  app   TikTokApp @relation(fields: [appId], references: [id], onDelete: Cascade)
+  // Relations - make appId optional for migration
+  appId String?   @db.ObjectId
+  app   ChannelApp? @relation(fields: [appId], references: [id], onDelete: Cascade)
   
   // Bank relations
   bankAccounts BankAccount[]
   
-  payments     TikTokPayment[]
-  statements   TikTokStatement[]
-  withdrawal   TikTokWithdrawal[]
+  // Universal relations (will work for all channels)
+  payments     Payment[]
+  statements   Statement[]
+  withdrawals  Withdrawal[]
+  orders       Order[]
+  products     Product[]
+  conversations Conversation[]
 
-  // Opposite relation for UserShopRole
   userShopRoles UserShopRole[]
-
-  // Opposite relation for TikTokOrder
-  tiktokOrders TikTokOrder[]
-
-  // Customer service relations
-  conversations     TikTokConversation[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  
+  @@map("shop_authorizations")
 }
 
-// Enum giúp đảm bảo tính toàn vẹn dữ liệu cho trường status
-enum AuthorizationStatus {
-  ACTIVE    // Đang hoạt động
-  EXPIRED   // Đã hết hạn (cần refresh)
-  REVOKED   // Đã bị thu hồi
-  INACTIVE  // Không hoạt động
-}
-
+// Update Product model to be channel-agnostic
 model Product {
   id                         String  @id @default(auto()) @map("_id") @db.ObjectId
-  productId                  String  @unique
-  shopId                     String
+  productId                  String  @unique // Universal product ID
+  
+  // Channel and shop information - make optional for migration
+  channel                    Channel? // Which channel this product belongs to
+  shopId                     String  @db.ObjectId
+  shop                       ShopAuthorization @relation(fields: [shopId], references: [id])
+  
+  // Universal product fields
   title                      String
   description                String
   status                     String
-  isNotForSale               Boolean
-  isCodAllowed               Boolean
-  isPreOwned                 Boolean
-  createTime                 Int
-  updateTime                 Int
-  shippingInsuranceRequirement String
+  
+  // Channel-specific data (JSON object)
+  channelData                String? // Store channel-specific fields as JSON
+  // Examples:
+  // TikTok: {"isNotForSale": true, "isCodAllowed": false, "isPreOwned": false, "shippingInsuranceRequirement": "xxx"}
+  // Amazon: {"asin": "B07XXX", "parentAsin": "B07YYY", "category": "Electronics"}
+  // Shopify: {"vendor": "Nike", "productType": "Shoes", "tags": ["summer", "sale"]}
+  // Alibaba: {"category": "Machinery", "moq": 100}
+  
+  // Pricing information (can vary by channel)
+  price                      String?
+  currency                   String?
+  
+  // Timing
+  createTime                 Int?
+  updateTime                 Int?
 
+  // Existing relations (keep for TikTok compatibility)
   brandId                    String? @map("brand_id") @db.ObjectId
   auditId                    String?  @unique @map("audit_id") @db.ObjectId
-
   brand                      Brand?  @relation(fields: [brandId], references: [id])
   audit                      Audit?  @relation(fields: [auditId], references: [id])
 
@@ -299,7 +345,7 @@ model BankAccount {
   
   shopId        String? @db.ObjectId
   shop          ShopAuthorization? @relation(fields: [shopId], references: [id])
-  
+
   historyActions BankHistory[]
 
   @@map("bank_accounts")
@@ -327,250 +373,231 @@ enum BankStatus {
 }
 
 
-model TikTokPayment {
+model Payment {
   id                             String   @id @default(auto()) @map("_id") @db.ObjectId
 
-  paymentId                      String   @unique
-  createTime                     Int
+  paymentId                      String   @unique // Universal payment ID
+  channel                        Channel? // Which channel this payment belongs to - make optional for migration
+  
+  // Universal payment fields
+  createTime                     Int?
   status                         String
-
+  
+  // Amounts (universal structure)
   amountValue                    String?
   amountCurrency                 String?
-
   settlementAmountValue          String?
   settlementAmountCurrency       String?
+  
+  // Channel-specific payment data (JSON)
+  channelData                    String?  // Store channel-specific fields as JSON
+  // Examples:
+  // TikTok: {"reserveAmountValue": "xx", "paymentBeforeExchangeValue": "xx", "exchangeRate": "xx"}
+  // Amazon: {"feeAmount": "xx", "taxAmount": "xx"}
+  // Shopify: {"processingFee": "xx", "gateway": "stripe"}
 
-  reserveAmountValue             String?
-  reserveAmountCurrency          String?
-
-  paymentBeforeExchangeValue     String?
-  paymentBeforeExchangeCurrency  String?
-
-  exchangeRate                   String?
   paidTime                       Int?
   bankAccount                    String?
 
-  // Liên kết shop
-  shopId                         String
-  shop                           ShopAuthorization @relation(fields: [shopId], references: [shopId])
+  // Shop relation (universal) - Fix: use ObjectId reference
+  shopId                         String   @db.ObjectId
+  shop                           ShopAuthorization @relation(fields: [shopId], references: [id])
 
   createdAt                      DateTime @default(now())
   updatedAt                      DateTime @updatedAt
+  
+  @@map("payments")
 }
 
-model TikTokStatement {
+// Rename and unify Statement model
+model Statement {
   id                    String   @id @default(auto()) @map("_id") @db.ObjectId
 
   statementId           String   @unique 
-  statementTime         Int
+  channel               Channel? // Which channel this statement belongs to - make optional for migration
+  statementTime         Int?
 
+  // Universal statement fields
   settlementAmount      String?
   currency              String?
-  revenueAmount         String?
-  feeAmount             String?
-  adjustmentAmount      String?
+  
+  // Channel-specific statement data (JSON)
+  channelData           String?  // Store channel-specific fields as JSON
+  // Examples:
+  // TikTok: {"revenueAmount": "xx", "feeAmount": "xx", "adjustmentAmount": "xx", "netSalesAmount": "xx"}
+  // Amazon: {"productSales": "xx", "shippingCredits": "xx", "refunds": "xx"}
+  
   paymentStatus         String?
   paymentId             String?
-  netSalesAmount        String?
-  shippingCostAmount    String?
 
-  // Liên kết shop
-  shopId                String
-  shop                  ShopAuthorization @relation(fields: [shopId], references: [shopId])
+  // Shop relation (universal) - Fix: use ObjectId reference
+  shopId                String   @db.ObjectId
+  shop                  ShopAuthorization @relation(fields: [shopId], references: [id])
 
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
+  
+  @@map("statements")
 }
 
-model TikTokWithdrawal {
+// Rename and unify Withdrawal model
+model Withdrawal {
   id            String   @id @default(auto()) @map("_id") @db.ObjectId
   withdrawalId  String   @unique
+  channel       Channel? // Which channel this withdrawal belongs to - make optional for migration
+  
   amount        Float
   status        String
   currency      String
-  type          String
-  createTime    Int
-  createdAt     DateTime
-  updatedAt     DateTime
-  shopId        String
-  shop          ShopAuthorization @relation(fields: [shopId], references: [shopId])
-
+  type          String?
+  createTime    Int?
+  
+  // Channel-specific withdrawal data (JSON)
+  channelData   String?  // Store channel-specific fields as JSON
+  
+  // Shop relation - Fix: use ObjectId reference
+  shopId        String   @db.ObjectId
+  shop          ShopAuthorization @relation(fields: [shopId], references: [id])
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@map("withdrawals")
 }
 
-model TikTokOrder {
+// Rename and unify Order model
+model Order {
   id                               String   @id @default(auto()) @map("_id") @db.ObjectId
-  orderId                          String   @unique // "id" field from API
+  orderId                          String   @unique // Universal order ID
+  channel                          Channel? // Which channel this order belongs to - make optional for migration
   
-  // Basic order information
-  buyerEmail                       String
+  // Universal order information
+  buyerEmail                       String?
   buyerMessage                     String?
-  cancelOrderSlaTime               Int?
-  collectionTime                   Int?
-  commercePlatform                 String?
-  createTime                       Int
+  createTime                       Int?
   updateTime                       Int?
+  status                           String
   
-  // Delivery information
-  deliveryOptionId                 String?
-  deliveryOptionName               String?
-  deliveryTime                     Int?
-  deliveryType                     String?
-  fulfillmentType                  String?
+  // Universal order amounts
+  totalAmount                      String?
+  currency                         String?
   
-  // Order flags
-  hasUpdatedRecipientAddress       Boolean  @default(false)
-  isCod                           Boolean  @default(false)
-  isOnHoldOrder                   Boolean  @default(false)
-  isReplacementOrder              Boolean  @default(false)
-  isSampleOrder                   Boolean  @default(false)
+  // Channel-specific order data (JSON)
+  channelData                      String?  // Store channel-specific fields as JSON
+  // Examples:
+  // TikTok: {"cancelOrderSlaTime": 123, "isCod": true, "fulfillmentType": "xxx", "trackingNumber": "xxx"}
+  // Amazon: {"fulfillmentChannel": "AMAZON", "shipServiceLevel": "Standard"}
+  // Shopify: {"financialStatus": "paid", "fulfillmentStatus": "fulfilled"}
   
-  // Order metadata
-  orderType                       String?
+  // Timing fields (universal)
   paidTime                        Int?
-  paymentMethodName               String?
-  status                          String
+  deliveryTime                    Int?
   
-  // Shipping information
-  shippingProvider                String?
-  shippingProviderId              String?
-  shippingType                    String?
-  trackingNumber                  String?
+  // Shop relation (universal) - Fix: use ObjectId reference
+  shopId                          String   @db.ObjectId
+  shop                            ShopAuthorization @relation(fields: [shopId], references: [id])
   
-  // SLA times
-  rtsSlaTime                      Int?
-  rtsTime                         Int?
-  ttsSlaTime                      Int?
-  
-  // User and warehouse
-  userId                          String?
-  warehouseId                     String?
-  
-  // Shop relation
-  shopId                          String
-  shop                            ShopAuthorization @relation(fields: [shopId], references: [shopId])
-  
-  // Related data
-  lineItems                       TikTokOrderLineItem[]
-  packages                        TikTokOrderPackage[]
-  payment                         TikTokOrderPayment?
-  recipientAddress                TikTokOrderRecipientAddress?
+  // Related data (keep existing structure for TikTok compatibility)
+  lineItems                       OrderLineItem[]
+  packages                        OrderPackage[]
+  payment                         OrderPayment?
+  recipientAddress                OrderRecipientAddress?
   
   createdAt                       DateTime @default(now())
   updatedAt                       DateTime @updatedAt
   
-  @@map("tiktok_orders")
+  @@map("orders")
 }
 
-model TikTokOrderLineItem {
+// Rename TikTokOrderLineItem to OrderLineItem (universal)
+model OrderLineItem {
   id                    String   @id @default(auto()) @map("_id") @db.ObjectId
-  lineItemId            String   @unique // "id" field from API
+  lineItemId            String   @unique // Universal line item ID
   
-  // Product information
+  // Universal product information
   productId             String
   productName           String
-  skuId                 String
+  skuId                 String?
   skuName               String?
-  skuType               String?
   sellerSku             String?
-  skuImage              String?
   
-  // Pricing information
-  currency              String
-  originalPrice         String
-  salePrice             String
-  sellerDiscount        String?
-  platformDiscount      String?
+  // Universal pricing information
+  currency              String?
+  originalPrice         String?
+  salePrice             String?
   
-  // Status and metadata
-  displayStatus         String?
-  isGift                Boolean  @default(false)
-  
-  // Package and shipping
-  packageId             String?
-  packageStatus         String?
-  shippingProviderId    String?
-  shippingProviderName  String?
-  trackingNumber        String?
-  rtsTime               Int?
+  // Channel-specific line item data (JSON)
+  channelData           String?  // Store channel-specific fields as JSON
+  // Examples:
+  // TikTok: {"skuType": "xxx", "skuImage": "xxx", "displayStatus": "xxx", "isGift": false}
+  // Amazon: {"conditionNote": "xxx", "giftMessage": "xxx"}
+  // Shopify: {"variant_id": "xxx", "requires_shipping": true}
   
   // Order relation
   orderId               String   @db.ObjectId
-  order                 TikTokOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order                 Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
   
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
   
-  @@map("tiktok_order_line_items")
+  @@map("order_line_items")
 }
 
-model TikTokOrderPayment {
+// Rename and keep other order-related models with channel support
+model OrderPayment {
   id                                    String   @id @default(auto()) @map("_id") @db.ObjectId
   
-  // Payment amounts
-  currency                              String
-  originalTotalProductPrice             String?
-  originalShippingFee                   String?
-  subTotal                              String?
+  // Universal payment amounts
+  currency                              String?
   totalAmount                           String?
+  subTotal                              String?
   tax                                   String?
   
-  // Discounts
-  sellerDiscount                        String?
-  platformDiscount                      String?
-  
-  // Shipping fees
-  shippingFee                           String?
-  shippingFeeCofundedDiscount          String?
-  shippingFeePlatformDiscount          String?
-  shippingFeeSellerDiscount            String?
+  // Channel-specific payment data (JSON)
+  channelData                           String?  // Store channel-specific fields as JSON
   
   // Order relation
   orderId                               String   @unique @db.ObjectId
-  order                                 TikTokOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order                                 Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
   
   createdAt                             DateTime @default(now())
   updatedAt                             DateTime @updatedAt
   
-  @@map("tiktok_order_payments")
+  @@map("order_payments")
 }
 
-model TikTokOrderRecipientAddress {
+model OrderRecipientAddress {
   id                        String   @id @default(auto()) @map("_id") @db.ObjectId
   
-  // Address details
-  addressDetail             String?
-  addressLine1              String?
-  addressLine2              String?
-  addressLine3              String?
-  addressLine4              String?
+  // Universal address fields
   fullAddress               String?
   postalCode                String?
-  regionCode                String?
   
-  // Name information
-  firstName                 String?
-  firstNameLocalScript      String?
-  lastName                  String?
-  lastNameLocalScript       String?
+  // Universal name information
   name                      String?
-  
-  // Contact information
   phoneNumber               String?
+  
+  // Channel-specific address data (JSON)
+  channelData               String?  // Store channel-specific fields as JSON
+  // Examples:
+  // TikTok: {"addressDetail": "xxx", "regionCode": "xxx", "firstName": "xxx"}
+  // Amazon: {"addressLine1": "xxx", "city": "xxx", "state": "xxx"}
+  // Shopify: {"company": "xxx", "province": "xxx", "country": "xxx"}
   
   // Order relation
   orderId                   String   @unique @db.ObjectId
-  order                     TikTokOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order                     Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
   
-  // District information
-  districtInfo              TikTokAddressDistrict[]
+  // District information (keep for TikTok compatibility)
+  districtInfo              AddressDistrict[]
   
   createdAt                 DateTime @default(now())
   updatedAt                 DateTime @updatedAt
   
-  @@map("tiktok_order_recipient_addresses")
+  @@map("order_recipient_addresses")
 }
 
-model TikTokAddressDistrict {
+model AddressDistrict {
   id                        String   @id @default(auto()) @map("_id") @db.ObjectId
   
   addressLevel              String   // "L0", "L1", "L2", "L3"
@@ -579,98 +606,131 @@ model TikTokAddressDistrict {
   
   // Recipient address relation
   recipientAddressId        String   @db.ObjectId
-  recipientAddress          TikTokOrderRecipientAddress @relation(fields: [recipientAddressId], references: [id], onDelete: Cascade)
+  recipientAddress          OrderRecipientAddress @relation(fields: [recipientAddressId], references: [id], onDelete: Cascade)
   
   createdAt                 DateTime @default(now())
   updatedAt                 DateTime @updatedAt
   
-  @@map("tiktok_address_districts")
+  @@map("address_districts")
 }
 
-model TikTokOrderPackage {
+model OrderPackage {
   id                        String   @id @default(auto()) @map("_id") @db.ObjectId
-  packageId                 String   // "id" field from packages array
+  packageId                 String   // Package ID from channel
+  
+  // Channel-specific package data (JSON)
+  channelData               String?  // Store channel-specific fields as JSON
   
   // Order relation
   orderId                   String   @db.ObjectId
-  order                     TikTokOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order                     Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
   
   createdAt                 DateTime @default(now())
   updatedAt                 DateTime @updatedAt
   
   @@unique([orderId, packageId])
-  @@map("tiktok_order_packages")
+  @@map("order_packages")
 }
 
-model TikTokConversation {
+// Rename and unify Conversation model
+model Conversation {
   id                String   @id @default(auto()) @map("_id") @db.ObjectId
-  conversationId    String   @unique // "id" field from API
-  participantCount  Int
-  canSendMessage    Boolean
-  unreadCount       Int
-  createTime        Int
+  conversationId    String   @unique // Universal conversation ID
+  channel           Channel? // Which channel this conversation belongs to - make optional for migration
   
-  // Shop relation
-  shopId            String
-  shop              ShopAuthorization @relation(fields: [shopId], references: [shopId])
+  // Universal conversation fields
+  participantCount  Int?
+  canSendMessage    Boolean?
+  unreadCount       Int?
+  createTime        Int?
+  
+  // Channel-specific conversation data (JSON)
+  channelData       String?  // Store channel-specific fields as JSON
+  
+  // Shop relation - Fix: use ObjectId reference
+  shopId            String   @db.ObjectId
+  shop              ShopAuthorization @relation(fields: [shopId], references: [id])
   
   // Related data
-  participants      TikTokConversationParticipant[]
-  messages          TikTokConversationMessage[]
-  latestMessage     TikTokConversationMessage? @relation("LatestMessage")
+  participants      ConversationParticipant[]
+  messages          ConversationMessage[]
+  latestMessage     ConversationMessage? @relation("LatestMessage")
   
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
   
-  @@map("tiktok_conversations")
+  @@map("conversations")
 }
 
-model TikTokConversationParticipant {
+model ConversationParticipant {
   id                String   @id @default(auto()) @map("_id") @db.ObjectId
-  imUserId          String   // "im_user_id" from API
-  userId            String?  // "user_id" from API
+  participantId     String   // Universal participant ID (im_user_id, customer_id, etc.)
+  userId            String?  // Platform-specific user ID
   role              String   // "BUYER", "SELLER", etc.
-  nickname          String
+  nickname          String?
   avatar            String?
-  buyerPlatform     String?  // "TIKTOK_SHOP", etc.
+  
+  // Channel-specific participant data (JSON)
+  channelData       String?  // Store channel-specific fields as JSON
+  // Examples:
+  // TikTok: {"buyerPlatform": "TIKTOK_SHOP"}
+  // Amazon: {"buyerName": "xxx"}
   
   // Conversation relation
   conversationId    String   @db.ObjectId
-  conversation      TikTokConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  conversation      Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   
   // Messages sent by this participant
-  sentMessages      TikTokConversationMessage[] @relation("MessageSender")
+  sentMessages      ConversationMessage[] @relation("MessageSender")
   
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
   
-  @@unique([conversationId, imUserId])
-  @@map("tiktok_conversation_participants")
+  @@unique([conversationId, participantId])
+  @@map("conversation_participants")
 }
 
-model TikTokConversationMessage {
+model ConversationMessage {
   id                String   @id @default(auto()) @map("_id") @db.ObjectId
-  messageId         String   @unique // "id" field from API
-  type              String   // "TEXT", "IMAGE", "ORDER", etc.
-  content           String   // JSON string containing message content
-  createTime        Int
-  isVisible         Boolean
-  messageIndex      String?  // "index" field from API
+  messageId         String   @unique // Universal message ID
+  type              String?  // "TEXT", "IMAGE", "ORDER", etc.
+  content           String?  // Message content or JSON string
+  createTime        Int?
+  isVisible         Boolean?
+  
+  // Channel-specific message data (JSON)
+  channelData       String?  // Store channel-specific fields as JSON
+  // Examples:
+  // TikTok: {"messageIndex": "xxx"}
+  // Others can store specific message metadata
   
   // Conversation relation
   conversationId    String   @db.ObjectId
-  conversation      TikTokConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  conversation      Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   
   // Sender relation
   senderId          String?  @db.ObjectId
-  sender            TikTokConversationParticipant? @relation("MessageSender", fields: [senderId], references: [id])
+  sender            ConversationParticipant? @relation("MessageSender", fields: [senderId], references: [id])
   
   // Latest message relation (one-to-one)
-  isLatestFor       TikTokConversation? @relation("LatestMessage", fields: [isLatestForId], references: [id])
+  isLatestFor       Conversation? @relation("LatestMessage", fields: [isLatestForId], references: [id])
   isLatestForId     String? @unique @db.ObjectId
   
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
   
-  @@map("tiktok_conversation_messages")
+  @@map("conversation_messages")
 }
+
+// Remove all the channel-specific models:
+// - AmazonAuthorization
+// - ShopifyAuthorization  
+// - AlibabaAuthorization
+// - AmazonProduct
+// - ShopifyProduct
+// - AlibabaProduct
+// - AmazonOrder
+// - ShopifyOrder
+// - AlibabaOrder
+// - TikTokAuthorization (merged into ShopAuthorization)
+// - All TikTok-prefixed models (renamed to universal versions)

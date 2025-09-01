@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Get statements với shop active
-    const statements = await prisma.tikTokStatement.findMany({
+    const statements = await prisma.statement.findMany({
       where: whereClause,
       include: {
         shop: {

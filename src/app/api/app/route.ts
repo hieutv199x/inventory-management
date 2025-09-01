@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
         }
 
         // Admin/Manager can see all shops
-        const app = await prisma.tikTokApp.findMany({
+        const app = await prisma.channelApp.findMany({
             where: {
                 isActive: true
             },

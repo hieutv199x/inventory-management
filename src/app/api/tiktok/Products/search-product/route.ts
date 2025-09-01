@@ -56,7 +56,7 @@ export async function POST(req: NextRequest) {
             credentials.accessToken,
             'application/json',
             "",
-            credentials.shopCipher,
+            credentials.shopCipher ?? undefined,
             searchBody
         );
 

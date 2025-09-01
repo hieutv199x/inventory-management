@@ -29,51 +29,37 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url);
-    const page = parseInt(searchParams.get("page") || "1");
-    const limit = parseInt(searchParams.get("limit") || "10");
+    const page = parseInt(searchParams.get("page") || "1", 10);
+    const limit = parseInt(searchParams.get("limit") || "10", 10);
     const search = searchParams.get("search") || "";
+    const role = searchParams.get("role") || "";
 
     const skip = (page - 1) * limit;
 
-    // Build where clause for search - Fix the role field reference
-    const userRoles = ["ADMIN", "MANAGER", "USER"]; // adjust according to your enum
-    const matchedRoles = userRoles.filter((role) =>
-      role.toLowerCase().includes(search.toLowerCase())
-    );
+    // Build where clause
+    const where: any = {};
 
-    const where = search
-      ? {
-          OR: [
-            { name: { contains: search, mode: "insensitive" as const } },
-            { email: { contains: search, mode: "insensitive" as const } },
-            ...(matchedRoles.length > 0
-              ? [{ role: { in: matchedRoles as any } }]
-              : []),
-            {
-              userShopRoles: {
-                some: {
-                  OR: [
-                    {
-                      shop: {
-                        shopName: { contains: search, mode: "insensitive" as const },
-                      },
-                    },
-                    // Assuming userShopRoles.role is also an enum
-                    ...(matchedRoles.length > 0
-                      ? [{ role: { in: matchedRoles as any } }]
-                      : []),
-                  ],
-                },
-              },
-            },
-          ],
-        }
-      : {};
+    if (search) {
+      where.OR = [
+        { name: { contains: search, mode: "insensitive" } },
+        { email: { contains: search, mode: "insensitive" } },
+      ];
+    }
 
-    // Get total count
-    const total = await prisma.user.count({ where });
+    if (role) {
+      where.role = role;
+    }
 
-    // Get paginated users
+    // Role-based filtering
+    if (!["ADMIN", "MANAGER"].includes(currentUser.role)) {
+      // Non-admin users can only see users they created or themselves
+      where.OR = [
+        { id: currentUser.id },
+        { createdBy: currentUser.id },
+      ];
+    }
+
+    // Get paginated users without shop relations first
     const users = await prisma.user.findMany({
       where,
       select: {
@@ -82,16 +68,15 @@ export async function GET(request: NextRequest) {
         email: true,
         role: true,
         isActive: true,
-        userShopRoles: {
+        createdAt: true,
+        updatedAt: true,
+        createdBy: true,
+        // Include creator information
+        creator: {
           select: {
             id: true,
-            role: true,
-            shop: {
-              select: {
-                id: true,
-                shopName: true,
-              },
-            },
+            name: true,
+            email: true,
           },
         },
       },
@@ -102,29 +87,95 @@ export async function GET(request: NextRequest) {
       take: limit,
     });
 
-    // Transform the data to match the expected format - Fix the role mapping
-    const transformedUsers = users.map((user) => ({
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      role: user.role,
-      isActive: user.isActive,
-      shops: user.userShopRoles.map((userShopRole) => ({
-        id: userShopRole.shop.id,
-        shopName: userShopRole.shop.shopName,
-        role: userShopRole.role, // This is the shop role, not user role
-      })),
-    }));
+    // Get total count
+    const totalCount = await prisma.user.count({ where });
+    const totalPages = Math.ceil(totalCount / limit);
 
-    const totalPages = Math.ceil(total / limit);
+    // Manually fetch user shop roles with proper error handling
+    const usersWithShopRoles = await Promise.all(
+      users.map(async (user) => {
+        try {
+          // Get user shop roles separately
+          const userShopRoles = await prisma.userShopRole.findMany({
+            where: { userId: user.id },
+            select: {
+              id: true,
+              role: true,
+              shopId: true,
+            },
+          });
+
+          // For each role, try to get the shop data
+          const rolesWithShops = await Promise.all(
+            userShopRoles.map(async (role) => {
+              try {
+                const shop = await prisma.shopAuthorization.findUnique({
+                  where: { id: role.shopId },
+                  select: {
+                    id: true,
+                    shopId: true,
+                    shopName: true,
+                    status: true,
+                    app: {
+                      select: {
+                        channel: true,
+                        appName: true,
+                      },
+                    },
+                  },
+                });
+
+                return {
+                  id: role.id,
+                  role: role.role,
+                  shop:
+                    shop !== null
+                      ? {
+                          ...shop,
+                          channelName: shop.app?.channel || "UNKNOWN",
+                          appName: shop.app?.appName || "Unknown App",
+                        }
+                      : null,
+                };
+              } catch (error) {
+                console.warn(
+                  `Could not fetch shop for role ${role.id}:`,
+                  error
+                );
+                return {
+                  id: role.id,
+                  role: role.role,
+                  shop: null,
+                };
+              }
+            })
+          );
+
+          // Filter out roles with null shops
+          const validRoles = rolesWithShops.filter((role) => role.shop !== null);
+
+          return {
+            ...user,
+            userShopRoles: validRoles,
+          };
+        } catch (error) {
+          console.warn(`Could not fetch shop roles for user ${user.id}:`, error);
+          return {
+            ...user,
+            userShopRoles: [],
+          };
+        }
+      })
+    );
 
     return NextResponse.json({
-      users: transformedUsers,
+      users: usersWithShopRoles,
       pagination: {
         page,
         limit,
-        total,
+        total: totalCount,
         totalPages,
+        hasMore: page < totalPages,
       },
     });
   } catch (error) {

@@ -1,62 +1,131 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
-import { validateToken, checkRole } from '@/lib/auth-middleware';
+import { PrismaClient } from '@prisma/client';
+import { getUserWithShopAccess, getActiveShopIds, validateShopAccess } from '@/lib/auth';
+
+const prisma = new PrismaClient();
 
 export async function GET(request: NextRequest) {
   try {
-    // Validate token and get user
-    const authResult = await validateToken(request);
-    if (authResult.error) {
-      return NextResponse.json({ error: authResult.error }, { status: authResult.status });
+    const { user, isAdmin, accessibleShopIds } = await getUserWithShopAccess(request, prisma);
+
+    const { searchParams } = new URL(request.url);
+    const channel = searchParams.get('channel');
+    const appId = searchParams.get('appId');
+    const requestedShopId = searchParams.get('shopId');
+
+    // Get active shop IDs
+    const activeShopIds = await getActiveShopIds(prisma);
+
+    // Validate shop access
+    const { shopFilter, hasAccess } = validateShopAccess(
+      requestedShopId,
+      isAdmin,
+      accessibleShopIds,
+      activeShopIds
+    );
+
+    if (!hasAccess) {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 });
     }
 
-    const { user } = authResult;
-
-    // Check if user has permission
-    if (!checkRole(user!.role, ['ADMIN', 'MANAGER'])) {
-      // If not admin/manager, only show shops they have access to
-      const userShops = await prisma.shopAuthorization.findMany({
-        where: {
-          userShopRoles: {
-            some: {
-              userId: user!.id
-            }
-          },
-          status: 'ACTIVE'
-        },
-        select: {
-          id: true,
-          shopName: true
-        },
-        orderBy: {
-          shopName: 'asc'
-        }
-      });
-
-      return NextResponse.json({ shops: userShops });
+    const where: any = {};
+    
+    // Apply shop filter based on user permissions
+    if (shopFilter) {
+      where.shopId = shopFilter;
     }
 
-    // Admin/Manager can see all shops
+    if (channel) {
+      where.app = { channel: channel as any };
+    }
+    if (appId) {
+      where.appId = appId;
+    }
+    
     const shops = await prisma.shopAuthorization.findMany({
-      where: {
-        status: 'ACTIVE'
+      where,
+      include: {
+        app: {
+          select: {
+            id: true,
+            appName: true,
+            channel: true
+          }
+        },
+        _count: {
+          select: {
+            orders: true,
+            products: true,
+            payments: true
+          }
+        }
       },
-      select: {
-        id: true,
-        shopId: true,
-        shopName: true,
-      },
-      orderBy: {
-        shopName: 'asc'
-      }
+      orderBy: { createdAt: 'desc' }
     });
 
     return NextResponse.json({ shops });
   } catch (error) {
     console.error('Error fetching shops:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch shops' },
-      { status: 500 }
-    );
+    if (error instanceof Error && error.message === 'Authentication required') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const { user, isAdmin } = await getUserWithShopAccess(request, prisma);
+
+    // Only admins can create shop authorizations
+    if (!isAdmin) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    const body = await request.json();
+    const { 
+      shopId, 
+      shopName, 
+      appId, 
+      accessToken, 
+      refreshToken, 
+      expiresIn, 
+      scope, 
+      channelData, 
+      credentials 
+    } = body;
+
+    // Validate required fields
+    if (!shopId || !appId || !accessToken) {
+      return NextResponse.json(
+        { error: 'Missing required fields: shopId, appId, accessToken' }, 
+        { status: 400 }
+      );
+    }
+
+    const shop = await prisma.shopAuthorization.create({
+      data: {
+        shopId,
+        shopName,
+        appId,
+        accessToken,
+        refreshToken,
+        expiresIn,
+        scope,
+        channelData: JSON.stringify(channelData || {}),
+        credentials: credentials ? JSON.stringify(credentials) : null
+      },
+      include: {
+        app: true
+      }
+    });
+
+    return NextResponse.json({ shop });
+  } catch (error) {
+    console.error('Error creating shop authorization:', error);
+    if (error instanceof Error && error.message === 'Authentication required') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }

@@ -1,154 +1,184 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
-import { validateToken, checkRole, checkShopPermission } from '@/lib/auth-middleware';
+import { PrismaClient } from '@prisma/client';
+import { getUserWithShopAccess } from '@/lib/auth';
+
+const prisma = new PrismaClient();
 
 export async function GET(request: NextRequest) {
   try {
-    // Validate token and get user
-    const authResult = await validateToken(request);
-    if (authResult.error) {
-      return NextResponse.json({ error: authResult.error }, { status: authResult.status });
-    }
+    const { user: currentUser, isAdmin, accessibleShopIds } = await getUserWithShopAccess(request, prisma);
 
-    const { user } = authResult;
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get('page') || '1', 10);
     const limit = parseInt(searchParams.get('limit') || '10', 10);
-    const search = searchParams.get('search') || '';
-    const shopId = searchParams.get('shopId') || '';
+    const userId = searchParams.get('userId');
+    const shopId = searchParams.get('shopId');
+    const role = searchParams.get('role');
 
     const skip = (page - 1) * limit;
 
     // Build where clause
-    let whereClause: any = {};
+    const whereClause: any = {};
 
-    // If user is not ADMIN, filter by shops they have access to
-    if (!checkRole(user!.role, ['ADMIN'])) {
-      const userShopRoles = await prisma.userShopRole.findMany({
-        where: {
-          userId: user!.id,
-          role: { in: ['OWNER'] } // Only owners and resource managers can view all roles
-        },
-        select: { shopId: true }
-      });
-
-      const accessibleShopIds = userShopRoles.map(role => role.shopId);
-      
-      if (accessibleShopIds.length === 0) {
-        return NextResponse.json({
-          userRoles: [],
-          pagination: { page, limit, total: 0, totalPages: 0 }
-        });
-      }
-
-      whereClause.shopId = { in: accessibleShopIds };
+    if (userId) {
+      whereClause.userId = userId;
     }
-
-    // Apply search filter
-    if (search) {
-      whereClause.OR = [
-        {
-          user: {
-            name: { contains: search, mode: 'insensitive' }
-          }
-        },
-        {
-          user: {
-            email: { contains: search, mode: 'insensitive' }
-          }
-        },
-        {
-          shop: {
-            shopName: { contains: search, mode: 'insensitive' }
-          }
-        }
-      ];
-    }
-
-    // Apply shop filter
     if (shopId) {
       whereClause.shopId = shopId;
     }
+    if (role) {
+      whereClause.role = role;
+    }
 
-    const [userRoles, total] = await Promise.all([
-      prisma.userShopRole.findMany({
-        where: whereClause,
-        include: {
-          user: {
+    // Role-based filtering
+    if (!isAdmin) {
+      // Non-admin users can only see roles for shops they have access to
+      whereClause.shopId = { in: accessibleShopIds };
+    }
+
+    // First get the user roles without shop inclusion to avoid null errors
+    const allUserRoles = await prisma.userShopRole.findMany({
+      where: whereClause,
+      select: {
+        id: true,
+        userId: true,
+        shopId: true,
+        role: true,
+        createdAt: true,
+        updatedAt: true
+      },
+      orderBy: { createdAt: 'desc' },
+      skip,
+      take: limit,
+    });
+
+    // Get total count
+    const total = await prisma.userShopRole.count({ where: whereClause });
+
+    // Manually fetch related data with error handling
+    const userRolesWithData = await Promise.all(
+      allUserRoles.map(async (userRole) => {
+        try {
+          // Fetch user data
+          const user = await prisma.user.findUnique({
+            where: { id: userRole.userId },
             select: {
               id: true,
               name: true,
-              email: true
+              email: true,
+              role: true
             }
-          },
-          shop: {
-            select: {
-              id: true,
-              shopName: true
-            }
+          });
+
+          // Fetch shop data with error handling
+          let shop = null;
+          try {
+            shop = await prisma.shopAuthorization.findUnique({
+              where: { id: userRole.shopId },
+              select: {
+                id: true,
+                shopId: true,
+                shopName: true,
+                status: true,
+                app: {
+                  select: {
+                    channel: true,
+                    appName: true
+                  }
+                }
+              }
+            });
+          } catch (shopError) {
+            console.warn(`Could not fetch shop ${userRole.shopId}:`, shopError);
           }
-        },
-        orderBy: { createdAt: 'desc' },
-        skip,
-        take: limit
-      }),
-      prisma.userShopRole.count({ where: whereClause })
-    ]);
+
+          return {
+            ...userRole,
+            user: user || null,
+            shop: shop ? {
+              ...shop,
+              channelName: shop.app?.channel || 'UNKNOWN',
+              appName: shop.app?.appName || 'Unknown App'
+            } : null
+          };
+        } catch (error) {
+          console.warn(`Error processing user role ${userRole.id}:`, error);
+          return {
+            ...userRole,
+            user: null,
+            shop: null
+          };
+        }
+      })
+    );
+
+    // Filter out roles where we couldn't get shop data (invalid references)
+    const validUserRoles = userRolesWithData.filter(role => role.shop !== null);
 
     const totalPages = Math.ceil(total / limit);
 
     return NextResponse.json({
-      userRoles,
-      pagination: { page, limit, total, totalPages }
+      userRoles: validUserRoles,
+      pagination: {
+        page,
+        limit,
+        total: validUserRoles.length, // Use filtered count
+        totalPages,
+        hasMore: page < totalPages
+      },
     });
   } catch (error) {
     console.error('Error fetching user roles:', error);
+    if (error instanceof Error && error.message === 'Authentication required') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
     return NextResponse.json(
       { error: 'Failed to fetch user roles' },
       { status: 500 }
     );
+  } finally {
+    await prisma.$disconnect();
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
-    // Validate token and get user
-    const authResult = await validateToken(request);
-    if (authResult.error) {
-      return NextResponse.json({ error: authResult.error }, { status: authResult.status });
+    const { user: currentUser, isAdmin } = await getUserWithShopAccess(request, prisma);
+
+    // Only admins can create user shop roles
+    if (!isAdmin) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const { user } = authResult;
     const { userId, shopId, role } = await request.json();
 
+    // Validate required fields
     if (!userId || !shopId || !role) {
       return NextResponse.json(
-        { error: 'userId, shopId, and role are required' },
+        { error: 'Missing required fields: userId, shopId, role' },
         { status: 400 }
       );
     }
 
-    // Validate role
-    const validRoles = ['OWNER', 'RESOURCE', 'ACCOUNTANT', 'SELLER'];
-    if (!validRoles.includes(role)) {
-      return NextResponse.json(
-        { error: 'Invalid role. Must be one of: OWNER, RESOURCE, ACCOUNTANT, SELLER' },
-        { status: 400 }
-      );
+    // Verify the user exists
+    const user = await prisma.user.findUnique({
+      where: { id: userId }
+    });
+
+    if (!user) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    // Check if user has permission to assign roles to this shop
-    const isAdmin = checkRole(user!.role, ['ADMIN']);
-    const hasShopPermission = await checkShopPermission(user!.id, shopId, ['OWNER', 'RESOURCE']);
+    // Verify the shop exists
+    const shop = await prisma.shopAuthorization.findUnique({
+      where: { id: shopId }
+    });
 
-    if (!isAdmin && !hasShopPermission) {
-      return NextResponse.json(
-        { error: 'Insufficient permissions to assign roles in this shop' },
-        { status: 403 }
-      );
+    if (!shop) {
+      return NextResponse.json({ error: 'Shop not found' }, { status: 404 });
     }
 
-    // Check if the user already has a role in this shop
+    // Check if the role already exists
     const existingRole = await prisma.userShopRole.findFirst({
       where: {
         userId,
@@ -158,60 +188,108 @@ export async function POST(request: NextRequest) {
 
     if (existingRole) {
       return NextResponse.json(
-        { error: 'User already has a role in this shop' },
-        { status: 400 }
+        { error: 'User already has a role for this shop' },
+        { status: 409 }
       );
     }
 
-    // Verify that both user and shop exist
-    const [targetUser, targetShop] = await Promise.all([
-      prisma.user.findUnique({ where: { id: userId } }),
-      prisma.shopAuthorization.findUnique({ where: { id: shopId } })
-    ]);
-
-    if (!targetUser) {
-      return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
-      );
-    }
-
-    if (!targetShop) {
-      return NextResponse.json(
-        { error: 'Shop not found' },
-        { status: 404 }
-      );
-    }
-
-    const newUserRole = await prisma.userShopRole.create({
+    // Create the user shop role
+    const userShopRole = await prisma.userShopRole.create({
       data: {
         userId,
         shopId,
         role
-      },
-      include: {
-        user: {
-          select: {
-            id: true,
-            name: true,
-            email: true
-          }
-        },
-        shop: {
-          select: {
-            id: true,
-            shopName: true
-          }
-        }
       }
     });
 
-    return NextResponse.json({ userRole: newUserRole });
+    // Fetch the complete data for response
+    const userShopRoleWithData = await prisma.userShopRole.findUnique({
+      where: { id: userShopRole.id },
+      select: {
+        id: true,
+        userId: true,
+        shopId: true,
+        role: true,
+        createdAt: true,
+        updatedAt: true
+      }
+    });
+
+    return NextResponse.json({
+      userShopRole: {
+        ...userShopRoleWithData,
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role
+        },
+        shop: {
+          id: shop.id,
+          shopId: shop.shopId,
+          shopName: shop.shopName,
+          status: shop.status
+        }
+      }
+    });
   } catch (error) {
-    console.error('Error creating user role:', error);
+    console.error('Error creating user shop role:', error);
+    if (error instanceof Error && error.message === 'Authentication required') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
     return NextResponse.json(
-      { error: 'Failed to create user role' },
+      { error: 'Failed to create user shop role' },
       { status: 500 }
     );
+  } finally {
+    await prisma.$disconnect();
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const { user: currentUser, isAdmin } = await getUserWithShopAccess(request, prisma);
+
+    // Only admins can delete user shop roles
+    if (!isAdmin) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
+
+    if (!id) {
+      return NextResponse.json(
+        { error: 'Missing role ID' },
+        { status: 400 }
+      );
+    }
+
+    // Verify the role exists
+    const existingRole = await prisma.userShopRole.findUnique({
+      where: { id }
+    });
+
+    if (!existingRole) {
+      return NextResponse.json({ error: 'Role not found' }, { status: 404 });
+    }
+
+    // Delete the role
+    await prisma.userShopRole.delete({
+      where: { id }
+    });
+
+    return NextResponse.json({ message: 'Role deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting user shop role:', error);
+    if (error instanceof Error && error.message === 'Authentication required') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    return NextResponse.json(
+      { error: 'Failed to delete user shop role' },
+      { status: 500 }
+    );
+  } finally {
+    await prisma.$disconnect();
   }
 }

@@ -13,7 +13,7 @@ interface User {
   email: string;
   role: 'ADMIN' | 'MANAGER' | 'ACCOUNTANT' | 'SELLER' | 'RESOURCE';
   isActive: boolean; // Add isActive property
-  shops: {
+  userShopRoles: {
     id: string;
     shopName: string;
     role: 'OWNER' | 'MANAGER' | 'STAFF' | 'VIEWER';
@@ -511,15 +511,15 @@ export default function UserRolesPage() {
                 {/* Shop Assignments */}
                 <div className="space-y-2">
                   <h4 className="text-sm font-medium text-gray-900 dark:text-white">
-                    Phân công cửa hàng ({user.shops.length})
+                    Phân công cửa hàng ({user.userShopRoles.length})
                   </h4>
-                  {user.shops.length === 0 ? (
+                  {user.userShopRoles.length === 0 ? (
                     <p className="text-xs text-gray-500 dark:text-gray-400">
                       Không có phân công cửa hàng
                     </p>
                   ) : (
                     <div className="space-y-1">
-                      {user.shops.slice(0, 3).map((shop) => (
+                      {user.userShopRoles.slice(0, 3).map((shop) => (
                         <div key={shop.id} className="flex items-center justify-between text-xs">
                           <span className="text-gray-600 dark:text-gray-400 truncate">
                             {shop.shopName}
@@ -529,9 +529,9 @@ export default function UserRolesPage() {
                           </span>
                         </div>
                       ))}
-                      {user.shops.length > 3 && (
+                      {user.userShopRoles.length > 3 && (
                         <p className="text-xs text-gray-500 dark:text-gray-400">
-                          +{user.shops.length - 3} cửa hàng khác
+                          +{user.userShopRoles.length - 3} cửa hàng khác
                         </p>
                       )}
                     </div>
@@ -668,13 +668,13 @@ export default function UserRolesPage() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm text-gray-900 dark:text-white">
-                          {user.shops.length === 0 ? (
+                          {user.userShopRoles.length === 0 ? (
                             <span className="text-gray-500 dark:text-gray-400 italic">
                               Không có phân công cửa hàng
                             </span>
                           ) : (
                             <div className="space-y-1">
-                              {user.shops.slice(0, 2).map((shop) => (
+                              {user.userShopRoles.slice(0, 2).map((shop) => (
                                 <div key={shop.id} className="flex items-center space-x-2">
                                   <span className="text-gray-600 dark:text-gray-400 text-xs">
                                     {shop.shopName}
@@ -684,9 +684,9 @@ export default function UserRolesPage() {
                                   </span>
                                 </div>
                               ))}
-                              {user.shops.length > 2 && (
+                              {user.userShopRoles.length > 2 && (
                                 <span className="text-xs text-gray-500 dark:text-gray-400">
-                                  +{user.shops.length - 2} more
+                                  +{user.userShopRoles.length - 2} more
                                 </span>
                               )}
                             </div>

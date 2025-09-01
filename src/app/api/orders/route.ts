@@ -1,134 +1,92 @@
 import { NextRequest, NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
-import { getUserWithShopAccess, validateShopAccess, getActiveShopIds } from "@/lib/auth";
+import { getUserWithShopAccess, getActiveShopIds, validateShopAccess } from "@/lib/auth";
 
 const prisma = new PrismaClient();
 
-export async function POST(req: NextRequest) {
+export async function GET(request: NextRequest) {
     try {
-        const { user, accessibleShopIds, isAdmin } = await getUserWithShopAccess(req, prisma);
+        const { user, isAdmin, accessibleShopIds } = await getUserWithShopAccess(request, prisma);
+
+        const { searchParams } = new URL(request.url);
+        const channel = searchParams.get('channel');
+        const requestedShopId = searchParams.get('shopId');
+        const status = searchParams.get('status');
+        const limit = parseInt(searchParams.get('limit') || '50');
+        const offset = parseInt(searchParams.get('offset') || '0');
+
+        // Get active shop IDs
         const activeShopIds = await getActiveShopIds(prisma);
 
-        const {
-            shopId,
-            createTimeGe,
-            createTimeLt,
-            status,
-            page = 1,
-            pageSize = 20,
-            fields, // New parameter for field selection
-        } = await req.json();
+        // Validate shop access
+        const { shopFilter, hasAccess } = validateShopAccess(
+            requestedShopId,
+            isAdmin,
+            accessibleShopIds,
+            activeShopIds
+        );
+
+        if (!hasAccess) {
+            return NextResponse.json({ error: 'Access denied' }, { status: 403 });
+        }
 
         const where: any = {};
-
-        // Validate shop access
-        const { shopFilter, hasAccess } = validateShopAccess(shopId, isAdmin, accessibleShopIds, activeShopIds);
         
-        if (!hasAccess) {
-            return NextResponse.json({
-                orders: [],
-                pagination: { total: 0, page: 1, pageSize: 20, totalPages: 0 }
-            });
+        // Apply shop filter based on user permissions
+        if (shopFilter) {
+            where.shopId = shopFilter;
         }
 
-        where.shopId = shopFilter;
-
-        const skip = (page - 1) * pageSize;
-
-        // Determine what to select based on fields parameter
-        const selectFields = fields ? {
-            id: true,
-            orderId: true,
-            buyerEmail: true,
-            status: true,
-            createTime: true,
-            trackingNumber: true,
-            payment: {
-                select: {
-                    totalAmount: true,
-                    currency: true,
-                }
-            },
-            recipientAddress: {
-                select: {
-                    name: true,
-                    phoneNumber: true,
-                }
-            },
-            shop: {
-                select: {
-                    shopName: true,
-                    shopId: true,
-                }
-            },
-            _count: {
-                select: {
-                    lineItems: true
-                }
-            }
-        } : {
-            // Full selection for detailed view
-            id: true,
-            orderId: true,
-            buyerEmail: true,
-            status: true,
-            createTime: true,
-            updateTime: true,
-            trackingNumber: true,
-            lineItems: true,
-            payment: true,
-            recipientAddress: {
-                include: {
-                    districtInfo: true,
-                }
-            },
-            packages: true,
-            shop: {
-                select: {
-                    id: true,
-                    shopName: true,
-                    shopId: true,
-                }
-            }
-        };
-
+        if (channel) {
+            where.channel = channel as any;
+        }
+        if (status) {
+            where.status = status;
+        }
+        
         const [orders, total] = await Promise.all([
-            prisma.tikTokOrder.findMany({
+            prisma.order.findMany({
                 where,
-                select: selectFields,
-                orderBy: {
-                    createTime: 'desc',
+                include: {
+                    shop: {
+                        select: {
+                            shopName: true,
+                            app: {
+                                select: {
+                                    channel: true,
+                                    appName: true
+                                }
+                            }
+                        }
+                    },
+                    lineItems: true,
+                    payment: true,
+                    recipientAddress: true
                 },
-                skip,
-                take: pageSize,
+                take: limit,
+                skip: offset,
+                orderBy: { createdAt: 'desc' }
             }),
-            prisma.tikTokOrder.count({ where }),
+            prisma.order.count({ where })
         ]);
 
-        // Transform data for field selection response
-        const transformedOrders = fields ? orders.map(order => ({
-            ...order,
-            lineItemsCount: order._count?.lineItems || 0,
-            _count: undefined, // Remove the count object from response
-        })) : orders;
-
-        return NextResponse.json({
-            orders: transformedOrders,
-            pagination: {
-                total,
-                page,
-                pageSize,
-                totalPages: Math.ceil(total / pageSize),
-            }
+        return NextResponse.json({ 
+            orders: orders.map(order => ({
+                ...order,
+                channelData: order.channelData ? JSON.parse(order.channelData) : null,
+                lineItems: order.lineItems.map(item => ({
+                    ...item,
+                    channelData: item.channelData ? JSON.parse(item.channelData) : null
+                }))
+            })),
+            total,
+            hasMore: offset + limit < total
         });
-
-    } catch (err: any) {
-        console.error("Error fetching stored orders:", err);
-        if (err.message === 'Authentication required' || err.message === 'User not found') {
-            return NextResponse.json({ error: err.message }, { status: 401 });
+    } catch (error) {
+        console.error('Error fetching orders:', error);
+        if (error instanceof Error && error.message === 'Authentication required') {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
-        return NextResponse.json({ error: err.message || "Internal error" }, { status: 500 });
-    } finally {
-        await prisma.$disconnect();
+        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
 }

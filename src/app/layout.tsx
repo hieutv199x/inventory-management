@@ -28,6 +28,9 @@ export const metadata: Metadata = {
   description: "Hệ thống quản lý cửa hàng và phân quyền người dùng",
   themeColor: '#2563eb',
   viewport: 'width=device-width, initial-scale=1',
+  icons: {
+    icon: '/favicon.ico',
+  },
 };
 
 const outfit = Outfit({
