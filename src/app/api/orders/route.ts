@@ -30,11 +30,36 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ error: 'Access denied' }, { status: 403 });
         }
 
-        const where: any = {};
+        // Extract query parameters
+        const shopId = searchParams.get('shopId');
         
+        // Build where clause
+        let where: any = {};
+
         // Apply shop filter based on user permissions
         if (shopFilter) {
-            where.shopId = shopFilter;
+            if (typeof shopFilter === 'object' && shopFilter.in) {
+                // shopFilter is { in: [tiktokShopId, ...] }
+                const shops = await prisma.shopAuthorization.findMany({
+                    where: { shopId: { in: shopFilter.in } },
+                    select: { id: true }
+                });
+                const objectIds = shops.map(s => s.id);
+                if (objectIds.length === 0) {
+                    return NextResponse.json({ orders: [], total: 0, hasMore: false });
+                }
+                where.shopId = { in: objectIds };
+            } else {
+                // shopFilter is a single TikTok shopId
+                const shop = await prisma.shopAuthorization.findUnique({
+                    where: { shopId: shopFilter },
+                    select: { id: true }
+                });
+                if (!shop?.id) {
+                    return NextResponse.json({ orders: [], total: 0, hasMore: false });
+                }
+                where.shopId = shop.id;
+            }
         }
 
         if (channel) {
@@ -43,7 +68,20 @@ export async function GET(request: NextRequest) {
         if (status) {
             where.status = status;
         }
-        
+
+        // If filtering by shopId (TikTok shopId), map to Shop _id
+        if (shopId) {
+            const shop = await prisma.shopAuthorization.findUnique({
+                where: { shopId: shopId },
+                select: { id: true },
+            });
+            if (!shop?.id) {
+                // No matching shop, return empty result
+                return NextResponse.json({ orders: [], total: 0, hasMore: false });
+            }
+            where.shopId = shop.id;
+        }
+
         const [orders, total] = await Promise.all([
             prisma.order.findMany({
                 where,

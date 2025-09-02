@@ -105,9 +105,9 @@ export default function Shops() {
         ...(user?.id && !canViewAllShops && { userId: user.id })
       });
       
-      const data = await httpClient.get(`/tiktok/shop/get-shops?${params}`);
+      const data = await httpClient.get(`/shops?${params}`);
       
-      setShops(data.credentials || []);
+      setShops(data.shops || []);
       setPagination({
         page: data.pagination?.page || 1,
         limit: data.pagination?.limit || limit,

@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
 
         if (groupByShop) {
             // Get conversations grouped by shop
-            const conversations = await prisma.tikTokConversation.findMany({
+            const conversations = await prisma.conversation.findMany({
                 where: shopFilter,
                 include: {
                     participants: true,
@@ -60,7 +60,7 @@ export async function GET(req: NextRequest) {
                 
                 acc[shopKey].conversations.push(conversation);
                 acc[shopKey].totalUnread += conversation.unreadCount;
-                if (conversation.createTime > acc[shopKey].lastActivity) {
+                if (conversation.createTime !== null && conversation.createTime !== undefined && conversation.createTime > acc[shopKey].lastActivity) {
                     acc[shopKey].lastActivity = conversation.createTime;
                 }
                 
@@ -73,7 +73,7 @@ export async function GET(req: NextRequest) {
             });
         } else {
             // Get individual conversations
-            const conversations = await prisma.tikTokConversation.findMany({
+            const conversations = await prisma.conversation.findMany({
                 where: shopFilter,
                 include: {
                     participants: true,

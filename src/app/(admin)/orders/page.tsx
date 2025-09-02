@@ -96,15 +96,17 @@ export default function OrdersPage() {
     const fetchOrders = async (page = 1) => {
         setLoading(true);
         try {
-            const response = await httpClient.post('/orders', {
-                shopId: selectedShop,
-                status: selectedStatus,
-                createTimeGe: dateFrom ? Math.floor(new Date(dateFrom).getTime() / 1000) : undefined,
-                createTimeLt: dateTo ? Math.floor(new Date(dateTo).getTime() / 1000) : undefined,
-                page,
-                pageSize: pagination.pageSize,
-                fields: 'orderId,buyerEmail,status,createTime,trackingNumber,payment.totalAmount,payment.currency,recipientAddress.name,recipientAddress.phoneNumber,shop.shopName,shop.shopId,lineItemsCount' // Only necessary fields
-            });
+            const params = new URLSearchParams({
+                ...(selectedShop && { shopId: selectedShop }),
+                ...(selectedStatus && { status: selectedStatus }),
+                ...(dateFrom && { createTimeGe: Math.floor(new Date(dateFrom).getTime() / 1000).toString() }),
+                ...(dateTo && { createTimeLt: Math.floor(new Date(dateTo).getTime() / 1000).toString() }),
+                page: page.toString(),
+                pageSize: pagination.pageSize.toString(),
+                fields: 'orderId,buyerEmail,status,createTime,trackingNumber,payment.totalAmount,payment.currency,recipientAddress.name,recipientAddress.phoneNumber,shop.shopName,shop.shopId,lineItemsCount'
+            }).toString();
+
+            const response = await httpClient.get(`/orders?${params}`);
 
             setOrders(response.orders || []);
             setPagination(response.pagination || { total: 0, page: 1, pageSize: 20, totalPages: 0 });

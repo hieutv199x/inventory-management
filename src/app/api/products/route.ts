@@ -29,11 +29,24 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 });
     }
 
-    const where: any = {};
-    
-    // Apply shop filter based on user permissions
+    // Build where clause
+    let where: any = {};
+
+    // Apply shop filter based on user permissions - use TikTok shopIds directly
     if (shopFilter) {
-      where.shopId = shopFilter;
+        if (typeof shopFilter === 'object' && shopFilter.in) {
+            // shopFilter contains array of TikTok shopIds
+            where.shopId = { in: shopFilter.in };
+        } else if (typeof shopFilter === 'string') {
+            // shopFilter is a single TikTok shopId
+            where.shopId = shopFilter;
+        }
+    }
+
+    // If filtering by shopId (TikTok shopId), use directly
+    const shopId = searchParams.get('shopId');
+    if (shopId) {
+        where.shopId = shopId;
     }
 
     if (channel) {
@@ -44,17 +57,6 @@ export async function GET(request: NextRequest) {
       prisma.product.findMany({
         where,
         include: {
-          shop: {
-            select: {
-              shopName: true,
-              app: {
-                select: {
-                  channel: true,
-                  appName: true
-                }
-              }
-            }
-          },
           brand: true,
           skus: {
             include: {
@@ -71,9 +73,21 @@ export async function GET(request: NextRequest) {
       prisma.product.count({ where })
     ]);
 
+    // Get shop information for the products
+    const uniqueShopIds = [...new Set(products.map(p => p.shopId))];
+    const shopAuthorizations = await prisma.shopAuthorization.findMany({
+      where: { shopId: { in: uniqueShopIds } },
+      select: { shopId: true, shopName: true }
+    });
+
+    const shopMap = Object.fromEntries(
+      shopAuthorizations.map(s => [s.shopId, { shopName: s.shopName }])
+    );
+
     return NextResponse.json({ 
       products: products.map(product => ({
         ...product,
+        shop: shopMap[product.shopId] || { shopName: 'Unknown' },
         channelData: product.channelData ? JSON.parse(product.channelData) : null
       })),
       total,

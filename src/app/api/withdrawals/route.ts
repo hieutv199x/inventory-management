@@ -50,14 +50,17 @@ export async function GET(request: NextRequest) {
         select: {
           shop: {
             select: {
-              id: true,
+              id: true, // MongoDB ObjectID
               shopId: true,
             },
           }
         },
       });
 
-      const accessibleShopIds = userShopRoles.map((usr) => usr.shop?.shopId);
+      // Use MongoDB _id for filtering
+      const accessibleShopIds = userShopRoles
+        .map((usr) => usr.shop?.id)
+        .filter((id): id is string => !!id);
 
       // If user has no shop assignments, return empty result
       if (accessibleShopIds.length === 0) {
@@ -66,8 +69,10 @@ export async function GET(request: NextRequest) {
 
       // If specific shop is requested (not 'all'), check if user has access to it
       if (shopId && shopId !== 'all') {
-        if (accessibleShopIds.includes(shopId)) {
-          whereClause.shopId = shopId;
+        // Find the shop's _id by TikTok shopId
+        const matchedShop = userShopRoles.find(usr => String(usr.shop?.shopId) === String(shopId));
+        if (matchedShop && matchedShop.shop?.id) {
+          whereClause.shopId = matchedShop.shop.id;
         } else {
           // User doesn't have access to the requested shop
           return NextResponse.json([]);
@@ -81,7 +86,16 @@ export async function GET(request: NextRequest) {
     } else {
       // Admin/Manager can access all shops
       if (shopId && shopId !== 'all') {
-        whereClause.shopId = shopId;
+        // Find the shop's _id by TikTok shopId
+        const shop = await prisma.shopAuthorization.findUnique({
+          where: { shopId: shopId },
+          select: { id: true },
+        });
+        if (shop?.id) {
+          whereClause.shopId = shop.id;
+        } else {
+          return NextResponse.json([]);
+        }
       }
       // If shopId is 'all' or not provided, don't add shopId filter (get all shops)
     }
@@ -95,16 +109,28 @@ export async function GET(request: NextRequest) {
     }
 
     // Get active shops list to filter withdrawals
-    const activeShops = await prisma.shopAuthorization.findMany({
+    const activeShopAuthorizations = await prisma.shopAuthorization.findMany({
       where: { status: 'ACTIVE' },
       select: { shopId: true },
     });
-    const activeShopIds = activeShops.map(shop => shop.shopId);
+    const activeShopTikTokIds = activeShopAuthorizations
+      .map(shop => shop.shopId)
+      .filter((id): id is string => !!id);
+
+    // Fetch Shop documents to get their MongoDB _id for active shops
+    const activeShops = await prisma.shopAuthorization.findMany({
+      where: { shopId: { in: activeShopTikTokIds } },
+      select: { id: true, shopId: true },
+    });
+    const activeShopIds = activeShops.map(shop => shop.id);
 
     // Filter whereClause to only get withdrawals from active shops
     if (whereClause.shopId) {
       if (typeof whereClause.shopId === 'object' && whereClause.shopId.in) {
         whereClause.shopId.in = whereClause.shopId.in.filter((id: string) => activeShopIds.includes(id));
+        if (whereClause.shopId.in.length === 0) {
+          return NextResponse.json([]);
+        }
       } else if (!activeShopIds.includes(whereClause.shopId)) {
         // If shopId is not active, return empty result
         return NextResponse.json([]);
@@ -114,7 +140,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Get withdrawals with active shop filtering
-    const withdrawals = await prisma.tikTokWithdrawal.findMany({
+    const withdrawals = await prisma.withdrawal.findMany({
       where: whereClause,
       include: {
         shop: {

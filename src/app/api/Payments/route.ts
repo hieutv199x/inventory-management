@@ -81,7 +81,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Get payments with user access control
-    const payments = await prisma.tikTokPayment.findMany({
+    const payments = await prisma.payment.findMany({
       where: whereClause,
       include: {
         shop: {
