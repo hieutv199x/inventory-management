@@ -18,7 +18,7 @@ export async function GET(req: Request) {
     if (!shop) {
       return NextResponse.json({ error: "Missing required parameters" }, { status: 400 });
     }
-    const appSecret = shop.app.appSecret;
+    const appSecret = shop.app?.appSecret;
 
     if (!appSecret) {
         return NextResponse.json({ error: 'App secret is missing in database' }, { status: 500 });
@@ -30,7 +30,7 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'App secret is missing in database' }, { status: 500 });
   }
 
-    const { body } = await AccessTokenTool.refreshToken(refresh_token, shop.app.appKey, appSecret);
+    const { body } = await AccessTokenTool.refreshToken(refresh_token, shop.app?.appKey, appSecret);
         console.log('getAccessToken resp data := ', JSON.stringify(body, null, 2));  
         const parsedBody = typeof body === 'string' ? JSON.parse(body) : body;
         const data = parsedBody.data;

@@ -32,18 +32,20 @@ export async function GET(req: NextRequest) {
             dailyOrderStats
         ] = await Promise.all([
             // Total orders count
-            prisma.tikTokOrder.count({
+            prisma.order.count({
                 where: {
                     ...shopFilter,
+                    channel: 'TIKTOK', // Filter for TikTok orders
                     createTime: { gte: startTime }
                 }
             }),
 
             // Orders by status
-            prisma.tikTokOrder.groupBy({
+            prisma.order.groupBy({
                 by: ['status'],
                 where: {
                     ...shopFilter,
+                    channel: 'TIKTOK',
                     createTime: { gte: startTime }
                 },
                 _count: {
@@ -52,10 +54,11 @@ export async function GET(req: NextRequest) {
             }),
 
             // Average order value
-            prisma.tikTokOrderPayment.findMany({
+            prisma.orderPayment.findMany({
                 where: {
                     order: {
                         ...shopFilter,
+                        channel: 'TIKTOK',
                         createTime: { gte: startTime }
                     }
                 },
@@ -65,10 +68,11 @@ export async function GET(req: NextRequest) {
             }),
 
             // Top performing shops
-            prisma.tikTokOrder.groupBy({
+            prisma.order.groupBy({
                 by: ['shopId'],
                 where: {
                     ...shopFilter,
+                    channel: 'TIKTOK',
                     createTime: { gte: startTime }
                 },
                 _count: {
@@ -83,9 +87,10 @@ export async function GET(req: NextRequest) {
             }),
 
             // Daily order statistics (simplified approach)
-            prisma.tikTokOrder.findMany({
+            prisma.order.findMany({
                 where: {
                     ...shopFilter,
+                    channel: 'TIKTOK',
                     createTime: { gte: startTime }
                 },
                 select: {
@@ -104,6 +109,9 @@ export async function GET(req: NextRequest) {
 
         // Process daily stats manually
         const dailyStats = dailyOrderStats.reduce((acc: any, order) => {
+            if (order.createTime == null) {
+                return acc;
+            }
             const date = new Date(order.createTime * 1000).toISOString().split('T')[0];
             if (!acc[date]) {
                 acc[date] = { orderCount: 0, totalValue: 0 };
@@ -125,11 +133,11 @@ export async function GET(req: NextRequest) {
         // Get shop names for top performing shops
         const shopIds = topPerformingShops.map(shop => shop.shopId);
         const shops = shopIds.length > 0 ? await prisma.shopAuthorization.findMany({
-            where: { shopId: { in: shopIds } },
-            select: { shopId: true, shopName: true }
+            where: { id: { in: shopIds } }, // Use ObjectId instead of shopId
+            select: { id: true, shopId: true, shopName: true }
         }) : [];
 
-        const shopNameMap = new Map(shops.map(s => [s.shopId, s.shopName]));
+        const shopNameMap = new Map(shops.map(s => [s.id, s.shopName]));
 
         return NextResponse.json({
             overview: {

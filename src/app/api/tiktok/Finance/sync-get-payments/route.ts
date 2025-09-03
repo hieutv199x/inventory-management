@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import {TikTokShopNodeApiClient} from "@/nodejs_sdk";
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, Channel } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
@@ -19,7 +19,10 @@ export async function GET(request: NextRequest) {
         }
 
         const shops = await prisma.shopAuthorization.findMany({
-            where: { status: 'ACTIVE' },
+            where: { 
+                status: 'ACTIVE',
+                app: { channel: 'TIKTOK' } // Only get TikTok shops
+            },
             include: { app: true },
         });
 
@@ -28,9 +31,25 @@ export async function GET(request: NextRequest) {
 
         for (const shop of shops) {
             try {
+                // Extract shopCipher from channelData
+                let shopCipher = shop.shopCipher; // Legacy field
+                if (shop.channelData) {
+                    try {
+                        const channelData = JSON.parse(shop.channelData);
+                        shopCipher = channelData.shopCipher || shopCipher;
+                    } catch (error) {
+                        console.warn(`Failed to parse channelData for shop ${shop.shopId}, using legacy shopCipher`);
+                    }
+                }
+
+                if (!shop.app) {
+                    console.error(`Missing app information for shop ${shop.shopId}`);
+                    continue;
+                }
+
                 const credentials = {
                     accessToken: shop.accessToken,
-                    shopCipher: shop.shopCipher,
+                    shopCipher: shopCipher,
                     app: {
                         appKey: shop.app.appKey,
                         appSecret: shop.app.appSecret,
@@ -55,7 +74,7 @@ export async function GET(request: NextRequest) {
                 console.log(`Fetched ${allPayments.length} payments for shop ${shop.shopId}`);
 
                 // Sync payments in batches
-                const syncedCount = await syncPaymentsToDatabase(allPayments, shop.shopId);
+                const syncedCount = await syncPaymentsToDatabase(allPayments, shop.id); // Use ObjectId instead of shopId
                 totalPaymentsSynced += syncedCount;
 
                 shopResults.push({
@@ -154,32 +173,32 @@ async function fetchAllPayments(client: any, credentials: any, statementTimeGe: 
     return allPayments;
 }
 
-async function syncPaymentsToDatabase(payments: any[], shopId: string) {
+async function syncPaymentsToDatabase(payments: any[], shopObjectId: string) {
     const BATCH_SIZE = 100;
     let totalSynced = 0;
 
-    console.log(`Starting sync of ${payments.length} payments for shop ${shopId} in batches of ${BATCH_SIZE}`);
+    console.log(`Starting sync of ${payments.length} payments for shop ${shopObjectId} in batches of ${BATCH_SIZE}`);
 
     // Process payments in batches
     for (let i = 0; i < payments.length; i += BATCH_SIZE) {
         const batch = payments.slice(i, i + BATCH_SIZE);
-        const syncedCount = await processPaymentBatch(batch, shopId);
+        const syncedCount = await processPaymentBatch(batch, shopObjectId);
         totalSynced += syncedCount;
-        console.log(`Processed ${Math.min(i + BATCH_SIZE, payments.length)} of ${payments.length} payments for shop ${shopId}. Synced: ${syncedCount}`);
+        console.log(`Processed ${Math.min(i + BATCH_SIZE, payments.length)} of ${payments.length} payments for shop ${shopObjectId}. Synced: ${syncedCount}`);
     }
 
-    console.log(`Payment sync completed for shop ${shopId}. Total synced: ${totalSynced}`);
+    console.log(`Payment sync completed for shop ${shopObjectId}. Total synced: ${totalSynced}`);
     return totalSynced;
 }
 
-async function processPaymentBatch(payments: any[], shopId: string) {
+async function processPaymentBatch(payments: any[], shopObjectId: string) {
     let syncedCount = 0;
 
     try {
         await prisma.$transaction(async (tx) => {
             // Get existing payment IDs to avoid duplicates
             const paymentIds = payments.map(p => p.id).filter(Boolean);
-            const existingPayments = await tx.tikTokPayment.findMany({
+            const existingPayments = await tx.payment.findMany({
                 where: { paymentId: { in: paymentIds } },
                 select: { paymentId: true }
             });
@@ -193,26 +212,34 @@ async function processPaymentBatch(payments: any[], shopId: string) {
 
             if (newPayments.length > 0) {
                 // Prepare batch data
-                const paymentData = newPayments.map(payment => ({
-                    paymentId: payment.id!,
-                    createTime: payment.createTime ?? 0,
-                    status: payment.status!,
-                    amountValue: payment.amount?.value,
-                    amountCurrency: payment.amount?.currency ?? "",
-                    settlementAmountValue: payment.settlementAmount?.value,
-                    settlementAmountCurrency: payment.settlementAmount?.currency ?? "",
-                    reserveAmountValue: payment.reserveAmount?.value,
-                    reserveAmountCurrency: payment.reserveAmount?.currency ?? "",
-                    paymentBeforeExchangeValue: payment.paymentAmountBeforeExchange?.value,
-                    paymentBeforeExchangeCurrency: payment.paymentAmountBeforeExchange?.currency ?? "",
-                    exchangeRate: payment.exchangeRate,
-                    paidTime: payment.paidTime,
-                    bankAccount: payment.bankAccount ?? null,
-                    shopId: shopId,
-                }));
+                const paymentData = newPayments.map(payment => {
+                    // Prepare channelData for TikTok-specific fields
+                    const channelData = {
+                        reserveAmountValue: payment.reserveAmount?.value,
+                        reserveAmountCurrency: payment.reserveAmount?.currency,
+                        paymentBeforeExchangeValue: payment.paymentAmountBeforeExchange?.value,
+                        paymentBeforeExchangeCurrency: payment.paymentAmountBeforeExchange?.currency,
+                        exchangeRate: payment.exchangeRate,
+                    };
+
+                    return {
+                        paymentId: payment.id!,
+                        channel: Channel.TIKTOK, // Add channel field
+                        createTime: payment.createTime ?? 0,
+                        status: payment.status!,
+                        amountValue: payment.amount?.value,
+                        amountCurrency: payment.amount?.currency ?? "",
+                        settlementAmountValue: payment.settlementAmount?.value,
+                        settlementAmountCurrency: payment.settlementAmount?.currency ?? "",
+                        channelData: JSON.stringify(channelData), // Store TikTok-specific data as JSON
+                        paidTime: payment.paidTime,
+                        bankAccount: payment.bankAccount ?? null,
+                        shopId: shopObjectId, // Use ObjectId reference
+                    };
+                });
 
                 // Batch create payments
-                await tx.tikTokPayment.createMany({
+                await tx.payment.createMany({
                     data: paymentData,
                 });
 
@@ -224,7 +251,7 @@ async function processPaymentBatch(payments: any[], shopId: string) {
         });
 
     } catch (error) {
-        console.error(`Error processing payment batch for shop ${shopId}:`, error);
+        console.error(`Error processing payment batch for shop ${shopObjectId}:`, error);
     }
 
     return syncedCount;

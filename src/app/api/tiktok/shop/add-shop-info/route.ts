@@ -50,25 +50,36 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Create or find the TikTok app
-    const app = await prisma.tikTokApp.upsert({
+    // Create or find the TikTok ChannelApp
+    const app = await prisma.channelApp.upsert({
       where: { appKey },
       create: {
         appName,
+        channel: 'TIKTOK', // Add channel field
         appId: serviceId, // Using serviceId as appId
         appKey,
         appSecret,
         isActive: true,
+        config: JSON.stringify({ 
+          country,
+          createdBy: currentUser.id,
+          createdAt: new Date().toISOString()
+        }),
       },
       update: {
         appName,
         appSecret,
         isActive: true,
+        config: JSON.stringify({ 
+          country,
+          updatedBy: currentUser.id,
+          updatedAt: new Date().toISOString()
+        }),
       },
     });
 
     return NextResponse.json(
-      { message: 'App is saved successfully', data: app },
+      { message: 'TikTok app is saved successfully', data: app },
       { status: 201 }
     );
   } catch (error) {

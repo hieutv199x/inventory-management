@@ -12,8 +12,11 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: 'Authorization auth_code, app_key is missing' }, { status: 400 });
         }
 
-        const credential = await prisma.tikTokApp.findUnique({
-            where: { appKey: app_key },
+        const credential = await prisma.channelApp.findUnique({
+            where: { 
+                appKey: app_key,
+                channel: 'TIKTOK' 
+            },
         });
 
         if (!credential) {
@@ -55,6 +58,12 @@ export async function POST(req: Request) {
         const shops = parsedResult.body.data?.shops ?? [];
 
         for (const shop of shops) {
+            // Prepare channelData for TikTok-specific fields
+            const channelData = {
+                shopCipher: shop.cipher,
+                region: shop.region,
+            };
+
             await prisma.shopAuthorization.upsert({
                 where: { shopId: shop.id },
                 update: {
@@ -63,20 +72,23 @@ export async function POST(req: Request) {
                     expiresIn: access_token_expire_in,
                     scope: granted_scopes.join(','),
                     shopName: shop.name,
-                    region: shop.region,
+                    region: shop.region, // Keep legacy field for compatibility
+                    shopCipher: shop.cipher, // Keep legacy field for compatibility
+                    channelData: JSON.stringify(channelData), // Store in new unified format
                     status: 'ACTIVE',
                 },
                 create: {
                     shopId: shop.id,
-                    shopCipher: shop.cipher,
+                    shopCipher: shop.cipher, // Legacy field
                     shopName: shop.name,
-                    region: shop.region,
+                    region: shop.region, // Legacy field
+                    channelData: JSON.stringify(channelData), // New unified format
                     accessToken: access_token,
                     refreshToken: refresh_token,
                     expiresIn: access_token_expire_in,
                     scope: granted_scopes.join(','),
                     status: 'ACTIVE',
-                    appId: credential.id, // Liên kết với ứng dụng cha
+                    appId: credential.id, // Link to ChannelApp
                 },
             });
         }

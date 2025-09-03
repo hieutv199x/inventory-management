@@ -59,17 +59,32 @@ export async function GET(request: NextRequest) {
         return NextResponse.json([]);
       }
 
-      // Filter by accessible shops
+      // Filter by accessible shops (using ObjectId)
       whereClause.shopId = {
         in: accessibleShopIds,
       };
     }
 
-    // If specific shop is requested (not 'all'), add to filter
+    // If specific shop is requested (not 'all'), need to convert shopId string to ObjectId
     if (shopId && shopId !== 'all') {
-      whereClause.shopId = shopId;
+      // Find the ShopAuthorization by shopId string to get the ObjectId
+      const shop = await prisma.shopAuthorization.findUnique({
+        where: { shopId: shopId },
+        select: { id: true },
+      });
+
+      if (shop) {
+        whereClause.shopId = shop.id; // Use ObjectId
+      } else {
+        // Shop not found, return empty result
+        return NextResponse.json([]);
+      }
     }
-    // If shopId is 'all' or not provided, we keep the existing whereClause 
+
+    // Add channel filter for TikTok payments
+    whereClause.channel = 'TIKTOK';
+
+    // If shopId is 'all' or not provided, we keep the existing whereClause
     // which already filters by user permissions for non-admin users
 
     // Add date range filter if provided
@@ -86,6 +101,7 @@ export async function GET(request: NextRequest) {
       include: {
         shop: {
           select: {
+            shopId: true,
             shopName: true,
           },
         },

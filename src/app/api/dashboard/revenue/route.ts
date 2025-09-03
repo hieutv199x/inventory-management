@@ -21,9 +21,10 @@ export async function GET(req: NextRequest) {
             paymentsByStatus
         ] = await Promise.all([
             // Total payments - fetch all and calculate manually
-            prisma.tikTokPayment.findMany({
+            prisma.payment.findMany({
                 where: {
                     ...shopFilter,
+                    channel: 'TIKTOK', // Filter for TikTok payments
                     createTime: { gte: startTime },
                     settlementAmountValue: { not: null }
                 },
@@ -34,9 +35,10 @@ export async function GET(req: NextRequest) {
             }),
 
             // Total withdrawals - fetch all and calculate manually
-            prisma.tikTokWithdrawal.findMany({
+            prisma.withdrawal.findMany({
                 where: {
                     ...shopFilter,
+                    channel: 'TIKTOK', // Filter for TikTok withdrawals
                     createTime: { gte: startTime }
                 },
                 select: {
@@ -46,9 +48,10 @@ export async function GET(req: NextRequest) {
             }),
 
             // Revenue by shop - fetch all and group manually
-            prisma.tikTokPayment.findMany({
+            prisma.payment.findMany({
                 where: {
                     ...shopFilter,
+                    channel: 'TIKTOK',
                     createTime: { gte: startTime },
                     settlementAmountValue: { not: null }
                 },
@@ -59,9 +62,10 @@ export async function GET(req: NextRequest) {
             }),
 
             // Payments by status - fetch all and group manually
-            prisma.tikTokPayment.findMany({
+            prisma.payment.findMany({
                 where: {
                     ...shopFilter,
+                    channel: 'TIKTOK',
                     createTime: { gte: startTime }
                 },
                 select: {
@@ -114,11 +118,11 @@ export async function GET(req: NextRequest) {
         // Get shop names for revenue by shop
         const shopIds = revenueByShopArray.map(shop => shop.shopId);
         const shops = shopIds.length > 0 ? await prisma.shopAuthorization.findMany({
-            where: { shopId: { in: shopIds } },
-            select: { shopId: true, shopName: true }
+            where: { id: { in: shopIds } }, // Use ObjectId instead of shopId
+            select: { id: true, shopId: true, shopName: true }
         }) : [];
 
-        const shopNameMap = new Map(shops.map(s => [s.shopId, s.shopName]));
+        const shopNameMap = new Map(shops.map(s => [s.id, s.shopName]));
 
         return NextResponse.json({
             overview: {

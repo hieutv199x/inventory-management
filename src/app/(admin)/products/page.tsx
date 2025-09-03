@@ -9,7 +9,7 @@ import {Table, TableBody, TableCell, TableHeader, TableRow} from "@/components/u
 import Image from "next/image";
 import { useToast } from "@/context/ToastContext";
 import { httpClient } from "@/lib/http-client";
-import { Loader2, Search, RefreshCw, Eye, Package, Calendar, User, X, MapPin, CreditCard, Truck } from 'lucide-react';
+import {  RefreshCw,  Package, Calendar, User,  } from 'lucide-react';
 import Badge from "@/components/ui/badge/Badge";
 
 interface Product {
@@ -20,7 +20,9 @@ interface Product {
     status: string;
     createTime: number;
     shopId:string,
-    shopName:string;
+    shop:{
+        shopName:string;
+    }
     images: {
         uri: string;
         urls: string[];
@@ -193,7 +195,7 @@ export default function Product() {
             const rows = products.map((p) => ({
                 ProductID: p.productId,
                 Title: p.title,
-                Shop: p.shopName || "",
+                Shop: p.shop?.shopName || "",
                 Status: p.status,
                 Price: p.skus?.[0]?.price?.salePrice ? `${p.skus[0].price.salePrice} ${p.skus[0].price.currency}` : "",
                 CreationDate: formatUnixToDate(p.createTime),
@@ -495,7 +497,7 @@ export default function Product() {
                                                 <div className="flex flex-col space-y-1 max-w-[280px]">
                                                     <span>ID: {product.productId}</span>
                                                     <span>SKUId: {product.skus?.[0]?.id}</span>
-                                                    <span>Shop: {product.shopName}</span>
+                                                    <span>Shop: {product.shop?.shopName}</span>
                                                     <div
                                                         dangerouslySetInnerHTML={{ __html: product.description || "" }}
                                                         className="prose prose-sm max-w-none max-h-20 overflow-y-auto text-gray-500"

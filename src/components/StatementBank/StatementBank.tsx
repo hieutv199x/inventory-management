@@ -66,18 +66,28 @@ export const StatementBank = () => {
       }
 
       const res = await httpClient.get(url);
-      const rawStatements = res || [];
+      const rawStatements = Array.isArray(res) ? res : (res?.statements || res?.data || []);
 
-      const mappedStatements: Statement[] = rawStatements.map((item: any) => ({
-        statementId: item.statementId,
-        shopId: item.shopId,
-        shopName: item.shop?.shopName || '',
-        revenue: item.revenueAmount || '0',
-        holdAmount: item.adjustmentAmount || '0',
-        paidAmount: item.settlementAmount || '0',
-        holdDate: item.statementTime,
-        bankAccount: '',
-      }));
+      const mappedStatements: Statement[] = rawStatements.map((item: any) => {
+        // Parse channelData for TikTok-specific fields
+        let channelData = {};
+        try {
+          channelData = item.channelData ? JSON.parse(item.channelData) : {};
+        } catch (error) {
+          console.warn('Failed to parse channelData for statement:', item.statementId);
+        }
+
+        return {
+          statementId: item.statementId,
+          shopId: item.shop?.shopId || item.shopId || '',
+          shopName: item.shop?.shopName || '',
+          revenue: (channelData as any).revenueAmount || item.revenueAmount || '0',
+          holdAmount: (channelData as any).adjustmentAmount || item.adjustmentAmount || '0',
+          paidAmount: item.settlementAmount || '0',
+          holdDate: item.statementTime,
+          bankAccount: '',
+        };
+      });
 
       setStatements(mappedStatements);
     } catch (error) {

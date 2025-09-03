@@ -25,12 +25,12 @@ interface Shop {
   shopName: string | null;
   shopCipher: string | null;
   app: {
-    appId: string;
-    appKey: string;
+    id: string;
+    channel: string;
     appSecret: string | null;
     appName: string | null;
   };
-  country: string;
+  region: string;
   status: string | null;
   createdAt: string;
 }
@@ -493,7 +493,7 @@ export default function Shops() {
                 <div className="space-y-2 text-sm mb-4">
                   <div className="flex justify-between">
                     <span className="text-gray-500 dark:text-gray-400">Quốc gia:</span>
-                    <span className="text-gray-900 dark:text-white font-medium">{shop.country}</span>
+                    <span className="text-gray-900 dark:text-white font-medium">{shop.region}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-500 dark:text-gray-400">App Name:</span>
@@ -502,9 +502,9 @@ export default function Shops() {
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-500 dark:text-gray-400">App Key:</span>
+                    <span className="text-gray-500 dark:text-gray-400">Channel:</span>
                     <span className="text-gray-900 dark:text-white font-mono text-xs truncate ml-2">
-                      {shop.app.appKey}
+                      {shop.app.channel}
                     </span>
                   </div>
                   <div className="flex justify-between items-center">
@@ -619,7 +619,7 @@ export default function Shops() {
                             <span className="font-medium">App:</span> {shop.app.appName || 'N/A'}
                           </div>
                           <div className="text-gray-500 dark:text-gray-400 font-mono text-xs">
-                            Key: {shop.app.appKey?.substring(0, 12)}...
+                            Channel: {shop.app.channel}
                           </div>
                           <div className="flex items-center">
                             <span className="text-gray-500 dark:text-gray-400 text-xs mr-2">Secret:</span>
@@ -636,7 +636,7 @@ export default function Shops() {
                         </div>
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-900 dark:text-white">
-                        {shop.country}
+                        {shop.region}
                       </td>
                       <td className="px-6 py-4">
                         {getStatusBadge(shop.status)}
@@ -1004,7 +1004,7 @@ export default function Shops() {
             <div>
               <Label>Quốc gia</Label>
               <div className="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
-                {selectedShop.country}
+                {selectedShop.region}
               </div>
             </div>
             <div>
@@ -1017,8 +1017,8 @@ export default function Shops() {
               <Label>Thông tin ứng dụng</Label>
               <div className="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg space-y-2 vietnamese-text">
                 <div><strong>App Name:</strong> {selectedShop.app.appName}</div>
-                <div><strong>App ID:</strong> <span className="font-mono">{selectedShop.app.appId}</span></div>
-                <div><strong>App Key:</strong> <span className="font-mono">{selectedShop.app.appKey}</span></div>
+                <div><strong>App ID:</strong> <span className="font-mono">{selectedShop.app.id}</span></div>
+                <div><strong>Channel:</strong> <span className="font-mono">{selectedShop.app.channel}</span></div>
                 <div><strong>App Secret:</strong> <span className="font-mono">{selectedShop.app.appSecret}</span></div>
               </div>
             </div>

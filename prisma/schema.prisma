@@ -176,8 +176,8 @@ model Product {
   
   // Channel and shop information - make optional for migration
   channel                    Channel? // Which channel this product belongs to
-  shopId                     String
-  shop                       ShopAuthorization @relation(fields: [shopId], references: [id])
+  shopId                     String? @db.ObjectId
+  shop                       ShopAuthorization? @relation(fields: [shopId], references: [id])
 
   // Universal product fields
   title                      String

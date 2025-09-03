@@ -13,12 +13,12 @@ export async function GET(req: NextRequest) {
 
         if (!shop_id || !order_id ) {
             return NextResponse.json(
-                { error: "Missing required fields: shop_id, access_token, cipher" },
+                { error: "Missing required fields: shop_id, order_id" },
                 { status: 400 }
             );
         }
 
-        // Lấy thông tin shop và app
+        // Get shop and app info using unified schema
         const credentials = await prisma.shopAuthorization.findUnique({
             where: {
                 shopId: shop_id,
@@ -32,9 +32,28 @@ export async function GET(req: NextRequest) {
             return NextResponse.json({ error: "Shop not found" }, { status: 404 });
         }
 
+        // Ensure this is a TikTok shop
+        if (credentials.app?.channel !== 'TIKTOK') {
+            return NextResponse.json({ error: "Not a TikTok shop" }, { status: 400 });
+        }
+
         const app_key = credentials.app.appKey;
         const app_secret = credentials.app.appSecret;
         const baseUrl = process.env.TIKTOK_BASE_URL;
+
+        // Extract shopCipher from channelData
+        let shopCipher: string | undefined = credentials.shopCipher ?? undefined; // Legacy field
+        if (credentials.channelData) {
+            try {
+                const channelData = JSON.parse(credentials.channelData);
+                shopCipher = channelData.shopCipher ?? shopCipher;
+            } catch (error) {
+                console.warn('Failed to parse channelData, using legacy shopCipher');
+            }
+        }
+        if (shopCipher === null) {
+            shopCipher = undefined;
+        }
 
         const client = new TikTokShopNodeApiClient({
             config: {
@@ -43,12 +62,13 @@ export async function GET(req: NextRequest) {
                 app_secret: app_secret,
             },
         });
-        const result = await client.api.OrderV202407Api.OrdersOrderIdPriceDetailGet(order_id, credentials.accessToken, "application/json", credentials.shopCipher);
+        
+        const result = await client.api.OrderV202407Api.OrdersOrderIdPriceDetailGet(order_id!, credentials.accessToken, "application/json", shopCipher);
         console.log('response: ', JSON.stringify(result, null, 2));
 
         return NextResponse.json(result);
     } catch (err: any) {
-        console.error("Error getting orders:", err);
+        console.error("Error getting order price details:", err);
         return NextResponse.json({ error: err.message || "Internal error" }, { status: 500 });
     }
 }

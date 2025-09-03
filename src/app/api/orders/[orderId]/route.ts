@@ -22,7 +22,7 @@ export async function GET(
         }
 
         // First, find the order to check shop access
-        const orderCheck = await prisma.tikTokOrder.findUnique({
+        const orderCheck = await prisma.order.findUnique({
             where: { orderId },
             select: { shopId: true }
         });
@@ -51,7 +51,7 @@ export async function GET(
         }
 
         // Fetch all order data fields for detailed view
-        const order = await prisma.tikTokOrder.findUnique({
+        const order = await prisma.order.findUnique({
             where: { orderId },
             include: {
                 lineItems: {
@@ -62,22 +62,11 @@ export async function GET(
                         productName: true,
                         skuId: true,
                         skuName: true,
-                        skuType: true,
                         sellerSku: true,
-                        skuImage: true,
                         currency: true,
                         originalPrice: true,
                         salePrice: true,
-                        sellerDiscount: true,
-                        platformDiscount: true,
-                        displayStatus: true,
-                        isGift: true,
-                        packageId: true,
-                        packageStatus: true,
-                        shippingProviderId: true,
-                        shippingProviderName: true,
-                        trackingNumber: true,
-                        rtsTime: true,
+                        channelData: true, // TikTok-specific data as JSON
                         createdAt: true,
                         updatedAt: true,
                     }
@@ -86,17 +75,10 @@ export async function GET(
                     select: {
                         id: true,
                         currency: true,
-                        originalTotalProductPrice: true,
-                        originalShippingFee: true,
-                        subTotal: true,
                         totalAmount: true,
+                        subTotal: true,
                         tax: true,
-                        sellerDiscount: true,
-                        platformDiscount: true,
-                        shippingFee: true,
-                        shippingFeeCofundedDiscount: true,
-                        shippingFeePlatformDiscount: true,
-                        shippingFeeSellerDiscount: true,
+                        channelData: true, // TikTok-specific payment data as JSON
                         createdAt: true,
                         updatedAt: true,
                     }
@@ -119,6 +101,7 @@ export async function GET(
                     select: {
                         id: true,
                         packageId: true,
+                        channelData: true, // TikTok-specific package data as JSON
                         createdAt: true,
                         updatedAt: true,
                     }
@@ -128,7 +111,7 @@ export async function GET(
                         id: true,
                         shopId: true,
                         shopName: true,
-                        shopCipher: true,
+                        channelData: true, // Contains shopCipher and region
                         accessToken: true,
                         refreshToken: true,
                         status: true,
@@ -139,6 +122,7 @@ export async function GET(
                                 id: true,
                                 appName: true,
                                 appKey: true,
+                                channel: true,
                                 isActive: true,
                             }
                         }
@@ -166,3 +150,4 @@ export async function GET(
         await prisma.$disconnect();
     }
 }
+       

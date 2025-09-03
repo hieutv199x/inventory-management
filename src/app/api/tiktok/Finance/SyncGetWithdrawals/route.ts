@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { TikTokShopNodeApiClient } from "@/nodejs_sdk";
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, Channel } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
@@ -19,7 +19,10 @@ export async function GET(request: NextRequest) {
 
     // Lấy thông tin shop và app
     const shops = await prisma.shopAuthorization.findMany({
-      where: { status: "ACTIVE" },
+      where: { 
+        status: "ACTIVE",
+        app: { channel: 'TIKTOK' } // Only get TikTok shops
+      },
       include: {
         app: true,
       },
@@ -30,9 +33,25 @@ export async function GET(request: NextRequest) {
 
     for (const shop of shops) {
       try {
+        // Extract shopCipher from channelData
+        let shopCipher = shop.shopCipher; // Legacy field
+        if (shop.channelData) {
+          try {
+            const channelData = JSON.parse(shop.channelData);
+            shopCipher = channelData.shopCipher || shopCipher;
+          } catch (error) {
+            console.warn(`Failed to parse channelData for shop ${shop.shopId}, using legacy shopCipher`);
+          }
+        }
+
+        if (!shop.app) {
+          console.error(`Missing app information for shop ${shop.shopId}`);
+          continue;
+        }
+
         const credentials = {
           accessToken: shop.accessToken,
-          shopCipher: shop.shopCipher,
+          shopCipher: shopCipher,
           app: {
             appKey: shop.app.appKey,
             appSecret: shop.app.appSecret,
@@ -57,7 +76,7 @@ export async function GET(request: NextRequest) {
         console.log(`Fetched ${allWithdrawals.length} withdrawals for shop ${shop.shopId}`);
 
         // Sync withdrawals in batches
-        const syncedCount = await syncWithdrawalsToDatabase(allWithdrawals, shop.shopId);
+        const syncedCount = await syncWithdrawalsToDatabase(allWithdrawals, shop.id); // Use ObjectId instead of shopId
         totalWithdrawalsSynced += syncedCount;
 
         shopResults.push({
@@ -154,32 +173,32 @@ async function fetchAllWithdrawals(client: any, credentials: any, statementTimeG
   return allWithdrawals;
 }
 
-async function syncWithdrawalsToDatabase(withdrawals: any[], shopId: string) {
+async function syncWithdrawalsToDatabase(withdrawals: any[], shopObjectId: string) {
   const BATCH_SIZE = 100;
   let totalSynced = 0;
 
-  console.log(`Starting sync of ${withdrawals.length} withdrawals for shop ${shopId} in batches of ${BATCH_SIZE}`);
+  console.log(`Starting sync of ${withdrawals.length} withdrawals for shop ${shopObjectId} in batches of ${BATCH_SIZE}`);
 
   // Process withdrawals in batches
   for (let i = 0; i < withdrawals.length; i += BATCH_SIZE) {
     const batch = withdrawals.slice(i, i + BATCH_SIZE);
-    const syncedCount = await processWithdrawalBatch(batch, shopId);
+    const syncedCount = await processWithdrawalBatch(batch, shopObjectId);
     totalSynced += syncedCount;
-    console.log(`Processed ${Math.min(i + BATCH_SIZE, withdrawals.length)} of ${withdrawals.length} withdrawals for shop ${shopId}. Synced: ${syncedCount}`);
+    console.log(`Processed ${Math.min(i + BATCH_SIZE, withdrawals.length)} of ${withdrawals.length} withdrawals for shop ${shopObjectId}. Synced: ${syncedCount}`);
   }
 
-  console.log(`Withdrawal sync completed for shop ${shopId}. Total synced: ${totalSynced}`);
+  console.log(`Withdrawal sync completed for shop ${shopObjectId}. Total synced: ${totalSynced}`);
   return totalSynced;
 }
 
-async function processWithdrawalBatch(withdrawals: any[], shopId: string) {
+async function processWithdrawalBatch(withdrawals: any[], shopObjectId: string) {
   let syncedCount = 0;
 
   try {
     await prisma.$transaction(async (tx) => {
       // Get existing withdrawal IDs to avoid duplicates
       const withdrawalIds = withdrawals.map(w => w.id).filter(Boolean);
-      const existingWithdrawals = await tx.tikTokWithdrawal.findMany({
+      const existingWithdrawals = await tx.withdrawal.findMany({
         where: { withdrawalId: { in: withdrawalIds } },
         select: { withdrawalId: true }
       });
@@ -195,18 +214,18 @@ async function processWithdrawalBatch(withdrawals: any[], shopId: string) {
         // Prepare batch data
         const withdrawalData = newWithdrawals.map(withdrawal => ({
           withdrawalId: withdrawal.id!,
+          channel: Channel.TIKTOK, // Add channel field
           createTime: withdrawal.createTime ?? 0,
           status: withdrawal.status ?? "",
           amount: parseFloat(withdrawal.amount ?? "0"),
           currency: withdrawal.currency ?? "",
           type: withdrawal.type ?? "",
-          createdAt: new Date(),
-          updatedAt: new Date(),
-          shopId: shopId,
+          channelData: JSON.stringify({}), // Store TikTok-specific data as JSON (empty for now)
+          shopId: shopObjectId, // Use ObjectId reference
         }));
 
         // Batch create withdrawals
-        await tx.tikTokWithdrawal.createMany({
+        await tx.withdrawal.createMany({
           data: withdrawalData,
         });
 
@@ -218,7 +237,7 @@ async function processWithdrawalBatch(withdrawals: any[], shopId: string) {
     });
 
   } catch (error) {
-    console.error(`Error processing withdrawal batch for shop ${shopId}:`, error);
+    console.error(`Error processing withdrawal batch for shop ${shopObjectId}:`, error);
   }
 
   return syncedCount;

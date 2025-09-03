@@ -1,6 +1,6 @@
 import {NextRequest, NextResponse} from "next/server";
 import {TikTokShopNodeApiClient} from "@/nodejs_sdk";
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, Channel } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
@@ -19,7 +19,10 @@ export async function GET(request: NextRequest) {
         }
 
         // Build where clause for shop filtering
-        const whereClause: any = { status: "ACTIVE" };
+        const whereClause: any = { 
+            status: "ACTIVE",
+            app: { channel: 'TIKTOK' } // Only get TikTok shops
+        };
         
         // Add shopId filter if provided
         if (shopId) {
@@ -42,9 +45,30 @@ export async function GET(request: NextRequest) {
 
         for (const shop of shops) {
             try {
+                // Extract shopCipher from channelData
+                let shopCipher = shop.shopCipher; // Legacy field
+                if (shop.channelData) {
+                    try {
+                        const channelData = JSON.parse(shop.channelData);
+                        shopCipher = channelData.shopCipher || shopCipher;
+                    } catch (error) {
+                        console.warn(`Failed to parse channelData for shop ${shop.shopId}, using legacy shopCipher`);
+                    }
+                }
+
+                if (!shop.app) {
+                    console.error(`Missing app information for shop ${shop.shopId}`);
+                    shopResults.push({
+                        shopId: shop.shopId,
+                        shopName: shop.shopName,
+                        error: 'Missing app information'
+                    });
+                    continue;
+                }
+
                 const credentials = {
                     accessToken: shop.accessToken,
-                    shopCipher: shop.shopCipher,
+                    shopCipher: shopCipher,
                     app: {
                         appKey: shop.app.appKey,
                         appSecret: shop.app.appSecret,
@@ -69,7 +93,7 @@ export async function GET(request: NextRequest) {
                 console.log(`Fetched ${allStatements.length} statements for shop ${shop.shopId}`);
 
                 // Sync statements in batches
-                const syncedCount = await syncStatementsToDatabase(allStatements, shop.shopId);
+                const syncedCount = await syncStatementsToDatabase(allStatements, shop.id); // Use ObjectId instead of shopId
                 totalStatementsSynced += syncedCount;
 
                 shopResults.push({
@@ -172,32 +196,32 @@ async function fetchAllStatements(client: any, credentials: any, statementTimeGe
     return allStatements;
 }
 
-async function syncStatementsToDatabase(statements: any[], shopId: string) {
+async function syncStatementsToDatabase(statements: any[], shopObjectId: string) {
     const BATCH_SIZE = 100;
     let totalSynced = 0;
 
-    console.log(`Starting sync of ${statements.length} statements for shop ${shopId} in batches of ${BATCH_SIZE}`);
+    console.log(`Starting sync of ${statements.length} statements for shop ${shopObjectId} in batches of ${BATCH_SIZE}`);
 
     // Process statements in batches
     for (let i = 0; i < statements.length; i += BATCH_SIZE) {
         const batch = statements.slice(i, i + BATCH_SIZE);
-        const syncedCount = await processStatementBatch(batch, shopId);
+        const syncedCount = await processStatementBatch(batch, shopObjectId);
         totalSynced += syncedCount;
-        console.log(`Processed ${Math.min(i + BATCH_SIZE, statements.length)} of ${statements.length} statements for shop ${shopId}. Synced: ${syncedCount}`);
+        console.log(`Processed ${Math.min(i + BATCH_SIZE, statements.length)} of ${statements.length} statements for shop ${shopObjectId}. Synced: ${syncedCount}`);
     }
 
-    console.log(`Statement sync completed for shop ${shopId}. Total synced: ${totalSynced}`);
+    console.log(`Statement sync completed for shop ${shopObjectId}. Total synced: ${totalSynced}`);
     return totalSynced;
 }
 
-async function processStatementBatch(statements: any[], shopId: string) {
+async function processStatementBatch(statements: any[], shopObjectId: string) {
     let syncedCount = 0;
 
     try {
         await prisma.$transaction(async (tx) => {
             // Get existing statement IDs
             const statementIds = statements.map(s => s.id).filter(Boolean);
-            const existingStatements = await tx.tikTokStatement.findMany({
+            const existingStatements = await tx.statement.findMany({
                 where: { statementId: { in: statementIds } },
                 select: { statementId: true }
             });
@@ -211,11 +235,25 @@ async function processStatementBatch(statements: any[], shopId: string) {
             for (const statement of statements) {
                 if (!statement.id) continue;
 
+                // Prepare channelData for TikTok-specific fields
+                const channelData = {
+                    revenueAmount: statement.revenueAmount,
+                    feeAmount: statement.feeAmount,
+                    adjustmentAmount: statement.adjustmentAmount,
+                    netSalesAmount: statement.netSalesAmount,
+                    shippingCostAmount: statement.shippingCostAmount,
+                };
+
                 const statementData = {
-                    ...statement,
-                    shopId: shopId,
                     statementId: statement.id,
-                    statementTime: statement.statementTime ?? 0
+                    channel: Channel.TIKTOK, // Use enum value
+                    statementTime: statement.statementTime ?? 0,
+                    settlementAmount: statement.settlementAmount,
+                    currency: statement.currency,
+                    channelData: JSON.stringify(channelData), // Store TikTok-specific data as JSON
+                    paymentStatus: statement.paymentStatus,
+                    paymentId: statement.paymentId,
+                    shopId: shopObjectId, // Use ObjectId reference
                 };
 
                 if (existingStatementIds.has(statement.id)) {
@@ -227,7 +265,7 @@ async function processStatementBatch(statements: any[], shopId: string) {
 
             // Batch create new statements
             if (newStatements.length > 0) {
-                await tx.tikTokStatement.createMany({
+                await tx.statement.createMany({
                     data: newStatements,
                 });
                 syncedCount += newStatements.length;
@@ -236,7 +274,7 @@ async function processStatementBatch(statements: any[], shopId: string) {
             // Batch update existing statements
             if (updateStatements.length > 0) {
                 const updatePromises = updateStatements.map(statement => 
-                    tx.tikTokStatement.update({
+                    tx.statement.update({
                         where: { statementId: statement.statementId },
                         data: statement,
                     })
@@ -251,7 +289,7 @@ async function processStatementBatch(statements: any[], shopId: string) {
         });
 
     } catch (error) {
-        console.error(`Error processing statement batch for shop ${shopId}:`, error);
+        console.error(`Error processing statement batch for shop ${shopObjectId}:`, error);
     }
 
     return syncedCount;

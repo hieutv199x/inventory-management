@@ -13,9 +13,10 @@ export async function GET(
         const { conversationId } = params;
 
         // Find conversation and check access
-        const conversation = await prisma.tikTokConversation.findFirst({
+        const conversation = await prisma.conversation.findFirst({
             where: {
                 conversationId: conversationId,
+                channel: 'TIKTOK', // Add channel filter for TikTok conversations
                 ...(isAdmin ? {} : { shopId: { in: accessibleShopIds } })
             },
             include: {
@@ -37,7 +38,7 @@ export async function GET(
         }
 
         // Get messages for this conversation
-        const messages = await prisma.tikTokConversationMessage.findMany({
+        const messages = await prisma.conversationMessage.findMany({
             where: { conversationId: conversation.id },
             include: {
                 sender: true

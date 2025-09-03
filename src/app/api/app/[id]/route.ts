@@ -19,8 +19,8 @@ export async function PUT(
 
     const { appSecret } = await request.json();
     
-    // Find shop by name in ShopAuthorization
-    const app = await prisma.tikTokApp.findUnique({
+    // Find app by ID in ChannelApp
+    const app = await prisma.channelApp.findUnique({
       where: { id: params.id }
     });
 
@@ -50,7 +50,7 @@ export async function PUT(
           { status: 403 }
       );
     }
-    const updatedApp = await prisma.tikTokApp.update({
+    const updatedApp = await prisma.channelApp.update({
       where: { id: params.id },
       data: { appSecret }
     });
@@ -94,8 +94,8 @@ export async function DELETE(
       );
     }
 
-    // Get the bank before deletion for history
-    const app = await prisma.tikTokApp.findUnique({
+    // Get the app before deletion for history
+    const app = await prisma.channelApp.findUnique({
       where: { id: params.id }
     });
 
@@ -106,12 +106,13 @@ export async function DELETE(
       );
     }
 
-    // Delete bank account
-    await prisma.tikTokApp.update({
+    // Deactivate app
+    await prisma.channelApp.update({
       where: { id: params.id },
       data: { isActive: false }
     });
 
+    // Deactivate all associated shop authorizations
     await prisma.shopAuthorization.updateMany({
       where: { appId: params.id },
       data: { status: 'INACTIVE' }

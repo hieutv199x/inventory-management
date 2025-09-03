@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
             );
         }
 
-        // Lấy thông tin shop và app
+        // Get shop and app info using unified schema
         const credentials = await prisma.shopAuthorization.findUnique({
             where: {
                 shopId: shop_id,
@@ -51,9 +51,25 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: "Shop not found or inactive" }, { status: 404 });
         }
 
+        // Ensure this is a TikTok shop
+        if (credentials.app?.channel !== 'TIKTOK') {
+            return NextResponse.json({ error: "Not a TikTok shop" }, { status: 400 });
+        }
+
         const app_key = credentials.app.appKey;
         const app_secret = credentials.app.appSecret;
         const baseUrl = process.env.TIKTOK_BASE_URL;
+
+        // Extract shopCipher from channelData
+        let shopCipher: string | undefined = credentials.shopCipher ?? undefined; // Legacy field
+        if (credentials.channelData) {
+            try {
+                const channelData = JSON.parse(credentials.channelData);
+                shopCipher = channelData.shopCipher ?? shopCipher ?? undefined;
+            } catch (error) {
+                console.warn('Failed to parse channelData, using legacy shopCipher');
+            }
+        }
 
         // Tạo body request
         const body = new Order202309GetOrderListRequestBody();
@@ -86,7 +102,7 @@ export async function POST(req: NextRequest) {
             sort_direction,
             "",
             sort_by,
-            credentials.shopCipher,
+            shopCipher, // Use extracted shopCipher
             body
         );
 
@@ -107,7 +123,7 @@ export async function POST(req: NextRequest) {
                         sort_direction,
                         nextPageToken, // Use the token for next page
                         sort_by,
-                        credentials.shopCipher,
+                        shopCipher, // Use extracted shopCipher
                         body
                     );
 
@@ -129,7 +145,7 @@ export async function POST(req: NextRequest) {
             }
 
             console.log(`Total orders to sync: ${allOrders.length}`);
-            await syncOrdersToDatabase(allOrders, shop_id);
+            await syncOrdersToDatabase(allOrders, credentials.id); // Use credentials.id (ObjectId) instead of shop_id
             
             // Return modified result with total count information
             return NextResponse.json({
@@ -172,7 +188,7 @@ async function processBatch(orders: any[], shopId: string) {
         await prisma.$transaction(async (tx) => {
             // Collect existing order IDs to determine which are new vs updates
             const orderIds = orders.map(o => o.id);
-            const existingOrders = await tx.tikTokOrder.findMany({
+            const existingOrders = await tx.order.findMany({ // Use unified Order model
                 where: { orderId: { in: orderIds } },
                 select: { id: true, orderId: true }
             });
@@ -184,28 +200,22 @@ async function processBatch(orders: any[], shopId: string) {
             // Separate new orders from updates
             for (const order of orders) {
                 const createTime = order.createTime || Math.floor(Date.now() / 1000);
-                const orderData = {
-                    orderId: order.id,
-                    buyerEmail: order.buyerEmail || "",
-                    buyerMessage: order.buyerMessage || "",
+                
+                // Prepare TikTok-specific data for channelData
+                const channelData = {
                     cancelOrderSlaTime: order.cancelOrderSlaTime,
                     collectionTime: order.collectionTime,
                     commercePlatform: order.commercePlatform,
-                    createTime: createTime,
-                    updateTime: order.updateTime,
                     deliveryOptionId: order.deliveryOptionId,
                     deliveryOptionName: order.deliveryOptionName,
-                    deliveryTime: order.deliveryTime,
                     deliveryType: order.deliveryType,
                     fulfillmentType: order.fulfillmentType,
-                    status: order.status || "UNKNOWN",
                     hasUpdatedRecipientAddress: order.hasUpdatedRecipientAddress || false,
                     isCod: order.isCod || false,
                     isOnHoldOrder: order.isOnHoldOrder || false,
                     isReplacementOrder: order.isReplacementOrder || false,
                     isSampleOrder: order.isSampleOrder || false,
                     orderType: order.orderType,
-                    paidTime: order.paidTime,
                     paymentMethodName: order.paymentMethodName,
                     shippingProvider: order.shippingProvider,
                     shippingProviderId: order.shippingProviderId,
@@ -215,8 +225,23 @@ async function processBatch(orders: any[], shopId: string) {
                     rtsTime: order.rtsTime,
                     ttsSlaTime: order.ttsSlaTime,
                     userId: order.userId,
-                    warehouseId: order.warehouseId,
-                    shopId: shopId,
+                    warehouseId: order.warehouseId
+                };
+
+                const orderData = {
+                    orderId: order.id,
+                    channel: 'TIKTOK' as any, // Add channel field and cast to 'any' or 'Channel'
+                    buyerEmail: order.buyerEmail || "",
+                    buyerMessage: order.buyerMessage || "",
+                    createTime: createTime,
+                    updateTime: order.updateTime,
+                    status: order.status || "UNKNOWN",
+                    totalAmount: order.payment?.totalAmount || null,
+                    currency: order.payment?.currency || null,
+                    paidTime: order.paidTime,
+                    deliveryTime: order.deliveryTime,
+                    channelData: JSON.stringify(channelData), // Store TikTok-specific fields
+                    shopId: shopId, // This should be the ObjectId from ShopAuthorization
                 };
 
                 if (existingOrderMap.has(order.id)) {
@@ -231,7 +256,7 @@ async function processBatch(orders: any[], shopId: string) {
 
             // Batch create new orders
             if (newOrders.length > 0) {
-                await tx.tikTokOrder.createMany({
+                await tx.order.createMany({ // Use unified Order model
                     data: newOrders
                 });
             }
@@ -239,17 +264,17 @@ async function processBatch(orders: any[], shopId: string) {
             // Batch update existing orders
             if (updateOrders.length > 0) {
                 const updatePromises = updateOrders.map(order => 
-                    tx.tikTokOrder.update({
+                    tx.order.update({ // Use unified Order model
                         where: { id: order.dbId },
                         data: {
                             status: order.status,
                             updateTime: order.updateTime,
                             deliveryTime: order.deliveryTime,
                             paidTime: order.paidTime,
-                            trackingNumber: order.trackingNumber,
+                            totalAmount: order.totalAmount,
+                            currency: order.currency,
                             buyerMessage: order.buyerMessage,
-                            paymentMethodName: order.paymentMethodName,
-                            shippingProvider: order.shippingProvider,
+                            channelData: order.channelData,
                         }
                     })
                 );
@@ -257,13 +282,13 @@ async function processBatch(orders: any[], shopId: string) {
             }
 
             // Get all order IDs after insert/update
-            const allOrders = await tx.tikTokOrder.findMany({
+            const allOrders = await tx.order.findMany({ // Use unified Order model
                 where: { orderId: { in: orderIds } },
                 select: { id: true, orderId: true }
             });
             const orderIdMap = new Map(allOrders.map(o => [o.orderId, o.id]));
 
-            // Process line items in batches
+            // Process line items, payments, addresses, and packages using unified models
             const allLineItems = [];
             const allPayments = [];
             const allAddresses = [];
@@ -273,21 +298,12 @@ async function processBatch(orders: any[], shopId: string) {
                 const dbOrderId = orderIdMap.get(order.id);
                 if (!dbOrderId) continue;
 
-                // Collect line items
+                // Collect line items for unified OrderLineItem model
                 if (order.lineItems) {
                     for (const item of order.lineItems) {
-                        allLineItems.push({
-                            lineItemId: item.id,
-                            productId: item.productId,
-                            productName: item.productName,
-                            skuId: item.skuId,
-                            skuName: item.skuName || "",
+                        const itemChannelData = {
                             skuType: item.skuType,
-                            sellerSku: item.sellerSku || "",
                             skuImage: item.skuImage,
-                            currency: item.currency,
-                            originalPrice: item.originalPrice,
-                            salePrice: item.salePrice,
                             sellerDiscount: item.sellerDiscount,
                             platformDiscount: item.platformDiscount,
                             displayStatus: item.displayStatus,
@@ -297,134 +313,155 @@ async function processBatch(orders: any[], shopId: string) {
                             shippingProviderId: item.shippingProviderId,
                             shippingProviderName: item.shippingProviderName,
                             trackingNumber: item.trackingNumber,
-                            rtsTime: item.rtsTime,
+                            rtsTime: item.rtsTime
+                        };
+
+                        allLineItems.push({
+                            lineItemId: item.id,
+                            productId: item.productId,
+                            productName: item.productName,
+                            skuId: item.skuId,
+                            skuName: item.skuName || "",
+                            sellerSku: item.sellerSku || "",
+                            currency: item.currency,
+                            originalPrice: item.originalPrice,
+                            salePrice: item.salePrice,
+                            channelData: JSON.stringify(itemChannelData),
                             orderId: dbOrderId,
                         });
                     }
                 }
 
-                // Collect payments
+                // Collect payments for unified OrderPayment model
                 if (order.payment) {
-                    allPayments.push({
-                        orderId: dbOrderId,
-                        currency: order.payment.currency,
+                    const paymentChannelData = {
                         originalTotalProductPrice: order.payment.originalTotalProductPrice,
                         originalShippingFee: order.payment.originalShippingFee,
-                        subTotal: order.payment.subTotal,
-                        totalAmount: order.payment.totalAmount,
-                        tax: order.payment.tax,
                         sellerDiscount: order.payment.sellerDiscount,
                         platformDiscount: order.payment.platformDiscount,
                         shippingFee: order.payment.shippingFee,
                         shippingFeeCofundedDiscount: order.payment.shippingFeeCofundedDiscount,
                         shippingFeePlatformDiscount: order.payment.shippingFeePlatformDiscount,
                         shippingFeeSellerDiscount: order.payment.shippingFeeSellerDiscount,
+                    };
+
+                    allPayments.push({
+                        orderId: dbOrderId,
+                        currency: order.payment.currency,
+                        totalAmount: order.payment.totalAmount,
+                        subTotal: order.payment.subTotal,
+                        tax: order.payment.tax,
+                        channelData: JSON.stringify(paymentChannelData),
                     });
                 }
 
-                // Collect addresses
+                // Collect addresses for unified OrderRecipientAddress model
                 if (order.recipientAddress) {
-                    allAddresses.push({
-                        orderId: dbOrderId,
+                    const addressChannelData = {
                         addressDetail: order.recipientAddress.addressDetail,
                         addressLine1: order.recipientAddress.addressLine1,
                         addressLine2: order.recipientAddress.addressLine2 || "",
                         addressLine3: order.recipientAddress.addressLine3 || "",
                         addressLine4: order.recipientAddress.addressLine4 || "",
-                        fullAddress: order.recipientAddress.fullAddress,
                         firstName: order.recipientAddress.firstName || "",
                         firstNameLocalScript: order.recipientAddress.firstNameLocalScript || "",
                         lastName: order.recipientAddress.lastName || "",
                         lastNameLocalScript: order.recipientAddress.lastNameLocalScript || "",
+                        regionCode: order.recipientAddress.regionCode,
+                        districtInfo: order.recipientAddress.districtInfo || []
+                    };
+
+                    allAddresses.push({
+                        orderId: dbOrderId,
+                        fullAddress: order.recipientAddress.fullAddress,
                         name: order.recipientAddress.name,
                         phoneNumber: order.recipientAddress.phoneNumber,
                         postalCode: order.recipientAddress.postalCode || "",
-                        regionCode: order.recipientAddress.regionCode,
-                        districtInfo: order.recipientAddress.districtInfo || [],
+                        channelData: JSON.stringify(addressChannelData),
                     });
                 }
 
-                // Collect packages
+                // Collect packages for unified OrderPackage model
                 if (order.packages) {
                     for (const pkg of order.packages) {
                         allPackages.push({
                             orderId: dbOrderId,
                             packageId: pkg.id,
+                            channelData: JSON.stringify({}), // Can store package-specific data if needed
                         });
                     }
                 }
             }
 
-            // Batch upsert line items
+            // Batch upsert using unified models
             if (allLineItems.length > 0) {
-                // Delete existing line items for these orders first
-                await tx.tikTokOrderLineItem.deleteMany({
+                await tx.orderLineItem.deleteMany({ // Use unified model
                     where: { orderId: { in: Array.from(orderIdMap.values()) } }
                 });
-                // Insert all line items
-                await tx.tikTokOrderLineItem.createMany({
+                await tx.orderLineItem.createMany({ // Use unified model
                     data: allLineItems
                 });
             }
 
-            // Batch upsert payments
             if (allPayments.length > 0) {
-                await tx.tikTokOrderPayment.deleteMany({
+                await tx.orderPayment.deleteMany({ // Use unified model
                     where: { orderId: { in: Array.from(orderIdMap.values()) } }
                 });
-                await tx.tikTokOrderPayment.createMany({
+                await tx.orderPayment.createMany({ // Use unified model
                     data: allPayments
                 });
             }
 
-            // Batch upsert addresses and districts
             if (allAddresses.length > 0) {
-                // Delete existing addresses first
-                await tx.tikTokOrderRecipientAddress.deleteMany({
+                await tx.orderRecipientAddress.deleteMany({ // Use unified model
                     where: { orderId: { in: Array.from(orderIdMap.values()) } }
                 });
 
-                // Insert new addresses
-                const addressInserts = allAddresses.map(({ districtInfo, ...address }) => address);
-                await tx.tikTokOrderRecipientAddress.createMany({
+                const addressInserts = allAddresses.map(({ channelData, ...address }) => ({
+                    ...address,
+                    channelData
+                }));
+                await tx.orderRecipientAddress.createMany({ // Use unified model
                     data: addressInserts
                 });
 
-                // Handle district info
-                const newAddresses = await tx.tikTokOrderRecipientAddress.findMany({
+                // Handle district info for unified AddressDistrict model
+                const newAddresses = await tx.orderRecipientAddress.findMany({ // Use unified model
                     where: { orderId: { in: Array.from(orderIdMap.values()) } },
-                    select: { id: true, orderId: true }
+                    select: { id: true, orderId: true, channelData: true }
                 });
-                const addressIdMap = new Map(newAddresses.map(a => [a.orderId, a.id]));
 
                 const allDistricts = [];
-                for (const address of allAddresses) {
-                    const addressId = addressIdMap.get(address.orderId);
-                    if (addressId && address.districtInfo.length > 0) {
-                        for (const district of address.districtInfo) {
+                for (const address of newAddresses) {
+                    try {
+                        const channelData = JSON.parse(address.channelData || '{}');
+                        const districtInfo = channelData.districtInfo || [];
+                        
+                        for (const district of districtInfo) {
                             allDistricts.push({
                                 addressLevel: district.addressLevel,
                                 addressLevelName: district.addressLevelName,
                                 addressName: district.addressName,
-                                recipientAddressId: addressId,
+                                recipientAddressId: address.id,
                             });
                         }
+                    } catch (error) {
+                        console.warn('Failed to parse address channelData:', error);
                     }
                 }
 
                 if (allDistricts.length > 0) {
-                    await tx.tikTokAddressDistrict.createMany({
+                    await tx.addressDistrict.createMany({ // Use unified model
                         data: allDistricts
                     });
                 }
             }
 
-            // Batch upsert packages
             if (allPackages.length > 0) {
-                await tx.tikTokOrderPackage.deleteMany({
+                await tx.orderPackage.deleteMany({ // Use unified model
                     where: { orderId: { in: Array.from(orderIdMap.values()) } }
                 });
-                await tx.tikTokOrderPackage.createMany({
+                await tx.orderPackage.createMany({ // Use unified model
                     data: allPackages
                 });
             }

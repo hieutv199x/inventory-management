@@ -43,8 +43,8 @@ export async function POST(req: NextRequest) {
         const client = new TikTokShopNodeApiClient({
             config: {
                 basePath: process.env.TIKTOK_BASE_URL,
-                app_key: credentials.app.appKey,
-                app_secret: credentials.app.appSecret,
+                app_key: credentials.app?.appKey,
+                app_secret: credentials.app?.appSecret,
             },
         });
 
