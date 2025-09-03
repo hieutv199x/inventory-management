@@ -272,8 +272,6 @@ model ProductImage {
   urls       String[]
   thumbUrls  String[]
   product    Product  @relation(fields: [productId], references: [id])
-
-  @@unique([productId, uri])
 }
 
 model ProductAttribute {

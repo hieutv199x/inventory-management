@@ -121,38 +121,30 @@ async function syncProductsToDatabase(products: any[], shopObjectId: string, cli
     const BATCH_SIZE = 10; // Reduce batch size to avoid timeout issues
     let totalCreated = 0;
 
-    console.log(`🚀 Starting sync of ${products.length} products in batches of ${BATCH_SIZE}`);
-    console.log(`🏪 Using shop ObjectId: ${shopObjectId}`);
-
     // Verify shop exists before starting
     try {
         const shop = await prisma.shopAuthorization.findUnique({
             where: { id: shopObjectId }
         });
         if (!shop) {
-            console.error(`❌ Shop with ObjectId ${shopObjectId} not found!`);
             return 0;
         }
         console.log(`✅ Shop found: ${shop.shopName || shop.shopId}`);
     } catch (error) {
-        console.error(`❌ Error verifying shop:`, error);
         return 0;
     }
 
     // Process products in batches
     for (let i = 0; i < products.length; i += BATCH_SIZE) {
         const batch = products.slice(i, i + BATCH_SIZE);
-        console.log(`\n📦 Processing batch ${Math.floor(i / BATCH_SIZE) + 1} (products ${i + 1}-${Math.min(i + BATCH_SIZE, products.length)})`);
         
         const batchCreated = await processProductBatch(batch, shopObjectId, client, credentials);
         totalCreated += batchCreated;
-        console.log(`📊 Batch ${Math.floor(i / BATCH_SIZE) + 1} completed: ${batchCreated} created. Total so far: ${totalCreated}`);
         
         // Add delay between batches
         await new Promise(resolve => setTimeout(resolve, 200));
     }
 
-    console.log(`🏁 Product sync completed. Total created: ${totalCreated} out of ${products.length}`);
     return totalCreated;
 }
 
@@ -171,7 +163,6 @@ async function processProductBatch(products: any[], shopObjectId: string, client
                 // Check if product already exists
                 const existed = await prisma.product.findUnique({ where: { productId } });
                 if (existed) {
-                    console.log(`⏭️ Product ${productId} already exists, skipping...`);
                     continue;
                 }
 
@@ -185,20 +176,14 @@ async function processProductBatch(products: any[], shopObjectId: string, client
 
                 if (result.body.code === 0 && result.body.data) {
                     productDetails.push(result.body.data);
-                    console.log(`✅ Fetched details for product ${productId}`);
                 } else {
-                    console.warn(`⚠️ Failed to get details for product ${productId}: ${result.body.message}`);
                 }
 
                 // Add delay between detail requests
                 await new Promise(resolve => setTimeout(resolve, 50));
             } catch (error) {
-                console.error(`❌ Error fetching product detail for ${product.id}:`, error);
             }
         }
-
-        console.log(`📋 Processing ${productDetails.length} product details...`);
-
         // Process each product individually to avoid large transaction timeouts
         for (const productDetail of productDetails) {
             try {
@@ -220,7 +205,6 @@ async function processProductBatch(products: any[], shopObjectId: string, client
                                 name: productDetail.brand.name,
                             },
                         });
-                        console.log(`📦 Brand handled: ${brandRecord.id}`);
                     }
 
                     // Handle audit
@@ -234,7 +218,6 @@ async function processProductBatch(products: any[], shopObjectId: string, client
                                 suggestions: productDetail.audit.suggestions ?? [],
                             },
                         });
-                        console.log(`📝 Audit created: ${auditRecord.id}`);
                     }
 
                     // Create main product with updated schema
@@ -263,7 +246,6 @@ async function processProductBatch(products: any[], shopObjectId: string, client
                         }
                     });
 
-                    console.log(`✅ Product created: ${productRecord.id}`);
                     return productRecord;
                 }, {
                     maxWait: 15000,
@@ -274,7 +256,6 @@ async function processProductBatch(products: any[], shopObjectId: string, client
                     // Handle related data in separate operations to avoid large transactions
                     await handleProductRelatedData(productDetail, productCreated.id);
                     createdCount++;
-                    console.log(`✅ Product ${productId} completed successfully`);
                 }
 
             } catch (error) {
@@ -307,7 +288,6 @@ async function handleProductRelatedData(productDetail: any, productDbId: string)
                 await prisma.productImage.createMany({
                     data: imageData
                 });
-                console.log(`📸 Created ${imageData.length} images`);
             } catch (error) {
                 console.warn(`⚠️ Failed to create images:`, error);
             }
@@ -327,7 +307,6 @@ async function handleProductRelatedData(productDetail: any, productDbId: string)
                 await prisma.categoryChain.createMany({
                     data: categoryData
                 });
-                console.log(`🏷️ Created ${categoryData.length} categories`);
             } catch (error) {
                 console.warn(`⚠️ Failed to create categories:`, error);
             }
@@ -400,7 +379,6 @@ async function handleProductRelatedData(productDetail: any, productDbId: string)
                         unit: productDetail.packageDimensions.unit!,
                     }
                 });
-                console.log(`📐 Package dimensions created`);
             } catch (error) {
                 console.warn(`⚠️ Failed to create dimensions:`, error);
             }
@@ -420,7 +398,6 @@ async function handleProductRelatedData(productDetail: any, productDbId: string)
                         unit: productDetail.packageWeight.unit!,
                     }
                 });
-                console.log(`⚖️ Package weight created`);
             } catch (error) {
                 console.warn(`⚠️ Failed to create weight:`, error);
             }

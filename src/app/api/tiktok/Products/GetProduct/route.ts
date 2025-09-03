@@ -127,7 +127,7 @@ export async function GET(req: NextRequest) {
                 createTime: 'desc'
             }
         });
-        const uniqueShopIds = [...new Set(products.map((p) => p.shopId))];
+        const uniqueShopIds = [...new Set(products.map((p) => p.shopId))].filter((id): id is string => typeof id === 'string');
         const shopAuths = await prisma.shopAuthorization.findMany({
             where: { shopId: { in: uniqueShopIds } },
             select: {
@@ -140,7 +140,7 @@ export async function GET(req: NextRequest) {
 
         const resultWithShopName = products.map((p) => ({
             ...p,
-            shopName: shopMap[p.shopId] || null,
+            shopName: p.shopId ? shopMap[p.shopId] || null : null,
         }));
         console.log(resultWithShopName);
         return NextResponse.json(resultWithShopName);
