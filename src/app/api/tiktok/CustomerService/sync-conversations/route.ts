@@ -153,19 +153,34 @@ async function processConversationBatch(conversations: any[], shopId: string) {
     let syncedCount = 0;
 
     try {
+        // Get shop ObjectID for reference
+        const shopAuth = await prisma.shopAuthorization.findUnique({
+            where: { shopId: shopId }
+        });
+
+        if (!shopAuth) {
+            console.error(`Shop ${shopId} not found`);
+            return 0;
+        }
+
         await prisma.$transaction(async (tx) => {
             for (const conversation of conversations) {
                 try {
-                    // Upsert conversation
-                    const savedConversation = await tx.tikTokConversation.upsert({
+                    // Upsert conversation with updated schema
+                    const savedConversation = await tx.conversation.upsert({
                         where: { conversationId: conversation.id },
                         create: {
                             conversationId: conversation.id,
+                            channel: 'TIKTOK', // Add required channel field
                             participantCount: conversation.participant_count || 0,
                             canSendMessage: conversation.can_send_message || false,
                             unreadCount: conversation.unread_count || 0,
                             createTime: conversation.create_time || 0,
-                            shopId: shopId,
+                            shopId: shopAuth.id, // Use ObjectID reference
+                            // Store TikTok-specific data in channelData
+                            channelData: JSON.stringify({
+                                originalShopId: shopId
+                            })
                         },
                         update: {
                             participantCount: conversation.participant_count || 0,
@@ -177,22 +192,25 @@ async function processConversationBatch(conversations: any[], shopId: string) {
                     // Sync participants
                     if (conversation.participants) {
                         // Delete existing participants
-                        await tx.tikTokConversationParticipant.deleteMany({
+                        await tx.conversationParticipant.deleteMany({
                             where: { conversationId: savedConversation.id }
                         });
 
                         // Create new participants
                         const participantData = conversation.participants.map((participant: any) => ({
-                            imUserId: participant.im_user_id,
+                            participantId: participant.im_user_id,
                             userId: participant.user_id,
                             role: participant.role || '',
                             nickname: participant.nickname || '',
                             avatar: participant.avatar,
-                            buyerPlatform: participant.buyer_platform,
                             conversationId: savedConversation.id,
+                            // Store TikTok-specific data in channelData
+                            channelData: JSON.stringify({
+                                buyerPlatform: participant.buyer_platform
+                            })
                         }));
 
-                        await tx.tikTokConversationParticipant.createMany({
+                        await tx.conversationParticipant.createMany({
                             data: participantData,
                         });
                     }
@@ -204,16 +222,16 @@ async function processConversationBatch(conversations: any[], shopId: string) {
                         // Find sender participant
                         let senderId = null;
                         if (latestMessage.sender?.im_user_id) {
-                            const senderParticipant = await tx.tikTokConversationParticipant.findFirst({
+                            const senderParticipant = await tx.conversationParticipant.findFirst({
                                 where: {
                                     conversationId: savedConversation.id,
-                                    imUserId: latestMessage.sender.im_user_id
+                                    participantId: latestMessage.sender.im_user_id
                                 }
                             });
                             senderId = senderParticipant?.id;
                         }
 
-                        await tx.tikTokConversationMessage.upsert({
+                        await tx.conversationMessage.upsert({
                             where: { messageId: latestMessage.id },
                             create: {
                                 messageId: latestMessage.id,
@@ -221,16 +239,21 @@ async function processConversationBatch(conversations: any[], shopId: string) {
                                 content: latestMessage.content || '',
                                 createTime: latestMessage.create_time || 0,
                                 isVisible: latestMessage.is_visible || true,
-                                messageIndex: latestMessage.index,
                                 conversationId: savedConversation.id,
                                 senderId: senderId,
                                 isLatestForId: savedConversation.id,
+                                // Store TikTok-specific data in channelData
+                                channelData: JSON.stringify({
+                                    messageIndex: latestMessage.index
+                                })
                             },
                             update: {
                                 type: latestMessage.type || '',
                                 content: latestMessage.content || '',
                                 isVisible: latestMessage.is_visible || true,
-                                messageIndex: latestMessage.index,
+                                channelData: JSON.stringify({
+                                    messageIndex: latestMessage.index
+                                })
                             }
                         });
                     }
