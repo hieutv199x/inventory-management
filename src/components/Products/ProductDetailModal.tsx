@@ -77,7 +77,7 @@ const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product, isOpen
                         aria-labelledby="modal-title"
                     >
                         {/* Header */}
-                        <div className="flex items-center justify-between border-b border-gray-200 bg-white px-10 py-6 dark:border-gray-700 dark:bg-gray-800">
+                        <div className="flex items-center justify-between border-b border-gray-200 bg-white px-10 py-3 dark:border-gray-700 dark:bg-gray-800">
                             <div>
                                 <h3 id="modal-title" className="text-xl font-semibold leading-6 text-gray-900 dark:text-white">
                                     Product Details
@@ -156,7 +156,6 @@ const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product, isOpen
                                                     <dt className="text-base font-medium text-gray-500 dark:text-gray-400">Status</dt>
                                                     <dd className="mt-3">
                                                         <Badge
-                                                            size="lg"
                                                             color={
                                                                 product.status === "ACTIVATE"
                                                                     ? "success"
@@ -232,11 +231,11 @@ const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product, isOpen
                         </div>
 
                         {/* Footer */}
-                        <div className="bg-gray-50 px-10 py-6 dark:bg-gray-900">
+                        <div className="bg-gray-50 px-10 py-4 dark:bg-gray-900">
                             <div className="flex justify-end">
                                 <button
                                     type="button"
-                                    className="inline-flex justify-center rounded-md border border-gray-300 bg-white px-8 py-4 text-lg font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+                                    className="inline-flex justify-center rounded-md border border-gray-300 bg-white px-6 py-2 text-lg font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
                                     onClick={onClose}
                                 >
                                     Close

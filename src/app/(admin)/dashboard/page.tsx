@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { 
     TrendingUp, 
     ShoppingCart, 
@@ -67,33 +68,53 @@ const StatCard = ({ icon: Icon, title, value, change, changeType = 'positive' }:
     </div>
 );
 
-const QuickActions = () => (
-    <div className="bg-white rounded-lg shadow-sm border p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
-        <div className="grid grid-cols-2 gap-4">
-            <button className="p-3 text-left rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors">
-                <Package className="h-5 w-5 text-blue-600 mb-2" />
-                <p className="font-medium text-gray-900">Sync Orders</p>
-                <p className="text-sm text-gray-600">Update latest orders</p>
-            </button>
-            <button className="p-3 text-left rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors">
-                <Store className="h-5 w-5 text-green-600 mb-2" />
-                <p className="font-medium text-gray-900">Sync Products</p>
-                <p className="text-sm text-gray-600">Update inventory</p>
-            </button>
-            <button className="p-3 text-left rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors">
-                <DollarSign className="h-5 w-5 text-purple-600 mb-2" />
-                <p className="font-medium text-gray-900">Sync Payments</p>
-                <p className="text-sm text-gray-600">Update financial data</p>
-            </button>
-            <button className="p-3 text-left rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors">
-                <Users className="h-5 w-5 text-orange-600 mb-2" />
-                <p className="font-medium text-gray-900">User Management</p>
-                <p className="text-sm text-gray-600">Manage access</p>
-            </button>
+const QuickActions = () => {
+    const router = useRouter();
+
+    const handleNavigation = (path: string) => {
+        router.push(path);
+    };
+
+    return (
+        <div className="bg-white rounded-lg shadow-sm border p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
+            <div className="grid grid-cols-2 gap-4">
+                <button 
+                    onClick={() => handleNavigation('/orders')}
+                    className="p-3 text-left rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
+                >
+                    <Package className="h-5 w-5 text-blue-600 mb-2" />
+                    <p className="font-medium text-gray-900">Sync Orders</p>
+                    <p className="text-sm text-gray-600">Update latest orders</p>
+                </button>
+                <button 
+                    onClick={() => handleNavigation('/products')}
+                    className="p-3 text-left rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
+                >
+                    <Store className="h-5 w-5 text-green-600 mb-2" />
+                    <p className="font-medium text-gray-900">Sync Products</p>
+                    <p className="text-sm text-gray-600">Update inventory</p>
+                </button>
+                <button 
+                    onClick={() => handleNavigation('/statement')}
+                    className="p-3 text-left rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
+                >
+                    <DollarSign className="h-5 w-5 text-purple-600 mb-2" />
+                    <p className="font-medium text-gray-900">Sync Payments</p>
+                    <p className="text-sm text-gray-600">Update financial data</p>
+                </button>
+                <button 
+                    onClick={() => handleNavigation('/users')}
+                    className="p-3 text-left rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
+                >
+                    <Users className="h-5 w-5 text-orange-600 mb-2" />
+                    <p className="font-medium text-gray-900">User Management</p>
+                    <p className="text-sm text-gray-600">Manage access</p>
+                </button>
+            </div>
         </div>
-    </div>
-);
+    );
+};
 
 const AlertsPanel = ({ alerts }: { alerts: any[] }) => (
     <div className="bg-white rounded-lg shadow-sm border p-6">

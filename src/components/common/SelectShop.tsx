@@ -16,6 +16,7 @@ interface SelectShopProps {
     className?: string; // Tùy chọn class để style từ bên ngoài
     placeholder?: string; // Tùy chọn placeholder
     enablePlaceholder?: boolean;
+    value?: string; // Giá trị hiện tại của select
 }
 
 export default function SelectShop({
@@ -23,6 +24,7 @@ export default function SelectShop({
     className = "",
     placeholder = "--- Select Shop ---",
     enablePlaceholder = false,
+    value,
 }: SelectShopProps) {
 
     const [shops, setShops] = useState<Shop[]>([]);
@@ -72,6 +74,7 @@ export default function SelectShop({
                     onChange={handleShopSelectChange}
                     enablePlaceholder={enablePlaceholder}
                     className="dark:bg-dark-900"
+                    value={value}
                 />
                 <span className="absolute text-gray-500 -translate-y-1/2 pointer-events-none right-3 top-1/2 dark:text-gray-400">
                     <ChevronDownIcon />

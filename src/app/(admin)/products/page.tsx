@@ -12,7 +12,9 @@ import { httpClient } from "@/lib/http-client";
 import {  RefreshCw,  Package, Calendar, User, Eye  } from 'lucide-react';
 import Badge from "@/components/ui/badge/Badge";
 import ProductDetailModal from "@/components/Products/ProductDetailModal";
+import SyncProductModal from "@/components/Products/SyncProductModal";
 import { Product } from "@/types/product";
+import { formatCurrency, formatDate } from "@/utils/common/functionFormat";
 
 export default function ProductPage() {
     const toast = useToast();
@@ -87,18 +89,8 @@ export default function ProductPage() {
         fetchProducts();
     }, [fetchProducts]);
 
-    const formatPrice = (price: string | undefined | null) => {
-        if (!price) {
-            return 'N/A';
-        }
-        const priceNumber = parseFloat(price);
-        if (isNaN(priceNumber)) {
-            return 'N/A';
-        }
-        return priceNumber.toLocaleString('vi-VN');
-    };
 
-    const handlerSyncProduct = async () => {
+    const handlerSyncProduct = async (shopId: string, status: string) => {
         try {
             const response = await fetch('/api/tiktok/Products/search-product', {
                 method: 'POST',
@@ -106,8 +98,8 @@ export default function ProductPage() {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    shop_id: filters.shopId,
-                    status: 'ALL',
+                    shop_id: shopId,
+                    status: status,
                     page_size: 100,
                 }),
             });
@@ -115,18 +107,16 @@ export default function ProductPage() {
             const result = await response.json();
 
             if (!response.ok) {
-                console.error('Error:', result.error || 'Unknown error');
                 toast.error(result.error || 'Unknown error');
                 return;
             }
 
-            console.log('✅ Synced products:', result);
-            toast.success(`Đồng bộ thành công ${result.count} sản phẩm!`);
-            // Optionally refresh list
+            toast.success(`Đồng bộ thành công ${result.syncInfo?.totalProductsCreated || 0} sản phẩm!`);
+            // Refresh list
             fetchProducts();
         } catch (err) {
-            console.error('❌ Sync failed:', err);
             toast.error('Gặp lỗi khi đồng bộ sản phẩm');
+            throw err;
         }
     };
 
@@ -151,12 +141,6 @@ export default function ProductPage() {
         setPageSize(Number.isNaN(num) ? 10 : num);
     };
 
-    const formatUnixToDate = (ts?: number) => {
-        if (!ts) return "N/A";
-        const ms = ts < 1e12 ? ts * 1000 : ts; // handle seconds vs ms
-        return new Date(ms).toLocaleDateString("vi-VN");
-    };
-
     const stripHtml = (html?: string) => (html || "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
 
     const handleExport = async () => {
@@ -173,7 +157,7 @@ export default function ProductPage() {
                 Shop: p.shop?.shopName || "",
                 Status: p.status,
                 Price: p.skus?.[0]?.price?.salePrice ? `${p.skus[0].price.salePrice} ${p.skus[0].price.currency}` : "",
-                CreationDate: formatUnixToDate(p.createTime),
+                CreationDate: formatDate(p.createTime),
                 Image: p.images?.[0]?.urls?.[0] || "",
                 Description: stripHtml(p.description),
             }));
@@ -200,7 +184,6 @@ export default function ProductPage() {
             XLSX.writeFile(wb, filename);
             toast.success("Xuất Excel thành công");
         } catch (e) {
-            console.error("Export failed", e);
             toast.error("Xuất Excel thất bại");
         } finally {
             setExporting(false);
@@ -208,6 +191,7 @@ export default function ProductPage() {
     };
     const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
 
     const handleViewProduct = (product: Product) => {
         setSelectedProduct(product);
@@ -230,7 +214,11 @@ export default function ProductPage() {
                 </div>
                 <div className="flex items-start w-full gap-3 sm:justify-end">
                     <div className="flex items-center gap-2">
-                        <button onClick={handlerSyncProduct} className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-theme-sm font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200">
+                        <button 
+                            onClick={() => setIsSyncModalOpen(true)} 
+                            className="bg-green-600 inline-flex items-center gap-2 rounded-lg border hover:bg-green-700 px-4 py-2.5 text-theme-sm font-medium text-white shadow-theme-xs hover:text-white-50 hover:text-white-800 dark:bg-green-700 dark:bg-green-800 dark:text-white-400 dark:hover:bg-green/[0.03] dark:hover:text-white-200"
+                        >
+                            <RefreshCw className="h-4 w-4" />
                             Sync Products
                         </button>
                         <button
@@ -494,7 +482,7 @@ export default function ProductPage() {
                                             </TableCell>
                                             <TableCell className="py-3 text-gray-500 text-theme-sm dark:text-gray-400">
                                                 {product.skus?.[0]?.price?.salePrice
-                                                    ? `${formatPrice(product.skus[0].price.salePrice)} ${product.skus[0].price.currency}`
+                                                    ? `${formatCurrency(product.skus[0].price.salePrice, product.skus[0].price.currency)}`
                                                     : 'N/A'
                                                 }
                                             </TableCell>
@@ -513,7 +501,7 @@ export default function ProductPage() {
                                                 </Badge>
                                             </TableCell>
                                             <TableCell className="py-3 text-gray-500 text-theme-sm dark:text-gray-400">
-                                                {formatUnixToDate(product.createTime)}
+                                                {formatDate(product.createTime)}
                                             </TableCell>
                                             <TableCell className="py-3">
                                                 <div className="flex items-center gap-2">
@@ -580,11 +568,17 @@ export default function ProductPage() {
                 </div>
             </div>
 
-            {/* Add the modal component */}
+            {/* Add the modal components */}
             <ProductDetailModal 
                 product={selectedProduct}
                 isOpen={isModalOpen}
                 onClose={handleCloseModal}
+            />
+            
+            <SyncProductModal
+                isOpen={isSyncModalOpen}
+                onClose={() => setIsSyncModalOpen(false)}
+                onSync={handlerSyncProduct}
             />
         </div>
 
