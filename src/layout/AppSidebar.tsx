@@ -57,6 +57,12 @@ const financeItems: NavItem[] = [
     path: "/statement",
     roles: ["ADMIN", "MANAGER", "ACCOUNTANT", "SELLER"]
   },
+  // {
+  //   icon: <FaMoneyCheckAlt size={24}/>,
+  //   name: "Fraud Alert",
+  //   path: "/fraud-alert",
+  //   roles: ["ADMIN", "MANAGER", "ACCOUNTANT", "SELLER"]
+  // },
   {
     icon: <PlugInIcon />,
     name: "nav.connect_shop",
