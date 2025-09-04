@@ -6,13 +6,14 @@ const prisma = new PrismaClient();
 
 export async function GET(
     req: NextRequest,
-    { params }: { params: { orderId: string } }
+    { params }: { params: Promise<{ orderId: string }> }
 ) {
     try {
         const { user, accessibleShopIds, isAdmin } = await getUserWithShopAccess(req, prisma);
         const activeShopIds = await getActiveShopIds(prisma);
 
-        const { orderId } = params;
+        // Await params before accessing properties
+        const { orderId } = await params;
 
         if (!orderId) {
             return NextResponse.json(
@@ -34,21 +35,25 @@ export async function GET(
             );
         }
 
-        // Validate shop access
-        if (!isAdmin && !accessibleShopIds.includes(orderCheck.shopId)) {
-            return NextResponse.json(
-                { error: "Access denied: You don't have permission to access this order" },
-                { status: 403 }
-            );
-        }
+        // Only validate shop access for non-admin users
+        if (!isAdmin) {
+            // Check if user has access to this shop
+            if (!accessibleShopIds.includes(orderCheck.shopId)) {
+                return NextResponse.json(
+                    { error: "Access denied: You don't have permission to access this order" },
+                    { status: 403 }
+                );
+            }
 
-        // Check if shop is active
-        if (!activeShopIds.includes(orderCheck.shopId)) {
-            return NextResponse.json(
-                { error: "Order not found or shop is inactive" },
-                { status: 404 }
-            );
+            // Check if shop is active (only for non-admin users)
+            if (!activeShopIds.includes(orderCheck.shopId)) {
+                return NextResponse.json(
+                    { error: "Order not found or shop is inactive" },
+                    { status: 404 }
+                );
+            }
         }
+        // For admin users, skip all shop access and active checks
 
         // Fetch all order data fields for detailed view
         const order = await prisma.order.findUnique({
@@ -150,4 +155,4 @@ export async function GET(
         await prisma.$disconnect();
     }
 }
-       
+

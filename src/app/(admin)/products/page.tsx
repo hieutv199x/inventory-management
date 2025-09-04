@@ -9,37 +9,12 @@ import {Table, TableBody, TableCell, TableHeader, TableRow} from "@/components/u
 import Image from "next/image";
 import { useToast } from "@/context/ToastContext";
 import { httpClient } from "@/lib/http-client";
-import {  RefreshCw,  Package, Calendar, User,  } from 'lucide-react';
+import {  RefreshCw,  Package, Calendar, User, Eye  } from 'lucide-react';
 import Badge from "@/components/ui/badge/Badge";
+import ProductDetailModal from "@/components/Products/ProductDetailModal";
+import { Product } from "@/types/product";
 
-interface Product {
-    id: string;
-    productId: string;
-    title: string;
-    description: string;
-    status: string;
-    createTime: number;
-    shopId:string,
-    shop:{
-        shopName:string;
-    }
-    images: {
-        uri: string;
-        urls: string[];
-    }[];
-    skus: {
-        id: string;
-        skuId: string;
-        price: {
-            originalPrice: string;
-            currency: string;
-            salePrice: string;
-        } | null;
-    }[];
-    // Thêm các trường khác nếu bạn cần hiển thị
-}
-
-export default function Product() {
+export default function ProductPage() {
     const toast = useToast();
 
     const optionsListing = [
@@ -231,6 +206,19 @@ export default function Product() {
             setExporting(false);
         }
     };
+    const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+    const [isModalOpen, setIsModalOpen] = useState(false);
+
+    const handleViewProduct = (product: Product) => {
+        setSelectedProduct(product);
+        setIsModalOpen(true);
+    };
+
+    const handleCloseModal = () => {
+        setIsModalOpen(false);
+        setSelectedProduct(null);
+    };
+
     return (
         <div>
             <div className="flex flex-col gap-5 mb-6 sm:flex-row sm:justify-between">
@@ -502,8 +490,6 @@ export default function Product() {
                                                         dangerouslySetInnerHTML={{ __html: product.description || "" }}
                                                         className="prose prose-sm max-w-none max-h-20 overflow-y-auto text-gray-500"
                                                     ></div>
-
-
                                                 </div>
                                             </TableCell>
                                             <TableCell className="py-3 text-gray-500 text-theme-sm dark:text-gray-400">
@@ -531,7 +517,13 @@ export default function Product() {
                                             </TableCell>
                                             <TableCell className="py-3">
                                                 <div className="flex items-center gap-2">
-                                                    {/* <button className="text-blue-500 hover:text-blue-600">View</button> */}
+                                                    <button 
+                                                        onClick={() => handleViewProduct(product)}
+                                                        className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 hover:text-blue-700 dark:bg-blue-900/20 dark:text-blue-400 dark:hover:bg-blue-900/30"
+                                                    >
+                                                        <Eye className="w-3 h-3" />
+                                                        View
+                                                    </button>
                                                 </div>
                                             </TableCell>
                                         </TableRow>
@@ -587,6 +579,13 @@ export default function Product() {
                     </div>
                 </div>
             </div>
+
+            {/* Add the modal component */}
+            <ProductDetailModal 
+                product={selectedProduct}
+                isOpen={isModalOpen}
+                onClose={handleCloseModal}
+            />
         </div>
 
     );
