@@ -23,6 +23,7 @@ interface Order {
         shopName?: string;
         shopId: string;
     };
+    shopId: string;
     lineItemsCount?: number;
 }
 
@@ -384,7 +385,7 @@ export default function OrdersPage() {
                                                 {order.shop.shopName || 'N/A'}
                                             </div>
                                             <div className="text-xs text-gray-500 dark:text-gray-400">
-                                                Shop ID: {order.shop.shopId}
+                                                Shop ID: {order.shopId}
                                             </div>
                                         </div>
                                     </td>
