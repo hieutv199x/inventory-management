@@ -6,6 +6,7 @@ import { Table, TableBody, TableCell, TableHeader, TableRow } from "@/components
 import SelectShop from "@/components/common/SelectShop";
 import { httpClient } from "@/lib/http-client";
 import DatePicker from "@/components/form/date-picker";
+import { formatCurrency, formatDate } from "@/utils/common/functionFormat";
 
 interface Statement {
   statementId: string;
@@ -225,30 +226,7 @@ export const StatementBank = () => {
     else fetchWithdrawals();
   }, [activeTab, selectedShop]);
 
-  const formatDate = (timestamp: number) => {
-    return new Date(timestamp * 1000).toLocaleDateString();
-  };
-  const currencyLocaleMap: Record<string, string> = {
-  USD: "en-US",
-  EUR: "de-DE", 
-  GBP: "en-GB",
-  JPY: "ja-JP",
-  VND: "vi-VN",
-  CNY: "zh-CN",
-  KRW: "ko-KR"
-};
-
-const formatCurrency = (value: string, currency: string) => {
-  const number = parseFloat(value);
-  if (isNaN(number)) return value;
-
-  const locale = currencyLocaleMap[currency] || "en-US";
-
-  return new Intl.NumberFormat(locale, {
-    style: "currency",
-    currency,
-  }).format(number);
-};
+  
 
   return (
     <div className="p-6 space-y-6">
