@@ -1,130 +1,203 @@
 import { NextRequest, NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
-import { getUserWithShopAccess, getActiveShopIds, validateShopAccess } from "@/lib/auth";
+import { getUserWithShopAccess, getActiveShopIds } from "@/lib/auth";
 
 const prisma = new PrismaClient();
 
-export async function GET(request: NextRequest) {
+export async function GET(req: NextRequest) {
     try {
-        const { user, isAdmin, accessibleShopIds } = await getUserWithShopAccess(request, prisma);
-
-        const { searchParams } = new URL(request.url);
-        const channel = searchParams.get('channel');
-        const requestedShopId = searchParams.get('shopId');
-        const status = searchParams.get('status');
-        const limit = parseInt(searchParams.get('limit') || '50');
-        const offset = parseInt(searchParams.get('offset') || '0');
-
-        // Get active shop IDs
+        const { user, accessibleShopIds, isAdmin } = await getUserWithShopAccess(req, prisma);
         const activeShopIds = await getActiveShopIds(prisma);
 
-        // Validate shop access
-        const { shopFilter, hasAccess } = validateShopAccess(
-            requestedShopId,
-            isAdmin,
-            accessibleShopIds,
-            activeShopIds
-        );
-
-        if (!hasAccess) {
-            return NextResponse.json({ error: 'Access denied' }, { status: 403 });
-        }
-
         // Extract query parameters
+        const { searchParams } = new URL(req.url);
         const shopId = searchParams.get('shopId');
+        const status = searchParams.get('status');
+        const keyword = searchParams.get('keyword');
+        const createTimeGe = searchParams.get('createTimeGe');
+        const createTimeLt = searchParams.get('createTimeLt');
         
-        // Build where clause
-        let where: any = {};
+        // Pagination parameters
+        const page = parseInt(searchParams.get('page') || '1', 10);
+        const pageSize = parseInt(searchParams.get('pageSize') || '20', 10);
+        const offset = (page - 1) * pageSize;
 
-        // Apply shop filter based on user permissions
-        if (shopFilter) {
-            if (typeof shopFilter === 'object' && shopFilter.in) {
-                // shopFilter is { in: [tiktokShopId, ...] }
-                const shops = await prisma.shopAuthorization.findMany({
-                    where: { shopId: { in: shopFilter.in } },
-                    select: { id: true }
-                });
-                const objectIds = shops.map(s => s.id);
-                if (objectIds.length === 0) {
-                    return NextResponse.json({ orders: [], total: 0, hasMore: false });
-                }
-                where.shopId = { in: objectIds };
-            } else {
-                // shopFilter is a single TikTok shopId
-                const shop = await prisma.shopAuthorization.findUnique({
-                    where: { shopId: shopFilter },
-                    select: { id: true }
-                });
-                if (!shop?.id) {
-                    return NextResponse.json({ orders: [], total: 0, hasMore: false });
-                }
-                where.shopId = shop.id;
-            }
-        }
+        // Build where condition
+        let whereCondition: any = {};
 
-        if (channel) {
-            where.channel = channel as any;
-        }
-        if (status) {
-            where.status = status;
-        }
-
-        // If filtering by shopId (TikTok shopId), map to Shop _id
-        if (shopId) {
-            const shop = await prisma.shopAuthorization.findUnique({
-                where: { shopId: shopId },
-                select: { id: true },
-            });
-            if (!shop?.id) {
-                // No matching shop, return empty result
-                return NextResponse.json({ orders: [], total: 0, hasMore: false });
-            }
-            where.shopId = shop.id;
-        }
-
-        const [orders, total] = await Promise.all([
-            prisma.order.findMany({
-                where,
-                include: {
-                    shop: {
-                        select: {
-                            shopName: true,
-                            app: {
-                                select: {
-                                    channel: true,
-                                    appName: true
-                                }
-                            }
-                        }
-                    },
-                    lineItems: true,
-                    payment: true,
-                    recipientAddress: true
+        // Shop access control
+        let allowedShopObjectIds: string[] = [];
+        
+        if (!isAdmin) {
+            // For non-admin users, get ObjectIDs of accessible shops
+            const accessibleShops = await prisma.shopAuthorization.findMany({
+                where: {
+                    shopId: { in: accessibleShopIds.filter(id => activeShopIds.includes(id)) }
                 },
-                take: limit,
-                skip: offset,
-                orderBy: { createdAt: 'desc' }
-            }),
-            prisma.order.count({ where })
-        ]);
-
-        return NextResponse.json({ 
-            orders: orders.map(order => ({
-                ...order,
-                channelData: order.channelData ? JSON.parse(order.channelData) : null,
-                lineItems: order.lineItems.map(item => ({
-                    ...item,
-                    channelData: item.channelData ? JSON.parse(item.channelData) : null
-                }))
-            })),
-            total,
-            hasMore: offset + limit < total
-        });
-    } catch (error) {
-        console.error('Error fetching orders:', error);
-        if (error instanceof Error && error.message === 'Authentication required') {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+                select: { id: true }
+            });
+            allowedShopObjectIds = accessibleShops.map(shop => shop.id);
+        } else {
+            // For admin users, get all active shops unless specific shop is requested
+            if (!shopId) {
+                const activeShops = await prisma.shopAuthorization.findMany({
+                    where: { shopId: { in: activeShopIds } },
+                    select: { id: true }
+                });
+                allowedShopObjectIds = activeShops.map(shop => shop.id);
+            }
         }
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+
+        // Apply shop filter
+        if (shopId) {
+            // Find the ObjectID for the specific shopId
+            const targetShop = await prisma.shopAuthorization.findUnique({
+                where: { shopId: shopId },
+                select: { id: true }
+            });
+            
+            if (!targetShop) {
+                return NextResponse.json({
+                    orders: [],
+                    pagination: {
+                        currentPage: page,
+                        pageSize,
+                        totalItems: 0,
+                        totalPages: 0,
+                        hasNextPage: false,
+                        hasPreviousPage: false
+                    }
+                });
+            }
+            
+            whereCondition.shopId = targetShop.id;
+        } else if (allowedShopObjectIds.length > 0) {
+            whereCondition.shopId = { in: allowedShopObjectIds };
+        } else {
+            // No accessible shops, return empty result
+            return NextResponse.json({
+                orders: [],
+                pagination: {
+                    currentPage: page,
+                    pageSize,
+                    totalItems: 0,
+                    totalPages: 0,
+                    hasNextPage: false,
+                    hasPreviousPage: false
+                }
+            });
+        }
+
+        // Apply other filters
+        if (status) {
+            whereCondition.status = status.toUpperCase();
+        }
+
+        if (keyword) {
+            whereCondition.OR = [
+                { orderId: { contains: keyword, mode: 'insensitive' } },
+                { buyerEmail: { contains: keyword, mode: 'insensitive' } },
+                { recipientAddress: { name: { contains: keyword, mode: 'insensitive' } } },
+                { lineItems: { some: { productName: { contains: keyword, mode: 'insensitive' } } } }
+            ];
+        }
+
+        if (createTimeGe) {
+            whereCondition.createTime = { 
+                ...whereCondition.createTime,
+                gte: parseInt(createTimeGe) 
+            };
+        }
+
+        if (createTimeLt) {
+            whereCondition.createTime = { 
+                ...whereCondition.createTime,
+                lt: parseInt(createTimeLt) 
+            };
+        }
+
+        // Get total count for pagination
+        const totalItems = await prisma.order.count({
+            where: whereCondition
+        });
+
+        // Get paginated orders
+        const orders = await prisma.order.findMany({
+            where: whereCondition,
+            include: {
+                shop: {
+                    select: {
+                        shopName: true,
+                        shopId: true
+                    }
+                },
+                lineItems: {
+                    select: {
+                        id: true,
+                        lineItemId: true,
+                        productId: true,
+                        productName: true,
+                        skuId: true,
+                        skuName: true,
+                        sellerSku: true,
+                        salePrice: true,
+                        originalPrice: true,
+                        currency: true,
+                        channelData: true,
+                        createdAt: true,
+                        updatedAt: true
+                    }
+                },
+                payment: {
+                    select: {
+                        currency: true,
+                        totalAmount: true,
+                        subTotal: true,
+                        tax: true
+                    }
+                },
+                recipientAddress: {
+                    select: {
+                        name: true,
+                        phoneNumber: true,
+                        fullAddress: true
+                    }
+                }
+            },
+            orderBy: {
+                createTime: 'desc'
+            },
+            skip: offset,
+            take: pageSize
+        });
+
+        const totalPages = Math.ceil(totalItems / pageSize);
+
+        // Transform orders to include lineItemsCount
+        const transformedOrders = orders.map(order => ({
+            ...order,
+            lineItemsCount: order.lineItems.length
+        }));
+
+        return NextResponse.json({
+            orders: transformedOrders,
+            pagination: {
+                currentPage: page,
+                pageSize,
+                totalItems,
+                totalPages,
+                hasNextPage: page < totalPages,
+                hasPreviousPage: page > 1
+            }
+        });
+
+    } catch (err: any) {
+        console.error("Error fetching orders:", err);
+        if (err.message === 'Authentication required' || err.message === 'User not found') {
+            return NextResponse.json({ error: err.message }, { status: 401 });
+        }
+        return NextResponse.json({ error: err.message || "Internal error" }, { status: 500 });
+    } finally {
+        await prisma.$disconnect();
     }
 }

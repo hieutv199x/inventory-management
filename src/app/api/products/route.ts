@@ -1,216 +1,174 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
-import { getUserWithShopAccess, getActiveShopIds, validateShopAccess } from '@/lib/auth';
+import { NextRequest, NextResponse } from "next/server";
+import { PrismaClient } from "@prisma/client";
+import { getUserWithShopAccess, getActiveShopIds } from "@/lib/auth";
 
 const prisma = new PrismaClient();
 
-export async function GET(request: NextRequest) {
-  try {
-    const { user, isAdmin, accessibleShopIds } = await getUserWithShopAccess(request, prisma);
-
-    const { searchParams } = new URL(request.url);
-    const channel = searchParams.get('channel');
-    const requestedShopId = searchParams.get('shopId');
-    const status = searchParams.get('status'); // Thêm status parameter
-    const limit = parseInt(searchParams.get('limit') || '50');
-    const offset = parseInt(searchParams.get('offset') || '0');
-
-    // Get active shop IDs with error handling
-    let activeShopIds: string[] = [];
+export async function GET(req: NextRequest) {
     try {
-      activeShopIds = await getActiveShopIds(prisma);
-    } catch (error) {
-      console.warn('Failed to get active shop IDs, using fallback:', error);
-      activeShopIds = accessibleShopIds;
-    }
+        const { user, accessibleShopIds, isAdmin } = await getUserWithShopAccess(req, prisma);
+        const activeShopIds = await getActiveShopIds(prisma);
 
-    // Handle special case for 'all' shops before validation
-    let shopFilter: any = null;
-    let hasAccess = true;
-
-    if (requestedShopId === 'all') {
-      // For 'all' case, always allow access and set appropriate filter
-      hasAccess = true;
-      if (!isAdmin && accessibleShopIds.length > 0) {
-        shopFilter = { in: accessibleShopIds };
-      }
-      // If admin, shopFilter remains null (no filtering)
-    } else {
-      // For specific shop or null, use normal validation
-      const validation = validateShopAccess(
-        requestedShopId,
-        isAdmin,
-        accessibleShopIds,
-        activeShopIds
-      );
-      shopFilter = validation.shopFilter;
-      hasAccess = validation.hasAccess;
-    }
-
-    if (!hasAccess) {
-      return NextResponse.json({ error: 'Access denied' }, { status: 403 });
-    }
-
-    // Build where clause with proper shop filtering
-    let where: any = {};
-
-    if (channel) {
-      where.channel = channel as any;
-    }
-
-    if (status && status !== 'All') {
-      where.status = status;
-    }
-
-    // Handle shop filtering with ObjectID references
-    if (requestedShopId && requestedShopId !== 'all') {
-      try {
-        // Find the shop authorization by shopId (TikTok shop ID)
-        const shopAuth = await prisma.shopAuthorization.findUnique({
-          where: { shopId: requestedShopId }
-        });
+        // Extract query parameters
+        const { searchParams } = new URL(req.url);
+        const shopId = searchParams.get('shopId');
+        const status = searchParams.get('status');
+        const listingQuality = searchParams.get('listingQuality');
+        const keyword = searchParams.get('keyword');
+        const startDate = searchParams.get('startDate');
+        const endDate = searchParams.get('endDate');
         
-        if (shopAuth) {
-          where.shopId = shopAuth.id; // Use the ObjectID reference
-        } else {
-          // If shop not found, return empty results
-          return NextResponse.json({ 
-            products: [],
-            total: 0,
-            hasMore: false
-          });
-        }
-      } catch (error) {
-        console.warn('Error finding shop authorization:', error);
-      }
-    } else if (requestedShopId === 'all' && shopFilter && shopFilter.in) {
-      // Handle 'all' case with access restrictions for non-admin users
-      try {
-        const shopAuths = await prisma.shopAuthorization.findMany({
-          where: { shopId: { in: shopFilter.in } },
-          select: { id: true }
-        });
+        // Pagination parameters
+        const page = parseInt(searchParams.get('page') || '1', 10);
+        const pageSize = parseInt(searchParams.get('pageSize') || '10', 10);
+        const offset = (page - 1) * pageSize;
+
+        // Build where condition
+        let whereCondition: any = {};
+
+        // First get the shop ObjectIDs that correspond to accessible TikTok shop IDs
+        let allowedShopObjectIds: string[] = [];
         
-        if (shopAuths.length > 0) {
-          where.shopId = { in: shopAuths.map(s => s.id) };
+        if (!isAdmin) {
+            // For non-admin users, get ObjectIDs of accessible shops
+            const accessibleShops = await prisma.shopAuthorization.findMany({
+                where: {
+                    shopId: { in: accessibleShopIds.filter(id => activeShopIds.includes(id)) }
+                },
+                select: { id: true }
+            });
+            allowedShopObjectIds = accessibleShops.map(shop => shop.id);
         } else {
-          return NextResponse.json({ 
-            products: [],
-            total: 0,
-            hasMore: false
-          });
+            // For admin users, get all active shops unless specific shop is requested
+            if (!shopId) {
+                const activeShops = await prisma.shopAuthorization.findMany({
+                    where: { shopId: { in: activeShopIds } },
+                    select: { id: true }
+                });
+                allowedShopObjectIds = activeShops.map(shop => shop.id);
+            }
         }
-      } catch (error) {
-        console.warn('Error finding shop authorizations for all shops:', error);
-      }
-    } else if (shopFilter && typeof shopFilter === 'object' && shopFilter.in) {
-      // Handle multiple shop IDs
-      try {
-        const shopAuths = await prisma.shopAuthorization.findMany({
-          where: { shopId: { in: shopFilter.in } },
-          select: { id: true }
+
+        // Apply shop filter
+        if (shopId) {
+            // Find the ObjectID for the specific shopId
+            const targetShop = await prisma.shopAuthorization.findUnique({
+                where: { shopId: shopId },
+                select: { id: true }
+            });
+            
+            if (!targetShop) {
+                return NextResponse.json({
+                    products: [],
+                    pagination: {
+                        currentPage: page,
+                        pageSize,
+                        totalItems: 0,
+                        totalPages: 0,
+                        hasNextPage: false,
+                        hasPreviousPage: false
+                    }
+                });
+            }
+            
+            whereCondition.shopId = targetShop.id;
+        } else if (allowedShopObjectIds.length > 0) {
+            whereCondition.shopId = { in: allowedShopObjectIds };
+        } else {
+            // No accessible shops, return empty result
+            return NextResponse.json({
+                products: [],
+                pagination: {
+                    currentPage: page,
+                    pageSize,
+                    totalItems: 0,
+                    totalPages: 0,
+                    hasNextPage: false,
+                    hasPreviousPage: false
+                }
+            });
+        }
+
+        // Apply other filters
+        if (status && status !== 'All') {
+            whereCondition.status = status;
+        }
+
+        if (listingQuality) {
+            whereCondition.listingQuality = listingQuality;
+        }
+
+        if (keyword) {
+            whereCondition.OR = [
+                { productId: { contains: keyword, mode: 'insensitive' } },
+                { title: { contains: keyword, mode: 'insensitive' } },
+                { description: { contains: keyword, mode: 'insensitive' } }
+            ];
+        }
+
+        if (startDate && endDate) {
+            const start = new Date(startDate);
+            const end = new Date(endDate);
+            end.setHours(23, 59, 59, 999); // End of day
+            
+            whereCondition.createTime = {
+                gte: Math.floor(start.getTime() / 1000),
+                lte: Math.floor(end.getTime() / 1000)
+            };
+        }
+
+        // Get total count for pagination
+        const totalItems = await prisma.product.count({
+            where: whereCondition
         });
-        
-        if (shopAuths.length > 0) {
-          where.shopId = { in: shopAuths.map(s => s.id) };
-        } else {
-          return NextResponse.json({ 
-            products: [],
-            total: 0,
-            hasMore: false
-          });
-        }
-      } catch (error) {
-        console.warn('Error finding shop authorizations:', error);
-      }
-    }
-    // If requestedShopId === 'all' and user is admin, no shop filtering (where.shopId remains undefined)
-    
-    // Fetch products with proper relations
-    let products, total;
-    try {
-      [products, total] = await Promise.all([
-        prisma.product.findMany({
-          where,
-          include: {
-            shop: {
-              select: {
-                id: true,
-                shopId: true,
-                shopName: true
-              }
+
+        // Get paginated products
+        const products = await prisma.product.findMany({
+            where: whereCondition,
+            include: {
+                shop: {
+                    select: {
+                        shopName: true,
+                        shopId: true
+                    }
+                },
+                images: true,
+                skus: {
+                    include: {
+                        price: true
+                    }
+                }
             },
-            brand: true,
-            skus: {
-              include: {
-                price: true,
-                inventory: true
-              }
+            orderBy: {
+                createTime: 'desc'
             },
-            images: true,
-            categories: true
-          },
-          take: limit,
-          skip: offset,
-          orderBy: { createdAt: 'desc' }
-        }),
-        prisma.product.count({ where })
-      ]);
-    } catch (dbError) {
-      console.error('Database query failed:', dbError);
-      
-      if (dbError instanceof Error && 
-          (dbError.message.includes('forcibly closed') || 
-           dbError.message.includes('I/O error') ||
-           dbError.message.includes('timed out'))) {
-        return NextResponse.json({ 
-          error: 'Database connection issue - please try again',
-          code: 'CONNECTION_ERROR'
-        }, { status: 503 });
-      }
-      
-      throw dbError;
-    }
+            skip: offset,
+            take: pageSize
+        });
 
-    return NextResponse.json({ 
-      products: products.map(product => ({
-        ...product,
-        shop: product.shop ? {
-          shopId: product.shop.shopId,
-          shopName: product.shop.shopName || 'Unknown'
-        } : { shopName: 'No Shop', shopId: null },
-        channelData: product.channelData ? JSON.parse(product.channelData) : null
-      })),
-      total,
-      hasMore: offset + limit < total
-    });
-  } catch (error) {
-    console.error('Error fetching products:', error);
-    
-    if (error instanceof Error) {
-      if (error.message.includes('Malformed ObjectID')) {
-        return NextResponse.json({ 
-          error: 'Database schema configuration issue',
-          details: 'ObjectID format incompatibility'
-        }, { status: 500 });
-      }
-      
-      if (error.message.includes('forcibly closed') || 
-          error.message.includes('I/O error') ||
-          error.message.includes('timed out')) {
-        return NextResponse.json({ 
-          error: 'Database connection lost - please try again',
-          code: 'CONNECTION_ERROR'
-        }, { status: 503 });
-      }
-      
-      if (error.message === 'Authentication required') {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-      }
+        const totalPages = Math.ceil(totalItems / pageSize);
+
+        return NextResponse.json({
+            products,
+            pagination: {
+                currentPage: page,
+                pageSize,
+                totalItems,
+                totalPages,
+                hasNextPage: page < totalPages,
+                hasPreviousPage: page > 1
+            }
+        });
+
+    } catch (err: any) {
+        console.error("Error fetching products:", err);
+        if (err.message === 'Authentication required' || err.message === 'User not found') {
+            return NextResponse.json({ error: err.message }, { status: 401 });
+        }
+        return NextResponse.json({ error: err.message || "Internal error" }, { status: 500 });
+    } finally {
+        await prisma.$disconnect();
     }
-    
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
-  }
 }
 
 export async function POST(request: NextRequest) {

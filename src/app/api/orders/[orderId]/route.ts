@@ -25,7 +25,14 @@ export async function GET(
         // First, find the order to check shop access
         const orderCheck = await prisma.order.findUnique({
             where: { orderId },
-            select: { shopId: true }
+            select: { 
+                shopId: true,
+                shop: {
+                    select: {
+                        shopId: true  // This is the TikTok shop ID string
+                    }
+                }
+            }
         });
 
         if (!orderCheck) {
@@ -37,8 +44,9 @@ export async function GET(
 
         // Only validate shop access for non-admin users
         if (!isAdmin) {
-            // Check if user has access to this shop
-            if (!accessibleShopIds.includes(orderCheck.shopId)) {
+            // Check if user has access to this shop using the TikTok shop ID
+            const tiktokShopId = orderCheck.shop?.shopId;
+            if (!tiktokShopId || !accessibleShopIds.includes(tiktokShopId)) {
                 return NextResponse.json(
                     { error: "Access denied: You don't have permission to access this order" },
                     { status: 403 }
@@ -46,7 +54,7 @@ export async function GET(
             }
 
             // Check if shop is active (only for non-admin users)
-            if (!activeShopIds.includes(orderCheck.shopId)) {
+            if (!activeShopIds.includes(tiktokShopId)) {
                 return NextResponse.json(
                     { error: "Order not found or shop is inactive" },
                     { status: 404 }
