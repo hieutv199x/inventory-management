@@ -119,10 +119,34 @@ export async function GET(request: NextRequest) {
       prisma.statement.count({ where: whereClause })
     ]);
 
+    // Lấy thêm thông tin bankAccount từ Payment dựa vào paymentId
+    const statementsWithBankAccount = await Promise.all(
+      statements.map(async (statement) => {
+        let bankAccount = null;
+        
+        if (statement.paymentId) {
+          try {
+            const payment = await prisma.payment.findUnique({
+              where: { paymentId: statement.paymentId },
+              select: { bankAccount: true }
+            });
+            bankAccount = payment?.bankAccount || null;
+          } catch (error) {
+            console.warn(`Failed to fetch payment for paymentId ${statement.paymentId}:`, error);
+          }
+        }
+
+        return {
+          ...statement,
+          bankAccount
+        };
+      })
+    );
+
     const totalPages = Math.ceil(total / pageSize);
 
     return NextResponse.json({
-      statements,
+      statements: statementsWithBankAccount,
       pagination: {
         total,
         page,

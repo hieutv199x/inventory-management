@@ -16,17 +16,22 @@ interface Statement {
   paidAmount: string;
   holdDate: number;
   bankAccount: string;
+  currency: string;
 }
 
 interface PaidHistory {
   id: string;
-  amount: string;
+  amountValue: string;
   shopId: string;
-  transactionId: string;
-  currency: string;
+  paymentId: string;
+  amountCurrency: string;
   createTime: number;
   status: string;
   bankAccount: string;
+  shop: {
+    shopName: string;
+    shopId: string;
+  };
 }
 
 interface Withdrawal {
@@ -85,7 +90,8 @@ export const StatementBank = () => {
           holdAmount: (channelData as any).adjustmentAmount || item.adjustmentAmount || '0',
           paidAmount: item.settlementAmount || '0',
           holdDate: item.statementTime,
-          bankAccount: '',
+          bankAccount: item.bankAccount || '',
+          currency: item.currency || 'USD',
         };
       });
 
@@ -222,14 +228,27 @@ export const StatementBank = () => {
   const formatDate = (timestamp: number) => {
     return new Date(timestamp * 1000).toLocaleDateString();
   };
-  const formatCurrency = (value: string) => {
-    const number = parseFloat(value);
-    if (isNaN(number)) return value;
-    return new Intl.NumberFormat('vi-VN', {
-      style: 'currency',
-      currency: 'VND',
-    }).format(number);
-  };
+  const currencyLocaleMap: Record<string, string> = {
+  USD: "en-US",
+  EUR: "de-DE", 
+  GBP: "en-GB",
+  JPY: "ja-JP",
+  VND: "vi-VN",
+  CNY: "zh-CN",
+  KRW: "ko-KR"
+};
+
+const formatCurrency = (value: string, currency: string) => {
+  const number = parseFloat(value);
+  if (isNaN(number)) return value;
+
+  const locale = currencyLocaleMap[currency] || "en-US";
+
+  return new Intl.NumberFormat(locale, {
+    style: "currency",
+    currency,
+  }).format(number);
+};
 
   return (
     <div className="p-6 space-y-6">
@@ -425,13 +444,13 @@ export const StatementBank = () => {
                           {s.shopName}
                         </TableCell>
                         <TableCell className="py-3 text-gray-700 dark:text-gray-300 font-medium">
-                          {formatCurrency(s.revenue)}
+                          {formatCurrency(s.revenue, s.currency)}
                         </TableCell>
                         <TableCell className="py-3 text-gray-700 dark:text-gray-300 font-medium">
-                          {formatCurrency(s.holdAmount)}
+                          {formatCurrency(s.holdAmount, s.currency)}
                         </TableCell>
                         <TableCell className="py-3 text-green-600 dark:text-green-400 font-medium">
-                          {formatCurrency(s.paidAmount)}
+                          {formatCurrency(s.paidAmount, s.currency)}
                         </TableCell>
                         <TableCell className="py-3 text-gray-700 dark:text-gray-300">
                           {formatDate(s.holdDate)}
@@ -462,7 +481,7 @@ export const StatementBank = () => {
                         ID
                       </TableCell>
                       <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
-                        Shop ID
+                        Shop Name
                       </TableCell>
                       <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
                         Mã giao dịch
@@ -501,16 +520,16 @@ export const StatementBank = () => {
                             {p.id}
                           </TableCell>
                           <TableCell className="py-3 text-gray-700 dark:text-gray-300">
-                            {p.shopId}
+                            {p.shop.shopName}
                           </TableCell>
                           <TableCell className="py-3 text-gray-700 dark:text-gray-300 font-mono">
-                            {p.transactionId}
+                            {p.paymentId}
                           </TableCell>
                           <TableCell className="py-3 text-gray-700 dark:text-gray-300 font-medium">
-                            {formatCurrency(p.amount)}
+                            {formatCurrency(p.amountValue, p.amountCurrency)}
                           </TableCell>
                           <TableCell className="py-3 text-gray-700 dark:text-gray-300">
-                            {p.currency}
+                            {p.amountCurrency}
                           </TableCell>
                           <TableCell className="py-3">
                             <span className={`px-2 py-1 rounded-full text-xs font-medium ${p.status === 'PAID'
@@ -603,7 +622,7 @@ export const StatementBank = () => {
                             {w.shopName}
                           </TableCell>
                           <TableCell className="py-3 text-gray-700 dark:text-gray-300 font-medium">
-                            {formatCurrency(w.amount)}
+                            {formatCurrency(w.amount, w.currency)}
                           </TableCell>
                           <TableCell className="py-3 text-gray-700 dark:text-gray-300">
                             {w.currency}
