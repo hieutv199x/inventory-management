@@ -16,7 +16,7 @@ import {
 } from "../icons/index";
 import { FaMoneyCheckAlt, FaUsersCog } from "react-icons/fa";
 import { AiOutlineShopping } from "react-icons/ai";
-import { MessageCircle } from "lucide-react";
+import { MessageCircle, Grid2X2Plus } from "lucide-react";
 import { LanguageSwitcher } from '@/components/ui/LanguageSwitcher';
 
 type NavItem = {
@@ -73,6 +73,12 @@ const financeItems: NavItem[] = [
 
 // Tài khoản (Accounts) Group - Only for ADMIN and MANAGER
 const accountItems: NavItem[] = [
+  {
+    icon: <Grid2X2Plus />,
+    name: "nav.dashboard",
+    path: "/dashboard",
+    roles: ["ADMIN", "MANAGER", "SELLER"]
+  },
   {
     icon: <MessageCircle />,
     name: "nav.chat",
