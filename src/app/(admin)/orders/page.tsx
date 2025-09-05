@@ -202,7 +202,7 @@ export default function OrdersPage() {
     };
 
     const syncOrders = async () => {
-        if (!selectedOrder) {
+        if (!filters?.shopId) {
             alert('Please select a shop to sync orders');
             return;
         }
@@ -210,7 +210,7 @@ export default function OrdersPage() {
         setSyncing(true);
         try {
             const response = await httpClient.post('/tiktok/Orders/get-order-list', {
-                shop_id: selectedOrder,
+                shop_id: filters.shopId,
                 sync: true,
                 filters: {
                     createTimeGe: filters.dateFrom ? Math.floor(new Date(filters.dateFrom).getTime() / 1000) : undefined,
@@ -255,10 +255,15 @@ export default function OrdersPage() {
 
     const getStatusColor = (status: string) => {
         switch (status.toLowerCase()) {
+            case 'unpaid': return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-400';
+            case 'on_hold': return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-400';
+            case 'awaiting_shipment': return 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-400';
+            case 'partially_shipping': return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-400';
+            case 'awaiting_collection': return 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-400';
+            case 'in_transit': return 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-400';
+            case 'delivered': return 'bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-400';
             case 'completed': return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-400';
-            case 'cancelled': return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-400';
-            case 'processing': return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-400';
-            case 'shipped': return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-400';
+            case 'cancelled': return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-400';
             default: return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-400';
         }
     };
@@ -308,7 +313,7 @@ export default function OrdersPage() {
                 
             </div>
 
-            {/* Stats Cards - Update to use pagination data */}
+            {/* Stats Cards - Update to use new status categories */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
                 <div className="bg-white p-6 rounded-lg shadow-sm border dark:border-gray-800 dark:bg-white/[0.03]">
                     <div className="flex items-center">
@@ -325,7 +330,7 @@ export default function OrdersPage() {
                         <div className="ml-4">
                             <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Completed</p>
                             <p className="text-2xl font-semibold text-gray-900 dark:text-white/90">
-                                {orders.filter(o => o.status.toLowerCase() === 'completed').length}
+                                {orders.filter(o => o.status.toUpperCase() === 'COMPLETED').length}
                             </p>
                         </div>
                     </div>
@@ -334,9 +339,9 @@ export default function OrdersPage() {
                     <div className="flex items-center">
                         <RefreshCw className="h-8 w-8 text-yellow-600" />
                         <div className="ml-4">
-                            <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Processing</p>
+                            <p className="text-sm font-medium text-gray-600 dark:text-gray-400">In Progress</p>
                             <p className="text-2xl font-semibold text-gray-900 dark:text-white/90">
-                                {orders.filter(o => o.status.toLowerCase() === 'processing').length}
+                                {orders.filter(o => ['AWAITING_SHIPMENT', 'PARTIALLY_SHIPPING', 'AWAITING_COLLECTION', 'IN_TRANSIT'].includes(o.status.toUpperCase())).length}
                             </p>
                         </div>
                     </div>
@@ -347,7 +352,7 @@ export default function OrdersPage() {
                         <div className="ml-4">
                             <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Cancelled</p>
                             <p className="text-2xl font-semibold text-gray-900 dark:text-white/90">
-                                {orders.filter(o => o.status.toLowerCase() === 'cancelled').length}
+                                {orders.filter(o => o.status.toUpperCase() === 'CANCELLED').length}
                             </p>
                         </div>
                     </div>
@@ -406,17 +411,31 @@ export default function OrdersPage() {
                     </div>
 
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2 dark:text-gray-400">Status</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-2 dark:text-gray-400">
+                            Order Status
+                            <span className="ml-1 text-xs text-gray-500 cursor-help" title="TikTok Shop order status definitions">ℹ️</span>
+                        </label>
                         <select
                             value={filters.status}
                             onChange={(e) => handleFilterChange('status', e.target.value)}
                             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white"
                         >
                             <option value="">All Status</option>
-                            <option value="COMPLETED">Completed</option>
-                            <option value="CANCELLED">Cancelled</option>
-                            <option value="PROCESSING">Processing</option>
-                            <option value="SHIPPED">Shipped</option>
+                            <optgroup label="Payment & Processing">
+                                <option value="UNPAID" title="Order placed but payment authorized">UNPAID</option>
+                                <option value="ON_HOLD" title="Payment completed, in remorse period">ON_HOLD</option>
+                            </optgroup>
+                            <optgroup label="Fulfillment">
+                                <option value="AWAITING_SHIPMENT" title="Waiting for seller to place logistics order">AWAITING_SHIPMENT</option>
+                                <option value="PARTIALLY_SHIPPING" title="Some items shipped, others pending">PARTIALLY_SHIPPING</option>
+                                <option value="AWAITING_COLLECTION" title="Logistics order placed, waiting for carrier pickup">AWAITING_COLLECTION</option>
+                                <option value="IN_TRANSIT" title="All items collected by carrier, in delivery">IN_TRANSIT</option>
+                            </optgroup>
+                            <optgroup label="Final States">
+                                <option value="DELIVERED" title="All items delivered to buyer">DELIVERED</option>
+                                <option value="COMPLETED" title="Order completed, no returns/refunds allowed">COMPLETED</option>
+                                <option value="CANCELLED" title="Order cancelled by buyer/seller/system/operator">CANCELLED</option>
+                            </optgroup>
                         </select>
                     </div>
 
@@ -452,6 +471,40 @@ export default function OrdersPage() {
                             <option value="50">50</option>
                             <option value="100">100</option>
                         </select>
+                    </div>
+                </div>
+
+                {/* Status Legend */}
+                <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                    <h5 className="text-xs font-medium text-gray-600 dark:text-gray-300 mb-2">Order Status Flow:</h5>
+                    <div className="flex flex-wrap gap-2 text-xs">
+                        <span className="inline-flex items-center px-2 py-1 rounded-full bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-400">
+                            UNPAID
+                        </span>
+                        <span className="text-gray-400">→</span>
+                        <span className="inline-flex items-center px-2 py-1 rounded-full bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-400">
+                            ON_HOLD
+                        </span>
+                        <span className="text-gray-400">→</span>
+                        <span className="inline-flex items-center px-2 py-1 rounded-full bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-400">
+                            AWAITING_SHIPMENT
+                        </span>
+                        <span className="text-gray-400">→</span>
+                        <span className="inline-flex items-center px-2 py-1 rounded-full bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-400">
+                            AWAITING_COLLECTION
+                        </span>
+                        <span className="text-gray-400">→</span>
+                        <span className="inline-flex items-center px-2 py-1 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-400">
+                            IN_TRANSIT
+                        </span>
+                        <span className="text-gray-400">→</span>
+                        <span className="inline-flex items-center px-2 py-1 rounded-full bg-teal-100 text-teal-700 dark:bg-teal-900 dark:text-teal-400">
+                            DELIVERED
+                        </span>
+                        <span className="text-gray-400">→</span>
+                        <span className="inline-flex items-center px-2 py-1 rounded-full bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-400">
+                            COMPLETED
+                        </span>
                     </div>
                 </div>
             </div>
