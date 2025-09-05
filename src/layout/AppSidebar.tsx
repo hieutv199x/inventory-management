@@ -16,7 +16,7 @@ import {
 } from "../icons/index";
 import { FaMoneyCheckAlt, FaUsersCog } from "react-icons/fa";
 import { AiOutlineShopping } from "react-icons/ai";
-import { MessageCircle, Grid2X2Plus } from "lucide-react";
+import { MessageCircle, Grid2X2Plus, AlertTriangle } from "lucide-react";
 import { LanguageSwitcher } from '@/components/ui/LanguageSwitcher';
 
 type NavItem = {
@@ -57,12 +57,12 @@ const financeItems: NavItem[] = [
     path: "/statement",
     roles: ["ADMIN", "MANAGER", "ACCOUNTANT", "SELLER"]
   },
-  // {
-  //   icon: <FaMoneyCheckAlt size={24}/>,
-  //   name: "Fraud Alert",
-  //   path: "/fraud-alert",
-  //   roles: ["ADMIN", "MANAGER", "ACCOUNTANT", "SELLER"]
-  // },
+  {
+    icon: <AlertTriangle size={24}/>,
+    name: "nav.fraud_alert",
+    path: "/fraud-alert",
+    roles: ["ADMIN", "ACCOUNTANT"]
+  },
   {
     icon: <PlugInIcon />,
     name: "nav.connect_shop",

@@ -16,7 +16,8 @@ export async function GET(request: NextRequest) {
         const { searchParams } = new URL(request.url);
         const shopId = searchParams.get('shopId');
         const alertType = searchParams.get('alertType');
-        const status = searchParams.get('status');
+        const startDate = searchParams.get('startDate');
+        const endDate = searchParams.get('endDate');
 
         // Get shop ObjectID references for filtering
         let shopObjectIds: string[] = [];
@@ -41,66 +42,139 @@ export async function GET(request: NextRequest) {
 
         // Build where clause for payments
         let paymentWhere: any = {};
+        
         if (shopObjectIds.length > 0) {
             paymentWhere.shopId = { in: shopObjectIds };
         }
 
-        // Get payments with bank accounts and compare with shop's configured bank
+        // Add date range filter if provided
+        if (startDate && endDate) {
+            const startTimestamp = new Date(startDate).getTime();
+            const endTimestamp = new Date(endDate).getTime();
+            paymentWhere.paymentTime = {
+                gte: startTimestamp,
+                lte: endTimestamp
+            };
+        }
+
+        // Get payments with shop and bank account data
         const payments = await prisma.payment.findMany({
             where: paymentWhere,
-            select: {
-                id: true,
-                paymentId: true,
-                amount: true,
-                currency: true,
-                paymentTime: true,
-                bankAccount: true,
+            include: {
                 shop: {
                     select: {
                         id: true,
                         shopId: true,
-                        shopName: true,
-                        bankAccounts: true
+                        shopName: true
                     }
                 }
             },
-            orderBy: { createdAt: 'desc' },
+            orderBy: { createTime: 'desc' },
             take: 500 // Limit for performance
+        });
+
+        // Get bank accounts for the shops
+        const bankAccounts = await prisma.bankAccount.findMany({
+            where: {
+                shopId: { in: shopObjectIds.length > 0 ? shopObjectIds : undefined }
+            },
+            select: {
+                shopId: true,
+                accountNumber: true,
+                setupDate: true
+            }
+        });
+
+        // Get seller information for the shops
+        const userShopRoles = await prisma.userShopRole.findMany({
+            where: {
+                shopId: { in: shopObjectIds.length > 0 ? shopObjectIds : undefined },
+                role: 'SELLER' // Assuming SELLER role identifies the seller
+            },
+            include: {
+                user: {
+                    select: {
+                        id: true,
+                        name: true,
+                        email: true
+                    }
+                }
+            }
+        });
+
+        // Create a map of shopId to seller info
+        const sellerMap = new Map<string, {name: string, email: string}>();
+        userShopRoles.forEach(usr => {
+            if (usr.shopId && usr.user) {
+                sellerMap.set(usr.shopId, {
+                    name: usr.user.name || 'Unknown Seller',
+                    email: usr.user.email
+                });
+            }
+        });
+
+        // Create a map of shopId to bank accounts with creation dates
+        const bankAccountMap = new Map<string, Array<{accountNumber: string, createdAt: Date}>>();
+        bankAccounts.forEach(ba => {
+            if (ba.shopId) {
+                const shopBankAccounts = bankAccountMap.get(ba.shopId) || [];
+                if (ba.setupDate) {
+                    shopBankAccounts.push({
+                        accountNumber: ba.accountNumber,
+                        createdAt: ba.setupDate
+                    });
+                }
+                bankAccountMap.set(ba.shopId, shopBankAccounts);
+            }
         });
 
         // Process payments to detect fraud alerts
         const fraudAlerts = payments.map(payment => {
-            const orderBankAccount = payment.bankAccount;
-            const configuredBankAccount = payment.shop?.bankAccounts;
-            
+            const paymentBankAccount = payment.bankAccount;
+            const shopBankAccounts = bankAccountMap.get(payment.shopId);
+            const sellerInfo = sellerMap.get(payment.shopId);
+
             let alertType: 'MISMATCH' | 'NO_BANK_ASSIGNED' | 'MATCHED';
-            
-            if (!configuredBankAccount) {
+            let configuredBankAccount: string | null = null;
+            let bankCreatedDate: Date | null = null;
+
+            if (!shopBankAccounts || shopBankAccounts.length === 0) {
                 alertType = 'NO_BANK_ASSIGNED';
-            } else if (!orderBankAccount) {
+            } else if (!paymentBankAccount) {
                 alertType = 'NO_BANK_ASSIGNED';
-            } else if (!Array.isArray(configuredBankAccount) || !configuredBankAccount.some(acc => acc.accountNumber === orderBankAccount)) {
-                alertType = 'MISMATCH';
             } else {
-                alertType = 'MATCHED';
+                // Compare last 4 digits of bank accounts
+                const paymentLast4 = paymentBankAccount.slice(-4);
+                const matchingAccount = shopBankAccounts.find(acc => 
+                    acc.accountNumber.slice(-4) === paymentLast4
+                );
+
+                if (matchingAccount) {
+                    alertType = 'MATCHED';
+                    configuredBankAccount = matchingAccount.accountNumber;
+                    bankCreatedDate = matchingAccount.createdAt;
+                } else {
+                    alertType = 'MISMATCH';
+                    configuredBankAccount = shopBankAccounts[0].accountNumber; // Show first configured account
+                    bankCreatedDate = shopBankAccounts[0].createdAt;
+                }
             }
 
             return {
                 id: payment.id,
-                orderId: payment.paymentId, // Using paymentId as orderId
+                paymentId: payment.paymentId,
                 shopId: payment.shop?.shopId || '',
                 shopName: payment.shop?.shopName || 'Unknown Shop',
-                orderBankAccount,
+                sellerName: sellerInfo?.name || 'Admin',
+                sellerEmail: sellerInfo?.email || '',
+                orderBankAccount: paymentBankAccount,
                 configuredBankAccount,
+                bankCreatedDate: bankCreatedDate ? bankCreatedDate.getTime() : null,
                 alertType,
-                amount: parseFloat(payment.amount) || 0,
-                currency: payment.currency || 'USD',
-                orderDate: payment.paymentTime || Date.now(),
+                amount: parseFloat(payment.amountValue ?? '0') || 0,
+                currency: payment.amountCurrency || 'USD',
+                paidTime: payment.paidTime || Date.now(),
                 detectedDate: Date.now(),
-                status: 'ACTIVE' as const,
-                reviewedBy: null,
-                reviewedAt: null,
-                notes: null
             };
         });
 
@@ -114,10 +188,6 @@ export async function GET(request: NextRequest) {
 
         if (alertType) {
             filteredAlerts = filteredAlerts.filter(alert => alert.alertType === alertType);
-        }
-
-        if (status) {
-            filteredAlerts = filteredAlerts.filter(alert => alert.status === status);
         }
 
         // Sort by most recent first and limit results
@@ -139,3 +209,4 @@ export async function GET(request: NextRequest) {
         await prisma.$disconnect();
     }
 }
+
