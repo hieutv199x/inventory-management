@@ -303,6 +303,7 @@ model Sku {
   price        Price?
   inventory    Inventory[]
   product      Product  @relation(fields: [productId], references: [id])
+  channelData                    String?
 }
 
 model Price {
@@ -320,6 +321,7 @@ model Inventory {
   quantity   Int
   warehouseId String
   sku        Sku     @relation(fields: [skuId], references: [id])
+  channelData                    String?
   @@unique([skuId, warehouseId])
 }
 
