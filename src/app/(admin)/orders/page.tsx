@@ -202,7 +202,7 @@ export default function OrdersPage() {
     };
 
     const syncOrders = async () => {
-        if (!selectedOrder) {
+        if (!filters?.shopId) {
             alert('Please select a shop to sync orders');
             return;
         }
@@ -210,7 +210,7 @@ export default function OrdersPage() {
         setSyncing(true);
         try {
             const response = await httpClient.post('/tiktok/Orders/get-order-list', {
-                shop_id: selectedOrder,
+                shop_id: filters.shopId,
                 sync: true,
                 filters: {
                     createTimeGe: filters.dateFrom ? Math.floor(new Date(filters.dateFrom).getTime() / 1000) : undefined,
