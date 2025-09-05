@@ -30,6 +30,34 @@ function verifySignature(body: string, signature: string, secret: string): boole
     }
 }
 
+// Get webhook secret for specific shop
+async function getWebhookSecretForShop(shopId: string): Promise<string | null> {
+    try {
+        const shop = await prisma.shopAuthorization.findUnique({
+            where: { shopId },
+            include: {
+                app: {
+                    select: {
+                        appSecret: true,
+                        appKey: true
+                    }
+                }
+            }
+        });
+
+        if (!shop || !shop.app) {
+            console.error(`Shop ${shopId} or associated app not found`);
+            return null;
+        }
+
+        // Return the webhook secret from the app
+        return shop.app.appSecret;
+    } catch (error) {
+        console.error('Error fetching webhook secret for shop:', error);
+        return null;
+    }
+}
+
 // Handle order events
 async function handleOrderEvent(event: WebhookEvent) {
     try {
@@ -311,6 +339,15 @@ export async function POST(req: NextRequest) {
         const signature = req.headers.get('x-tts-signature') || '';
         const timestamp = req.headers.get('x-tts-timestamp') || '';
 
+        // Parse the webhook event to get shop_id first
+        const event: WebhookEvent = JSON.parse(body);
+        
+        console.log('Received TikTok Shop webhook:', {
+            type: event.type,
+            shop_id: event.shop_id,
+            timestamp: event.timestamp
+        });
+
         // Verify timestamp (prevent replay attacks)
         const currentTime = Math.floor(Date.now() / 1000);
         const requestTime = parseInt(timestamp);
@@ -321,33 +358,24 @@ export async function POST(req: NextRequest) {
             );
         }
 
-        // Get webhook secret from environment
-        const webhookSecret = process.env.TIKTOK_WEBHOOK_SECRET;
+        // Get webhook secret for the specific shop's app
+        const webhookSecret = await getWebhookSecretForShop(event.shop_id);
         if (!webhookSecret) {
-            console.error('TIKTOK_WEBHOOK_SECRET not configured');
+            console.error(`No webhook secret found for shop ${event.shop_id}`);
             return NextResponse.json(
-                { error: 'Webhook secret not configured' },
+                { error: 'Webhook secret not found for this shop' },
                 { status: 500 }
             );
         }
 
-        // Verify signature
+        // Verify signature using the shop's app webhook secret
         if (!verifySignature(body, signature, webhookSecret)) {
-            console.error('Invalid webhook signature');
+            console.error(`Invalid webhook signature for shop ${event.shop_id}`);
             return NextResponse.json(
                 { error: 'Invalid signature' },
                 { status: 401 }
             );
         }
-
-        // Parse the webhook event
-        const event: WebhookEvent = JSON.parse(body);
-
-        console.log('Received TikTok Shop webhook:', {
-            type: event.type,
-            shop_id: event.shop_id,
-            timestamp: event.timestamp
-        });
 
         // Route event to appropriate handler
         try {
@@ -365,7 +393,8 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({
                 message: 'Webhook processed successfully',
                 event_type: event.type,
-                timestamp: event.timestamp
+                timestamp: event.timestamp,
+                shop_id: event.shop_id
             });
 
         } catch (processingError) {
