@@ -5,11 +5,11 @@ import "./globals.css";
 import { SidebarProvider } from '@/context/SidebarContext';
 import { ThemeProvider } from '@/context/ThemeContext';
 import { AuthProvider } from "../context/authContext";
-import { ToastProvider } from "@/context/ToastContext";
 import { LanguageProvider } from '@/context/LanguageContext';
+import { LoadingProvider } from "@/context/loadingContext";
 
 // Configure Inter font with Vietnamese subset
-const inter = Inter({ 
+const inter = Inter({
   subsets: ["latin", "vietnamese"],
   variable: "--font-inter",
   display: 'swap',
@@ -45,15 +45,15 @@ export default function RootLayout({
   return (
     <html lang="vi" className={`${inter.variable} ${roboto.variable}`}>
       <body className={`${inter.className} antialiased`}>
-      <AuthProvider>
-        <LanguageProvider>
-          <ThemeProvider>
-            <ToastProvider>
-              <SidebarProvider>{children}</SidebarProvider>
-            </ToastProvider>
-          </ThemeProvider>
-        </LanguageProvider>
-      </AuthProvider>
+        <LoadingProvider>
+          <AuthProvider>
+            <LanguageProvider>
+              <ThemeProvider>
+                <SidebarProvider>{children}</SidebarProvider>
+              </ThemeProvider>
+            </LanguageProvider>
+          </AuthProvider>
+        </LoadingProvider>
       </body>
     </html>
   );

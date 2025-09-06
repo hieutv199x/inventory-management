@@ -4,8 +4,9 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Loader2, Search, RefreshCw, Eye, Package, Calendar, User, X, MapPin, CreditCard, Truck } from 'lucide-react';
 import { format } from 'date-fns';
 import { httpClient } from '@/lib/http-client';
-import { Modal } from '@/components/ui/modal';
+import { useLoading } from '@/context/loadingContext';
 import OrderDetailModal from '@/components/Orders/OrderDetailModal';
+import ShopSelector from '@/components/ui/ShopSelector';
 
 interface Order {
     id: string;
@@ -70,11 +71,12 @@ interface PaginationInfo {
 }
 
 export default function OrdersPage() {
+    const { showLoading, hideLoading, setLoadingMessage } = useLoading();
+
     const [orders, setOrders] = useState<Order[]>([]);
     const [shops, setShops] = useState<Shop[]>([]);
-    const [loading, setLoading] = useState(false);
     const [syncing, setSyncing] = useState(false);
-    
+
     // Updated filter and search states
     const [filters, setFilters] = useState({
         shopId: '',
@@ -83,7 +85,7 @@ export default function OrdersPage() {
         dateTo: '',
         keyword: '',
     });
-    
+
     // Add separate search state
     const [searchKeyword, setSearchKeyword] = useState('');
     const [isSearching, setIsSearching] = useState(false);
@@ -104,7 +106,6 @@ export default function OrdersPage() {
     const [showOrderModal, setShowOrderModal] = useState(false);
 
     useEffect(() => {
-        fetchShops();
         fetchOrders();
     }, []);
 
@@ -116,21 +117,21 @@ export default function OrdersPage() {
     // Add search function
     const handleSearch = async (e: React.FormEvent) => {
         e.preventDefault();
-        setIsSearching(true);
+        showLoading('Searching orders...');
         setFilters(prev => ({ ...prev, keyword: searchKeyword }));
         setCurrentPage(1);
     };
 
     const fetchOrders = useCallback(async () => {
-        setLoading(true);
-        setIsSearching(false);
+        showLoading('Loading orders...');
+
         try {
             const params = new URLSearchParams();
-            
+
             // Add pagination params
             params.append('page', currentPage.toString());
             params.append('pageSize', pageSize.toString());
-            
+
             // Add filter params
             if (filters.shopId) params.append('shopId', filters.shopId);
             if (filters.status) params.append('status', filters.status);
@@ -156,20 +157,16 @@ export default function OrdersPage() {
         } catch (error) {
             console.error('Error fetching orders:', error);
         } finally {
-            setLoading(false);
+            hideLoading();
         }
-    }, [filters, currentPage, pageSize]);
+    }, [filters, currentPage, pageSize, showLoading, hideLoading]);
 
     // Reset to first page when filters change
     useEffect(() => {
-        if (currentPage !== 1) {
-            setCurrentPage(1);
+        if (currentPage === 1) {
+            fetchOrders();
         }
-    }, [filters]);
-
-    useEffect(() => {
-        fetchOrders();
-    }, [fetchOrders]);
+    }, [filters, currentPage]);
 
     const handlePageChange = (newPage: number) => {
         if (newPage >= 1 && newPage <= pagination.totalPages) {
@@ -180,15 +177,6 @@ export default function OrdersPage() {
     const handlePageSizeChange = (newSize: number) => {
         setPageSize(newSize);
         setCurrentPage(1);
-    };
-
-    const fetchShops = async () => {
-        try {
-            const response = await httpClient.get('/tiktok/shop/get-shops?status=ACTIVE');
-            setShops(response.credentials || []);
-        } catch (error) {
-            console.error('Error fetching shops:', error);
-        }
     };
 
     const fetchOrderDetail = async (orderId: string) => {
@@ -207,7 +195,7 @@ export default function OrdersPage() {
             return;
         }
 
-        setSyncing(true);
+        showLoading('Syncing orders...');
         try {
             const response = await httpClient.post('/tiktok/Orders/get-order-list', {
                 shop_id: filters.shopId,
@@ -225,15 +213,16 @@ export default function OrdersPage() {
             console.error('Error syncing orders:', error);
             alert('Sync failed');
         } finally {
-            setSyncing(false);
+            hideLoading();
         }
     };
 
     const openOrderModal = async (order: Order) => {
         setSelectedOrder(order);
         setShowOrderModal(true);
-        
+
         try {
+            showLoading('Loading order details...');
             // Fetch detailed order information
             const detailedOrder = await fetchOrderDetail(order.orderId);
             setSelectedOrder(detailedOrder);
@@ -241,6 +230,8 @@ export default function OrdersPage() {
             console.error('Failed to load order details:', error);
             alert('Failed to load order details');
             closeOrderModal();
+        } finally {
+            hideLoading();
         }
     };
 
@@ -269,7 +260,7 @@ export default function OrdersPage() {
     };
 
     // Filter orders based on search term
-    const filteredOrders = orders.filter(order => 
+    const filteredOrders = orders.filter(order =>
         order.orderId.toLowerCase().includes(filters.keyword.toLowerCase()) ||
         order.buyerEmail.toLowerCase().includes(filters.keyword.toLowerCase()) ||
         (order.recipientAddress?.name || '').toLowerCase().includes(filters.keyword.toLowerCase()) ||
@@ -278,18 +269,6 @@ export default function OrdersPage() {
 
     return (
         <div>
-            {/* Loading Overlay */}
-            {(loading || isSearching) && (
-                <div className="fixed inset-0 bg-gray-900/50 backdrop-blur-sm flex items-center justify-center" style={{ zIndex: 9999 }}>
-                    <div className="bg-white dark:bg-gray-800 rounded-lg p-6 flex items-center gap-3 shadow-xl">
-                        <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
-                        <span className="text-gray-900 dark:text-white font-medium">
-                            {isSearching ? 'Searching orders...' : 'Loading orders...'}
-                        </span>
-                    </div>
-                </div>
-            )}
-
             {/* Header */}
             <div className="flex flex-col gap-5 mb-6 sm:flex-row sm:justify-between">
                 <div className="w-full">
@@ -301,16 +280,16 @@ export default function OrdersPage() {
                 <div className="flex items-start w-full gap-3 sm:justify-end">
                     <div className="flex items-center gap-2">
                         <button
-                        onClick={syncOrders}
-                        disabled={syncing}
-                        className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 disabled:opacity-50 flex items-center justify-center hover:shadow-lg transition duration-200"
-                    >
-                        {syncing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <RefreshCw className="h-4 w-4 mr-2" />}
-                        Sync Orders
-                    </button>
+                            onClick={syncOrders}
+                            disabled={syncing}
+                            className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 disabled:opacity-50 flex items-center justify-center hover:shadow-lg transition duration-200"
+                        >
+                            {syncing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+                            Sync Orders
+                        </button>
                     </div>
                 </div>
-                
+
             </div>
 
             {/* Stats Cards - Update to use new status categories */}
@@ -374,11 +353,11 @@ export default function OrdersPage() {
                                 value={searchKeyword}
                                 onChange={(e) => setSearchKeyword(e.target.value)}
                                 className="h-11 w-full rounded-lg border border-gray-200 bg-transparent py-2.5 pl-12 pr-24 text-sm text-gray-800 shadow-sm placeholder:text-gray-400 focus:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 xl:w-[500px]"
-                                disabled={loading || isSearching}
+                                disabled={syncing}
                             />
-                            <button 
+                            <button
                                 type="submit"
-                                disabled={loading || isSearching}
+                                disabled={syncing}
                                 className="absolute right-2.5 top-1/2 inline-flex -translate-y-1/2 items-center gap-1 rounded-lg border border-gray-200 bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed dark:border-gray-600 dark:bg-blue-700 dark:hover:bg-blue-800"
                             >
                                 {isSearching ? (
@@ -396,18 +375,9 @@ export default function OrdersPage() {
                 <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2 dark:text-gray-400">Shop</label>
-                        <select
-                            value={filters.shopId}
-                            onChange={(e) => handleFilterChange('shopId', e.target.value)}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white"
-                        >
-                            <option value="">All Shops</option>
-                            {shops.map((shop) => (
-                                <option key={shop.id} value={shop.shopId}>
-                                    {shop.shopName || shop.shopId}
-                                </option>
-                            ))}
-                        </select>
+                        <ShopSelector
+                            onChange={(shopId: string | null, shop: any | null) => handleFilterChange('shopId', shopId ?? '')}
+                        />
                     </div>
 
                     <div>
@@ -524,16 +494,7 @@ export default function OrdersPage() {
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200 dark:divide-gray-700 dark:border-gray-800 dark:bg-white/[0.03]">
-                            {loading ? (
-                                <tr>
-                                    <td colSpan={6} className="px-6 py-8 text-center">
-                                        <div className="flex items-center justify-center gap-2">
-                                            <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
-                                            <span className="text-gray-500">Loading orders...</span>
-                                        </div>
-                                    </td>
-                                </tr>
-                            ) : orders.length === 0 ? (
+                            {orders.length === 0 ? (
                                 <tr>
                                     <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
                                         No orders found with the selected filters.
@@ -598,8 +559,8 @@ export default function OrdersPage() {
                                         <td className="px-6 py-4 whitespace-nowrap">
                                             <div className="flex flex-col space-y-1">
                                                 <div className="text-sm font-medium text-gray-900 dark:text-gray-400">
-                                                    {order.payment?.totalAmount ? 
-                                                        `${parseInt(order.payment.totalAmount).toLocaleString()} ${order.payment.currency}` : 
+                                                    {order.payment?.totalAmount ?
+                                                        `${parseInt(order.payment.totalAmount).toLocaleString()} ${order.payment.currency}` :
                                                         'N/A'
                                                     }
                                                 </div>
@@ -619,14 +580,14 @@ export default function OrdersPage() {
                                         {/* Actions - Chat trò chuyện (support) khách hàng */}
                                         <td className="px-6 py-4 whitespace-nowrap">
                                             <div className="flex flex-col space-y-2">
-                                                <button 
+                                                <button
                                                     onClick={() => openOrderModal(order)}
                                                     className="inline-flex items-center px-2 py-1 text-xs font-medium text-blue-600 hover:text-blue-900 border border-blue-300 rounded hover:bg-blue-50 dark:border-blue-800 dark:bg-blue-900 dark:text-blue-400 dark:hover:bg-blue-700"
                                                 >
                                                     <Eye className="h-3 w-3 mr-1" />
                                                     View Details
                                                 </button>
-                                                <button 
+                                                <button
                                                     className="inline-flex items-center px-2 py-1 text-xs font-medium text-green-600 hover:text-green-900 border border-green-300 rounded hover:bg-green-50 dark:border-green-800 dark:bg-green-900 dark:text-green-400 dark:hover:bg-green-700"
                                                     onClick={() => {
                                                         // TODO: Implement customer support chat
@@ -652,14 +613,14 @@ export default function OrdersPage() {
                     <div className="flex-1 flex justify-between sm:hidden">
                         <button
                             onClick={() => handlePageChange(pagination.currentPage - 1)}
-                            disabled={!pagination.hasPreviousPage || loading}
+                            disabled={!pagination.hasPreviousPage || syncing}
                             className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 dark:border-gray-800 dark:bg-white/[0.03] dark:text-gray-400 dark:hover:bg-gray-700"
                         >
                             Previous
                         </button>
                         <button
                             onClick={() => handlePageChange(pagination.currentPage + 1)}
-                            disabled={!pagination.hasNextPage || loading}
+                            disabled={!pagination.hasNextPage || syncing}
                             className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 dark:border-gray-800 dark:bg-white/[0.03] dark:text-gray-400 dark:hover:bg-gray-700"
                         >
                             Next
@@ -677,7 +638,7 @@ export default function OrdersPage() {
                             <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px">
                                 <button
                                     onClick={() => handlePageChange(pagination.currentPage - 1)}
-                                    disabled={!pagination.hasPreviousPage || loading}
+                                    disabled={!pagination.hasPreviousPage || syncing}
                                     className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-800 dark:bg-white/[0.03] dark:text-gray-400 dark:hover:bg-gray-700"
                                 >
                                     Previous
@@ -687,7 +648,7 @@ export default function OrdersPage() {
                                 </span>
                                 <button
                                     onClick={() => handlePageChange(pagination.currentPage + 1)}
-                                    disabled={!pagination.hasNextPage || loading}
+                                    disabled={!pagination.hasNextPage || syncing}
                                     className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-800 dark:bg-white/[0.03] dark:text-gray-400 dark:hover:bg-gray-700"
                                 >
                                     Next

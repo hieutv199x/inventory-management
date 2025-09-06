@@ -1,145 +1,166 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
-import { getUserWithShopAccess, getActiveShopIds, validateShopAccess } from '@/lib/auth';
+import { NextRequest, NextResponse } from "next/server";
+import { PrismaClient } from "@prisma/client";
+import { getUserWithShopAccess } from "@/lib/auth";
 
 const prisma = new PrismaClient();
 
-export async function GET(request: NextRequest) {
-  try {
-    const { user, isAdmin, accessibleShopIds } = await getUserWithShopAccess(request, prisma);
+export async function GET(req: NextRequest) {
+    try {
+        const { user, accessibleShopIds, isAdmin } = await getUserWithShopAccess(req, prisma);
+        
+        const { searchParams } = new URL(req.url);
+        const page = parseInt(searchParams.get('page') || '1');
+        const limit = parseInt(searchParams.get('limit') || '12');
+        const status = searchParams.get('status') || 'ACTIVE';
+        const search = searchParams.get('search')?.trim() || '';
+        const userId = searchParams.get('userId');
 
-    const { searchParams } = new URL(request.url);
-    const channel = searchParams.get('channel');
-    const appId = searchParams.get('appId');
-    const requestedShopId = searchParams.get('shopId');
-    const page = parseInt(searchParams.get('page') || '1');
-    const pageSize = parseInt(searchParams.get('pageSize') || '20');
-    const offset = (page - 1) * pageSize;
+        const skip = (page - 1) * limit;
 
-    const where: any = {};
-    
-    // Apply shop filter based on user permissions
-    if (isAdmin) {
-      // Admin can see all shops, optionally filtered by requestedShopId
-      if (requestedShopId) {
-        where.shopId = requestedShopId;
-      }
-    } else {
-      // Non-admin users can only see assigned shops
-      if (accessibleShopIds.length === 0) {
-        return NextResponse.json({ shops: [], pagination: { total: 0, page, pageSize, totalPages: 0 } });
-      }
-      
-      if (requestedShopId && accessibleShopIds.includes(requestedShopId)) {
-        where.shopId = requestedShopId;
-      } else if (requestedShopId) {
-        // User requested a specific shop they don't have access to
-        return NextResponse.json({ shops: [], pagination: { total: 0, page, pageSize, totalPages: 0 } });
-      } else {
-        // Filter by accessible shops
-        where.shopId = { in: accessibleShopIds };
-      }
-    }
+        // Build where clause based on user permissions and search
+        let whereClause: any = {};
 
-    if (channel) {
-      where.channelApp = { channel: channel as any };
-    }
-    if (appId) {
-      where.appId = appId;
-    }
-    
-    const [shops, total] = await Promise.all([
-      prisma.shopAuthorization.findMany({
-        where,
-        include: {
-          app: {
-            select: {
-              id: true,
-              appName: true,
-              channel: true
+        // Status filter
+        if (status && status !== 'ALL') {
+            whereClause.status = status;
+        }
+
+        // Search functionality - search across multiple fields
+        if (search) {
+            whereClause.OR = [
+                // Search by shop name (case insensitive)
+                {
+                    shopName: {
+                        contains: search,
+                        mode: 'insensitive'
+                    }
+                },
+                // Search by managed name (case insensitive)
+                {
+                    managedName: {
+                        contains: search,
+                        mode: 'insensitive'
+                    }
+                },
+                // Search by shop ID (TikTok shop ID)
+                {
+                    shopId: {
+                        contains: search,
+                        mode: 'insensitive'
+                    }
+                },
+                // Search by region/country
+                {
+                    region: {
+                        contains: search,
+                        mode: 'insensitive'
+                    }
+                },
+                // Search by app name
+                {
+                    app: {
+                        appName: {
+                            contains: search,
+                            mode: 'insensitive'
+                        }
+                    }
+                }
+            ];
+        }
+
+        // Role-based access control
+        if (!isAdmin) {
+            // For non-admin users, filter by accessible shops
+            if (accessibleShopIds.length === 0) {
+                // User has no shop access
+                return NextResponse.json({
+                    shops: [],
+                    pagination: {
+                        page,
+                        limit,
+                        total: 0,
+                        totalPages: 0
+                    }
+                });
             }
-          }
-        },
-        orderBy: { createdAt: 'desc' },
-        take: pageSize,
-        skip: offset
-      }),
-      prisma.shopAuthorization.count({ where })
-    ]);
 
-    const totalPages = Math.ceil(total / pageSize);
+            // Filter by accessible shop IDs (TikTok shop IDs)
+            whereClause.shopId = {
+                in: accessibleShopIds
+            };
+        }
 
-    return NextResponse.json({ 
-      shops,
-      pagination: {
-        total,
-        page,
-        pageSize,
-        totalPages
-      }
-    });
-  } catch (error) {
-    console.error('Error fetching shops:', error);
-    if (error instanceof Error && error.message === 'Authentication required') {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        // Get total count for pagination
+        const total = await prisma.shopAuthorization.count({
+            where: whereClause
+        });
+
+        const totalPages = Math.ceil(total / limit);
+
+        // Fetch shops with all necessary data
+        const shops = await prisma.shopAuthorization.findMany({
+            where: whereClause,
+            include: {
+                app: {
+                    select: {
+                        id: true,
+                        appName: true,
+                        appKey: true,
+                        appSecret: true,
+                        channel: true,
+                        isActive: true
+                    }
+                }
+            },
+            orderBy: [
+                { updatedAt: 'desc' },
+                { createdAt: 'desc' }
+            ],
+            skip,
+            take: limit
+        });
+
+        // Transform the data to match frontend expectations
+        const transformedShops = shops.map(shop => ({
+            id: shop.id,
+            shopId: shop.shopId, // TikTok shop ID
+            shopName: shop.shopName,
+            managedName: shop.managedName,
+            shopCipher: shop.shopCipher,
+            region: shop.region,
+            status: shop.status,
+            createdAt: shop.createdAt.toISOString(),
+            updatedAt: shop.updatedAt.toISOString(),
+            app: {
+                id: shop?.app?.id,
+                appName: shop?.app?.appName,
+                channel: shop?.app?.channel,
+                appSecret: shop?.app?.appSecret
+            }
+        }));
+
+        return NextResponse.json({
+            shops: transformedShops,
+            pagination: {
+                page,
+                limit,
+                total,
+                totalPages
+            }
+        });
+
+    } catch (err: any) {
+        console.error("Error fetching shops:", err);
+        
+        if (err.message === 'Authentication required' || err.message === 'User not found') {
+            return NextResponse.json({ error: err.message }, { status: 401 });
+        }
+        
+        return NextResponse.json(
+            { error: err.message || "Failed to fetch shops" },
+            { status: 500 }
+        );
+    } finally {
+        await prisma.$disconnect();
     }
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
-  }
-}
-
-export async function POST(request: NextRequest) {
-  try {
-    const { user, isAdmin } = await getUserWithShopAccess(request, prisma);
-
-    // Only admins can create shop authorizations
-    if (!isAdmin) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
-
-    const body = await request.json();
-    const { 
-      shopId, 
-      shopName, 
-      appId, 
-      accessToken, 
-      refreshToken, 
-      expiresIn, 
-      scope, 
-      channelData, 
-      credentials 
-    } = body;
-
-    // Validate required fields
-    if (!shopId || !appId || !accessToken) {
-      return NextResponse.json(
-        { error: 'Missing required fields: shopId, appId, accessToken' }, 
-        { status: 400 }
-      );
-    }
-
-    const shop = await prisma.shopAuthorization.create({
-      data: {
-        shopId,
-        shopName,
-        appId,
-        accessToken,
-        refreshToken,
-        expiresIn,
-        scope,
-        channelData: JSON.stringify(channelData || {}),
-        credentials: credentials ? JSON.stringify(credentials) : null
-      },
-      include: {
-        app: true
-      }
-    });
-
-    return NextResponse.json({ shop });
-  } catch (error) {
-    console.error('Error creating shop authorization:', error);
-    if (error instanceof Error && error.message === 'Authentication required') {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
-  }
 }

@@ -7,7 +7,6 @@ import Select from "@/components/form/Select";
 import DatePicker from "@/components/form/date-picker";
 import { Table, TableBody, TableCell, TableHeader, TableRow } from "@/components/ui/table";
 import Image from "next/image";
-import { useToast } from "@/context/ToastContext";
 import { httpClient } from "@/lib/http-client";
 import { RefreshCw, Package, Calendar, User, Eye, Search, Loader2 } from 'lucide-react';
 import Badge from "@/components/ui/badge/Badge";
@@ -15,6 +14,7 @@ import ProductDetailModal from "@/components/Products/ProductDetailModal";
 import SyncProductModal from "@/components/Products/SyncProductModal";
 import { Product } from "@/types/product";
 import { formatCurrency, formatDate } from "@/utils/common/functionFormat";
+import { toast } from "react-hot-toast";
 
 // Utility to strip HTML tags from a string
 function stripHtml(html: string = ""): string {
@@ -32,7 +32,6 @@ interface PaginationInfo {
 }
 
 export default function ProductPage() {
-    const toast = useToast();
 
     const optionsListing = [
         { label: "UNKNOWN", value: "UNKNOWN" },
@@ -215,7 +214,7 @@ export default function ProductPage() {
             const allProducts = result?.products || [];
 
             if (allProducts.length === 0) {
-                toast.info("Không có sản phẩm để xuất");
+                toast("Không có sản phẩm để xuất");
                 return;
             }
 

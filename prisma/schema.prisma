@@ -116,6 +116,8 @@ model ChannelApp {
 model ShopAuthorization {
   id         String  @id @default(auto()) @map("_id") @db.ObjectId
   
+  managedName String? // For TikTok: managed shop ID (if applicable)
+
   // Universal shop identification
   shopId     String  @unique // Universal shop ID (TikTok shop ID, Amazon seller ID, etc.)
   shopName   String? // Name of the shop/store
@@ -502,6 +504,8 @@ model Order {
   packages                        OrderPackage[]
   payment                         OrderPayment?
   recipientAddress                OrderRecipientAddress?
+
+  customStatus                    String?
   
   createdAt                       DateTime @default(now())
   updatedAt                       DateTime @updatedAt

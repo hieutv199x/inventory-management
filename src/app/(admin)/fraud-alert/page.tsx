@@ -3,7 +3,6 @@ import React, { useCallback, useEffect, useState } from "react";
 import { AlertTriangle, RefreshCw, Shield, Eye, Clock, Building } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHeader, TableRow } from "@/components/ui/table";
 import Badge from "@/components/ui/badge/Badge";
-import { useToast } from "@/context/ToastContext";
 import { httpClient } from "@/lib/http-client";
 import SelectShop from "@/components/common/SelectShop";
 import Label from "@/components/form/Label";
@@ -35,7 +34,6 @@ const AlertTypeMap = {
 };
 
 export default function FraudAlertPage() {
-    const toast = useToast();
     
     const [filters, setFilters] = useState({
         shopId: "",
@@ -68,7 +66,6 @@ export default function FraudAlertPage() {
             const message = err instanceof Error ? err.message : "An unknown fetch error occurred";
             setError(message);
             console.error("Fetch failed", err);
-            toast.error(message);
         } finally {
             setIsLoading(false);
         }

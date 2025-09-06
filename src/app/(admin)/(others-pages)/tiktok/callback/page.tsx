@@ -1,8 +1,9 @@
 "use client";
 
 import React, {Suspense, useEffect, useState, useRef} from "react";
-import {useSearchParams} from "next/navigation";
+import {useSearchParams, useRouter} from "next/navigation";
 import { httpClient } from '@/lib/http-client';
+import ShopNameModal from '@/components/TikTok/ShopNameModal';
 
 /**
  * This component handles the core logic of processing the TikTok redirect.
@@ -10,8 +11,11 @@ import { httpClient } from '@/lib/http-client';
  */
 const TikTokCallbackHandler: React.FC = () => {
     const searchParams = useSearchParams();
+    const router = useRouter();
     const [status, setStatus] = useState<"loading" | "success" | "error">("loading");
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
+    const [showShopNameModal, setShowShopNameModal] = useState(false);
+    const [shopData, setShopData] = useState<{shopId: string, shopName: string} | null>(null);
     const processedRef = useRef(false);
 
     useEffect(() => {
@@ -45,7 +49,13 @@ const TikTokCallbackHandler: React.FC = () => {
 
                     console.log('Token data:', data);
                     if (Array.isArray(data) && data.length > 0 && data[0].cipher) {
+                        const shopInfo = data[0];
+                        setShopData({
+                            shopId: shopInfo.id || shopInfo.cipher,
+                            shopName: shopInfo.name || 'TikTok Shop'
+                        });
                         setStatus("success");
+                        setShowShopNameModal(true);
                     } else {
                         throw new Error("Invalid token response");
                     }
@@ -65,13 +75,51 @@ const TikTokCallbackHandler: React.FC = () => {
         processTikTokAuth();
     }, [searchParams]);
 
+    const handleShopNameSubmit = async (managedName: string) => {
+        try {
+            await httpClient.post('/tiktok/update-shop-name', {
+                shopId: shopData?.shopId,
+                managedName: managedName
+            });
+            
+            setShowShopNameModal(false);
+            // Redirect to shops page or dashboard
+            setTimeout(() => {
+                router.push('/shops');
+            }, 1000);
+        } catch (error: any) {
+            throw new Error(error.message || 'Failed to update shop name');
+        }
+    };
+
+    const handleCloseModal = () => {
+        setShowShopNameModal(false);
+        // Redirect even if user skips naming
+        setTimeout(() => {
+            router.push('/shops');
+        }, 1000);
+    };
+
     if (status === "loading") return <span>Loading...</span>;
+    
     if (status === "success") {
         return (
-            <div className="text-center">
-                <h2 className="text-2xl font-semibold text-green-600">✔ TikTok Connected Successfully!</h2>
-                <p className="mt-2 text-gray-600">Your shop has been linked to your account.</p>
-            </div>
+            <>
+                <div className="text-center">
+                    <h2 className="text-2xl font-semibold text-green-600">✔ TikTok Connected Successfully!</h2>
+                    <p className="mt-2 text-gray-600">Your shop has been linked to your account.</p>
+                    {!showShopNameModal && (
+                        <p className="mt-4 text-sm text-gray-500">Redirecting to shops page...</p>
+                    )}
+                </div>
+                
+                <ShopNameModal
+                    isOpen={showShopNameModal}
+                    onClose={handleCloseModal}
+                    onSubmit={handleShopNameSubmit}
+                    shopData={shopData}
+                />
+            </>
         );
     }
 
@@ -80,10 +128,16 @@ const TikTokCallbackHandler: React.FC = () => {
             <div className="text-center">
                 <h2 className="text-2xl font-semibold text-red-600">✖ Failed to connect TikTok</h2>
                 <p className="mt-2 text-gray-600">Reason: {errorMessage}</p>
+                <button 
+                    onClick={() => router.push('/shops')}
+                    className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                >
+                    Return to Shops
+                </button>
             </div>
         );
     }
-    // Display a loading indicator while the auth process is running.
+    
     return null;
 };
 
