@@ -7,6 +7,7 @@ import { httpClient } from '@/lib/http-client';
 import { useLoading } from '@/context/loadingContext';
 import OrderDetailModal from '@/components/Orders/OrderDetailModal';
 import ShopSelector from '@/components/ui/ShopSelector';
+import { formatCurrency } from "@/utils/common/functionFormat";
 
 interface Order {
     id: string;
@@ -560,13 +561,13 @@ export default function OrdersPage() {
                                             <div className="flex flex-col space-y-1">
                                                 <div className="text-sm font-medium text-gray-900 dark:text-gray-400">
                                                     {order.payment?.totalAmount ?
-                                                        `${parseInt(order.payment.totalAmount).toLocaleString()} ${order.payment.currency}` :
+                                                        formatCurrency(order.payment.totalAmount, order.payment.currency) :
                                                         'N/A'
                                                     }
                                                 </div>
                                                 {order.payment?.subTotal && (
                                                     <div className="text-xs text-gray-500 font-mono">
-                                                        Subtotal: {parseInt(order.payment.subTotal).toLocaleString()} {order.payment.currency}
+                                                        Subtotal: {formatCurrency(order.payment.subTotal, order.payment.currency)}
                                                     </div>
                                                 )}
                                                 {order.trackingNumber && (
