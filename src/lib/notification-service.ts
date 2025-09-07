@@ -17,6 +17,81 @@ export class NotificationService {
   
   static async createNotification(notificationData: NotificationData) {
     try {
+      // Handle system notifications differently
+      if (notificationData.userId === 'system') {
+        // For system notifications, notify all admin users
+        const adminUsers = await prisma.user.findMany({
+          where: { 
+            role: { in: ['ADMIN', 'MANAGER'] },
+            isActive: true 
+          }
+        });
+
+        if (adminUsers.length === 0) {
+          console.warn('No admin users found for system notification');
+          return null;
+        }
+
+        const notifications = [];
+        for (const admin of adminUsers) {
+          const notification = await prisma.notification.create({
+            data: {
+              type: notificationData.type,
+              title: notificationData.title,
+              message: notificationData.message,
+              userId: admin.id,
+              orderId: notificationData.orderId,
+              conversationId: notificationData.conversationId,
+              shopId: notificationData.shopId,
+              data: notificationData.data ? JSON.stringify(notificationData.data) : null,
+            },
+          });
+          notifications.push(notification);
+        }
+        
+        console.log(`Created ${notifications.length} system notifications for admin users`);
+        return notifications;
+      }
+
+      // For shop-level notifications, distribute to all shop users
+      if (notificationData.shopId && notificationData.userId === notificationData.shopId) {
+        const shopUsers = await prisma.userShopRole.findMany({
+          where: { 
+            shopId: notificationData.shopId,
+            user: { isActive: true }
+          },
+          include: { user: true }
+        });
+
+        if (shopUsers.length === 0) {
+          console.warn(`No users found for shop ${notificationData.shopId}`);
+          return null;
+        }
+
+        const notifications = [];
+        for (const shopUser of shopUsers) {
+          if (!shopUser.user) continue;
+          
+          const notification = await prisma.notification.create({
+            data: {
+              type: notificationData.type,
+              title: notificationData.title,
+              message: notificationData.message,
+              userId: shopUser.user.id,
+              orderId: notificationData.orderId,
+              conversationId: notificationData.conversationId,
+              shopId: notificationData.shopId,
+              data: notificationData.data ? JSON.stringify(notificationData.data) : null,
+            },
+          });
+          notifications.push(notification);
+        }
+        
+        console.log(`Created ${notifications.length} notifications for shop ${notificationData.shopId}`);
+        return notifications;
+      }
+
+      // Regular user notification
       const notification = await prisma.notification.create({
         data: {
           type: notificationData.type,

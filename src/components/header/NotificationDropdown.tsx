@@ -54,7 +54,7 @@ export default function NotificationDropdown() {
     try {
       setLoading(true);
       const response = await httpClient.get<NotificationResponse>(
-        "/notifications?limit=10"
+        "/api/notifications?limit=10"
       );
       setNotifications(response.notifications);
       setUnreadCount(response.unreadCount);
