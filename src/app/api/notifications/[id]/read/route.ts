@@ -1,33 +1,39 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { NotificationService } from '@/lib/notification-service';
+import { NextRequest, NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 import { getUserWithShopAccess } from "@/lib/auth";
 
 const prisma = new PrismaClient();
 
-export async function PATCH(
-    request: NextRequest,
-    { params }: { params: { id: string } }
-) {
+export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
     try {
-        // Use the same auth pattern as product API
-        const user = await getUserWithShopAccess(request, prisma);
-        if (!user) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
-
-        const userId = user.user.id;
+        const { user } = await getUserWithShopAccess(req, prisma);
         const notificationId = params.id;
 
-        const notification = await NotificationService.markAsRead(notificationId, userId);
+        // Update notification as read
+        const notification = await prisma.notification.updateMany({
+            where: { 
+                id: notificationId,
+                userId: user.id // Ensure user owns this notification
+            },
+            data: { 
+                read: true,
+                readAt: new Date()
+            }
+        });
 
-        return NextResponse.json({ success: true, notification });
+        if (notification.count === 0) {
+            return NextResponse.json({ error: "Notification not found" }, { status: 404 });
+        }
 
-    } catch (error) {
-        console.error('Error marking notification as read:', error);
-        return NextResponse.json(
-            { error: 'Failed to mark notification as read' },
-            { status: 500 }
-        );
+        return NextResponse.json({ success: true });
+
+    } catch (err: any) {
+        console.error("Error marking notification as read:", err);
+        if (err.message === 'Authentication required' || err.message === 'User not found') {
+            return NextResponse.json({ error: err.message }, { status: 401 });
+        }
+        return NextResponse.json({ error: err.message || "Internal error" }, { status: 500 });
+    } finally {
+        await prisma.$disconnect();
     }
 }

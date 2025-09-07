@@ -497,8 +497,8 @@ export default function OrdersPage() {
                             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white"
                         >
                             <option value="">All Custom Status</option>
-                            <option value="NOT_SET" title="Orders with no custom status set">Not Set</option>
-                            <option value="DELIVERED" title="Order has been delivered internally">DELIVERED</option>
+                            <option value="NOT_SET" title="Orders with no custom status set">Chưa kéo đơn</option>
+                            <option value="DELIVERED" title="Order has been delivered internally">Đã kéo đơn</option>
                         </select>
                     </div>
 
@@ -767,7 +767,7 @@ export default function OrdersPage() {
                                                                 title="Mark as DELIVERED"
                                                             >
                                                                 <Check className="h-3 w-3 mr-1" />
-                                                                Đã chuyển
+                                                                Kéo đơn
                                                             </button>
                                                         </div>
                                                     )}

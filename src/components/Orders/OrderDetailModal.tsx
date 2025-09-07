@@ -439,7 +439,7 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({ order, isOpen, onCl
                             </div>
                         </div>
 
-                        {/* 5. Payment Information */}
+                        {/* Enhanced Payment Information with TikTok Price Details */}
                         <div>
                             <div className="flex items-center gap-2 mb-4">
                                 <CreditCard className="h-5 w-5 text-blue-600" />
@@ -458,6 +458,8 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({ order, isOpen, onCl
                                         {order.paidTime ? formatTimestamp(order.paidTime) : 'N/A'}
                                     </dd>
                                 </div>
+                                
+                                {/* Traditional payment fields */}
                                 <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
                                     <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Subtotal</dt>
                                     <dd className="mt-2 text-sm text-gray-900 dark:text-white">
@@ -468,12 +470,6 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({ order, isOpen, onCl
                                     <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Original Product Price</dt>
                                     <dd className="mt-2 text-sm text-gray-900 dark:text-white">
                                         {formatCurrency(paymentChannelData.originalTotalProductPrice || '0', order.currency)}
-                                    </dd>
-                                </div>
-                                <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
-                                    <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Total Discounts</dt>
-                                    <dd className="mt-2 text-sm text-red-600 dark:text-red-400">
-                                        -{formatCurrency(paymentChannelData.totalDiscountAmount || '0', order.currency)}
                                     </dd>
                                 </div>
                                 <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
@@ -493,11 +489,24 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({ order, isOpen, onCl
                                         {formatCurrency(order.payment?.tax || '0', order.currency)}
                                     </dd>
                                 </div>
-                                <div className="bg-green-50 dark:bg-green-900/20 p-4 rounded-lg border border-green-200 dark:border-green-800">
-                                    <dt className="text-sm font-medium text-green-700 dark:text-green-400">Total Amount</dt>
-                                    <dd className="mt-2 text-lg font-bold text-green-800 dark:text-green-300">
-                                        {formatCurrency(order.payment?.totalAmount || '0', order.currency)}
-                                    </dd>
+                                
+                                <div className="md:col-span-2 bg-green-50 dark:bg-green-900/20 p-4 rounded-lg border border-green-200 dark:border-green-800">
+                                    <div className="flex justify-between items-center">
+                                        <div>
+                                            <dt className="text-sm font-medium text-green-700 dark:text-green-400">Database Total</dt>
+                                            <dd className="mt-1 text-lg font-bold text-green-800 dark:text-green-300">
+                                                {formatCurrency(order.payment?.totalAmount || '0', order.currency)}
+                                            </dd>
+                                        </div>
+                                        {orderChannelData.priceDetails && (
+                                            <div className="text-right">
+                                                <dt className="text-sm font-medium text-green-700 dark:text-green-400">TikTok Total</dt>
+                                                <dd className="mt-1 text-lg font-bold text-green-800 dark:text-green-300">
+                                                    {formatCurrency(orderChannelData.priceDetails.payment || orderChannelData.priceDetails.total || '0', orderChannelData.priceDetails.currency)}
+                                                </dd>
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
                         </div>

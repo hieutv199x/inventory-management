@@ -1,0 +1,818 @@
+import { PrismaClient, Channel, NotificationType } from "@prisma/client";
+import { TikTokShopNodeApiClient, Order202309GetOrderListRequestBody } from "@/nodejs_sdk";
+import { NotificationService } from "@/lib/notification-service";
+
+const prisma = new PrismaClient();
+
+export interface OrderSyncOptions {
+    shop_id: string;
+    order_ids?: string[];
+    sync_all?: boolean;
+    create_time_ge?: number;
+    create_time_lt?: number;
+    update_time_ge?: number;
+    update_time_lt?: number;
+    page_size?: number;
+    include_price_detail?: boolean;
+    create_notifications?: boolean;
+    timeout_seconds?: number;
+}
+
+export interface OrderSyncResult {
+    success: boolean;
+    shopId: string;
+    shopName?: string;
+    totalOrdersProcessed: number;
+    ordersCreated: number;
+    ordersUpdated: number;
+    ordersWithPriceDetails: number;
+    errors: { orderId: string; error: string }[];
+    executionTimeMs: number;
+    error?: string;
+}
+
+export class TikTokOrderSync {
+    public client: TikTokShopNodeApiClient;
+    public credentials: any;
+    public shopCipher: string | undefined;
+
+    constructor(client: TikTokShopNodeApiClient, credentials: any, shopCipher?: string) {
+        this.client = client;
+        this.credentials = credentials;
+        this.shopCipher = shopCipher;
+    }
+
+    static async create(shop_id: string): Promise<TikTokOrderSync> {
+        // Get shop credentials
+        const credentials = await prisma.shopAuthorization.findUnique({
+            where: {
+                shopId: shop_id,
+                status: 'ACTIVE',
+            },
+            include: { app: true },
+        });
+
+        if (!credentials) {
+            throw new Error("Shop not found or inactive");
+        }
+
+        if (credentials.app?.channel !== 'TIKTOK') {
+            throw new Error("Not a TikTok shop");
+        }
+
+        // Extract shopCipher from channelData
+        let shopCipher: string | undefined = credentials.shopCipher ?? undefined;
+        if (credentials.channelData) {
+            try {
+                const channelData = JSON.parse(credentials.channelData);
+                shopCipher = channelData.shopCipher ?? shopCipher ?? undefined;
+            } catch (error) {
+                console.warn('Failed to parse channelData, using legacy shopCipher');
+            }
+        }
+
+        const client = new TikTokShopNodeApiClient({
+            config: {
+                basePath: process.env.TIKTOK_BASE_URL,
+                app_key: credentials.app.appKey,
+                app_secret: credentials.app.appSecret,
+            },
+        });
+
+        return new TikTokOrderSync(client, credentials, shopCipher);
+    }
+
+    async syncOrders(options: OrderSyncOptions): Promise<OrderSyncResult> {
+        const startTime = Date.now();
+        let syncResults: OrderSyncResult = {
+            success: false,
+            shopId: options.shop_id,
+            shopName: this.credentials.shopName,
+            totalOrdersProcessed: 0,
+            ordersCreated: 0,
+            ordersUpdated: 0,
+            ordersWithPriceDetails: 0,
+            errors: [],
+            executionTimeMs: 0
+        };
+
+        try {
+            // Validate input
+            if (!options.sync_all && (!options.order_ids || options.order_ids.length === 0)) {
+                throw new Error("Either provide order_ids or set sync_all=true with time filters");
+            }
+
+            let allOrders = [];
+
+            if (options.sync_all) {
+                // Sync orders within time range
+                allOrders = await this.fetchOrdersInTimeRange(
+                    options.create_time_ge,
+                    options.create_time_lt,
+                    options.update_time_ge,
+                    options.update_time_lt,
+                    options.page_size || 50
+                );
+            } else {
+                // Sync specific order IDs
+                allOrders = await this.fetchSpecificOrders(options.order_ids!);
+            }
+
+            console.log(`Fetched ${allOrders.length} orders for shop ${options.shop_id}`);
+
+            // Process orders in batches
+            const batchResults = await this.processOrderBatch(
+                allOrders,
+                this.credentials.id,
+                options.include_price_detail || false,
+                options.timeout_seconds || 120
+            );
+
+            syncResults.totalOrdersProcessed = batchResults.totalProcessed;
+            syncResults.ordersCreated = batchResults.created;
+            syncResults.ordersUpdated = batchResults.updated;
+            syncResults.ordersWithPriceDetails = batchResults.withPriceDetails;
+            syncResults.errors = batchResults.errors;
+            syncResults.success = true;
+
+            // Create notification for sync completion
+            if (options.create_notifications !== false && syncResults.totalOrdersProcessed > 0) {
+                await NotificationService.createNotification({
+                    type: NotificationType.SYSTEM_ALERT,
+                    title: '📊 Order Sync Completed',
+                    message: `Successfully synced ${syncResults.totalOrdersProcessed} orders (${syncResults.ordersCreated} new, ${syncResults.ordersUpdated} updated) for shop ${this.credentials.shopName || options.shop_id}`,
+                    userId: this.credentials.id,
+                    shopId: this.credentials.id,
+                    data: {
+                        syncType: options.sync_all ? 'time_range' : 'specific_orders',
+                        results: syncResults,
+                        apiVersion: 'utility_function'
+                    }
+                });
+            }
+
+        } catch (error) {
+            console.error("Error syncing orders:", error);
+            syncResults.error = error instanceof Error ? error.message : String(error);
+
+            // Create error notification
+            if (options.create_notifications !== false) {
+                try {
+                    await NotificationService.createNotification({
+                        type: NotificationType.WEBHOOK_ERROR,
+                        title: '❌ Order Sync Failed',
+                        message: `Failed to sync orders for shop ${options.shop_id}: ${syncResults.error}`,
+                        userId: this.credentials.id,
+                        shopId: this.credentials.id,
+                        data: {
+                            syncType: 'order_sync_utility',
+                            error: syncResults.error,
+                            timestamp: Date.now()
+                        }
+                    });
+                } catch (notificationError) {
+                    console.error('Failed to create error notification:', notificationError);
+                }
+            }
+        } finally {
+            syncResults.executionTimeMs = Date.now() - startTime;
+        }
+
+        return syncResults;
+    }
+
+    private async fetchOrdersInTimeRange(
+        createTimeGe?: number,
+        createTimeLt?: number,
+        updateTimeGe?: number,
+        updateTimeLt?: number,
+        pageSize = 50
+    ): Promise<any[]> {
+        let allOrders = [];
+        let nextPageToken = "";
+
+        try {
+            // Build request body for order search
+            const requestBody = new Order202309GetOrderListRequestBody();
+            
+            if (createTimeGe) requestBody.createTimeGe = createTimeGe;
+            if (createTimeLt) requestBody.createTimeLt = createTimeLt;
+            if (updateTimeGe) requestBody.updateTimeGe = updateTimeGe;
+            if (updateTimeLt) requestBody.updateTimeLt = updateTimeLt;
+
+            // Get first page using 202309 API (search functionality)
+            const result = await this.client.api.OrderV202309Api.OrdersSearchPost(
+                pageSize,
+                this.credentials.accessToken,
+                "application/json",
+                "DESC", // Sort order
+                nextPageToken,
+                "update_time", // Sort field
+                this.shopCipher,
+                requestBody
+            );
+
+            if (result?.body?.data?.orders) {
+                allOrders.push(...result.body.data.orders);
+                nextPageToken = result.body.data.nextPageToken ?? "";
+
+                // Continue fetching all pages
+                while (nextPageToken) {
+                    try {
+                        console.log(`Fetching next page with token: ${nextPageToken}`);
+                        
+                        const nextPageResult = await this.client.api.OrderV202309Api.OrdersSearchPost(
+                            pageSize,
+                            this.credentials.accessToken,
+                            "application/json",
+                            "DESC",
+                            nextPageToken,
+                            "update_time",
+                            this.shopCipher,
+                            requestBody
+                        );
+
+                        if (nextPageResult?.body?.data?.orders) {
+                            allOrders.push(...nextPageResult.body.data.orders);
+                            console.log(`Fetched ${nextPageResult.body.data.orders.length} more orders. Total: ${allOrders.length}`);
+                        }
+
+                        nextPageToken = nextPageResult.body?.data?.nextPageToken ?? "";
+                        
+                        // Add delay to avoid rate limiting
+                        await new Promise(resolve => setTimeout(resolve, 100));
+                        
+                    } catch (paginationError) {
+                        console.error('Error fetching next page:', paginationError);
+                        break;
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Error fetching orders in time range:', error);
+            throw error;
+        }
+
+        return allOrders;
+    }
+
+    private async fetchSpecificOrders(orderIds: string[]): Promise<any[]> {
+        const allOrders = [];
+        const batchSize = 50; // TikTok API limit
+
+        try {
+            // Process order IDs in batches
+            for (let i = 0; i < orderIds.length; i += batchSize) {
+                const batch = orderIds.slice(i, i + batchSize);
+                
+                console.log(`Fetching batch ${Math.floor(i/batchSize) + 1}: ${batch.length} orders`);
+                
+                const result = await this.client.api.OrderV202309Api.OrdersGet(
+                    batch,
+                    this.credentials.accessToken,
+                    "application/json",
+                    this.shopCipher
+                );
+
+                if (result?.body?.data?.orders) {
+                    allOrders.push(...result.body.data.orders);
+                    console.log(`Fetched ${result.body.data.orders.length} orders from batch`);
+                }
+
+                // Add delay between batches
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
+        } catch (error) {
+            console.error('Error fetching specific orders:', error);
+            throw error;
+        }
+
+        return allOrders;
+    }
+
+    private async processOrderBatch(
+        orders: any[],
+        shopId: string,
+        includePriceDetail: boolean,
+        timeoutSeconds: number
+    ): Promise<{
+        totalProcessed: number;
+        created: number;
+        updated: number;
+        withPriceDetails: number;
+        errors: { orderId: string; error: string }[];
+    }> {
+        const BATCH_SIZE = 50;
+        let results = {
+            totalProcessed: 0,
+            created: 0,
+            updated: 0,
+            withPriceDetails: 0,
+            errors: [] as { orderId: string; error: string }[]
+        };
+
+        console.log(`Processing ${orders.length} orders in batches of ${BATCH_SIZE}`);
+
+        for (let i = 0; i < orders.length; i += BATCH_SIZE) {
+            const batch = orders.slice(i, i + BATCH_SIZE);
+            const batchResult = await this.processSingleBatch(batch, shopId, includePriceDetail, timeoutSeconds);
+            
+            results.totalProcessed += batchResult.processed;
+            results.created += batchResult.created;
+            results.updated += batchResult.updated;
+            results.withPriceDetails += batchResult.withPriceDetails;
+            results.errors.push(...batchResult.errors);
+            
+            console.log(`Processed batch ${Math.floor(i/BATCH_SIZE) + 1}/${Math.ceil(orders.length/BATCH_SIZE)}`);
+        }
+
+        return results;
+    }
+
+    private async processSingleBatch(
+        orders: any[],
+        shopId: string,
+        includePriceDetail: boolean,
+        timeoutSeconds: number
+    ) {
+        let processed = 0;
+        let created = 0;
+        let updated = 0;
+        let withPriceDetails = 0;
+        let errors: { orderId: string; error: string }[] = [];
+
+        try {
+            await prisma.$transaction(async (tx) => {
+                const orderIds = orders.map(o => o.id);
+                const existingOrders = await tx.order.findMany({
+                    where: { orderId: { in: orderIds } },
+                    select: { id: true, orderId: true }
+                });
+                
+                const existingOrderMap = new Map(existingOrders.map(o => [o.orderId, o.id]));
+
+                for (const order of orders) {
+                    try {
+                        processed++;
+                        
+                        // Fetch price details for each order
+                        let priceDetails = null;
+                        if (includePriceDetail) {
+                            try {
+                                console.log(`Fetching price details for order ${order.id}`);
+                                const priceResult = await this.client.api.OrderV202407Api.OrdersOrderIdPriceDetailGet(
+                                    order.id,
+                                    this.credentials.accessToken,
+                                    "application/json",
+                                    this.shopCipher
+                                );
+                                if (priceResult?.body?.data) {
+                                    priceDetails = priceResult.body.data;
+                                    withPriceDetails++;
+                                    console.log(`Successfully fetched price details for order ${order.id}`);
+                                }
+                                
+                                // Add small delay between price detail requests to avoid rate limiting
+                                await new Promise(resolve => setTimeout(resolve, 50));
+                            } catch (priceError) {
+                                console.warn(`Failed to fetch price details for order ${order.id}:`, priceError);
+                                // Don't fail the entire sync if price details fail
+                            }
+                        }
+
+                        // Enhanced channel data with price details
+                        const channelData = {
+                            // Standard TikTok order data
+                            orderType: order.orderType,
+                            fulfillmentType: order.fulfillmentType,
+                            deliveryType: order.deliveryType,
+                            paymentMethodName: order.paymentMethodName,
+                            shippingProvider: order.shippingProvider,
+                            deliveryOptionName: order.deliveryOptionName,
+                            collectionTime: order.collectionTime,
+                            userId: order.userId,
+                            isOnHoldOrder: order.isOnHoldOrder,
+                            splitOrCombineTag: order.splitOrCombineTag,
+                            trackingNumber: order.trackingNumber,
+                            warehouseId: order.warehouseId,
+                            sellerNote: order.sellerNote,
+                            // Additional fields
+                            cancelOrderSlaTime: order.cancelOrderSlaTime,
+                            ttsSlaTime: order.ttsSlaTime,
+                            rtsSlaTime: order.rtsSlaTime,
+                            rtsTime: order.rtsTime,
+                            // Enhanced price details
+                            ...(priceDetails && { 
+                                priceDetails,
+                                priceDetailsFetchedAt: Date.now(),
+                                detailedBreakdown: this.extractPriceBreakdown(priceDetails)
+                            })
+                        };
+
+                        const orderData = {
+                            orderId: order.id,
+                            channel: Channel.TIKTOK,
+                            buyerEmail: order.buyerEmail || "",
+                            buyerMessage: order.buyerMessage || "",
+                            createTime: order.createTime || Math.floor(Date.now() / 1000),
+                            updateTime: order.updateTime || Math.floor(Date.now() / 1000),
+                            status: order.status || "UNKNOWN",
+                            totalAmount: order.payment?.totalAmount || null,
+                            currency: order.payment?.currency || null,
+                            paidTime: order.paidTime,
+                            deliveryTime: order.deliveryTime,
+                            channelData: JSON.stringify(channelData),
+                            shopId: shopId,
+                        };
+
+                        if (existingOrderMap.has(order.id)) {
+                            // Update existing order with price details
+                            await tx.order.update({
+                                where: { id: existingOrderMap.get(order.id) },
+                                data: {
+                                    status: orderData.status,
+                                    updateTime: orderData.updateTime,
+                                    deliveryTime: orderData.deliveryTime,
+                                    paidTime: orderData.paidTime,
+                                    totalAmount: orderData.totalAmount,
+                                    currency: orderData.currency,
+                                    buyerMessage: orderData.buyerMessage,
+                                    channelData: orderData.channelData,
+                                }
+                            });
+
+                            // Update payment information with price details if it exists
+                            if (priceDetails) {
+                                await this.updateExistingPaymentWithPriceDetails(tx, existingOrderMap.get(order.id)!, priceDetails);
+                            }
+                            
+                            updated++;
+                        } else {
+                            // Create new order with all associations including price details
+                            await this.insertOrderWithAssociations(tx, order, shopId, priceDetails);
+                            created++;
+                        }
+
+                    } catch (orderError) {
+                        console.error(`Error processing order ${order.id}:`, orderError);
+                        errors.push({
+                            orderId: order.id,
+                            error: orderError instanceof Error ? orderError.message : String(orderError)
+                        });
+                    }
+                }
+            }, {
+                maxWait: timeoutSeconds * 1000,
+                timeout: timeoutSeconds * 2000,
+            });
+
+        } catch (error) {
+            console.error('Error processing order batch:', error);
+            throw error;
+        }
+
+        return { processed, created, updated, withPriceDetails, errors };
+    }
+
+    public extractPriceBreakdown(priceDetails: any) {
+        // Extract key pricing information from TikTok price details
+        const breakdown = {
+            productPrice: 0,
+            shippingFee: 0,
+            taxes: 0,
+            platformFees: 0,
+            sellerDiscounts: 0,
+            platformDiscounts: 0,
+            vouchers: 0,
+            finalAmount: 0,
+            currency: priceDetails.currency || 'USD'
+        };
+
+        if (priceDetails.price_details) {
+            for (const detail of priceDetails.price_details) {
+                switch (detail.type?.toLowerCase()) {
+                    case 'product_price':
+                    case 'item_price':
+                        breakdown.productPrice += parseFloat(detail.amount || '0');
+                        break;
+                    case 'shipping_fee':
+                    case 'delivery_fee':
+                        breakdown.shippingFee += parseFloat(detail.amount || '0');
+                        break;
+                    case 'tax':
+                    case 'vat':
+                        breakdown.taxes += parseFloat(detail.amount || '0');
+                        break;
+                    case 'platform_fee':
+                    case 'service_fee':
+                        breakdown.platformFees += parseFloat(detail.amount || '0');
+                        break;
+                    case 'seller_discount':
+                        breakdown.sellerDiscounts += parseFloat(detail.amount || '0');
+                        break;
+                    case 'platform_discount':
+                        breakdown.platformDiscounts += parseFloat(detail.amount || '0');
+                        break;
+                    case 'voucher':
+                    case 'coupon':
+                        breakdown.vouchers += parseFloat(detail.amount || '0');
+                        break;
+                }
+            }
+        }
+
+        // Calculate final amount
+        breakdown.finalAmount = breakdown.productPrice + breakdown.shippingFee + breakdown.taxes + breakdown.platformFees
+                              - breakdown.sellerDiscounts - breakdown.platformDiscounts - breakdown.vouchers;
+
+        return breakdown;
+    }
+
+    public async updateExistingPaymentWithPriceDetails(tx: any, orderId: string, priceDetails: any) {
+        try {
+            const existingPayment = await tx.orderPayment.findUnique({
+                where: { orderId: orderId }
+            });
+
+            if (existingPayment) {
+                // Parse existing channel data
+                let paymentChannelData = {};
+                try {
+                    paymentChannelData = JSON.parse(existingPayment.channelData || '{}');
+                } catch (error) {
+                    console.warn('Failed to parse existing payment channelData');
+                }
+
+                // Enhanced payment channel data with detailed pricing
+                const enhancedChannelData = {
+                    ...paymentChannelData,
+                    // Add detailed pricing information
+                    detailedPricing: priceDetails,
+                    priceBreakdown: priceDetails.price_details || [],
+                    priceDetailsFetchedAt: Date.now(),
+                    // Extract key pricing metrics
+                    pricingBreakdown: this.extractPriceBreakdown(priceDetails)
+                };
+
+                await tx.orderPayment.update({
+                    where: { id: existingPayment.id },
+                    data: {
+                        channelData: JSON.stringify(enhancedChannelData)
+                    }
+                });
+
+                console.log(`Updated payment with price details for order ${orderId}`);
+            }
+        } catch (error) {
+            console.warn(`Failed to update payment with price details for order ${orderId}:`, error);
+        }
+    }
+
+    private async createOrderPayment(tx: any, orderId: string, paymentData: any, priceDetails: any = null) {
+        // Enhanced payment channel data with detailed pricing
+        const paymentChannelData = {
+            // Original TikTok payment fields
+            originalTotalProductPrice: paymentData.originalTotalProductPrice,
+            originalShippingFee: paymentData.originalShippingFee,
+            shippingFee: paymentData.shippingFee,
+            retailDeliveryFee: paymentData.retailDeliveryFee,
+            buyerServiceFee: paymentData.buyerServiceFee,
+            sellerDiscount: paymentData.sellerDiscount,
+            platformDiscount: paymentData.platformDiscount,
+            // Enhanced price details
+            ...(priceDetails && { 
+                detailedPricing: priceDetails,
+                priceBreakdown: priceDetails.price_details || [],
+                pricingBreakdown: this.extractPriceBreakdown(priceDetails),
+                priceDetailsFetchedAt: Date.now()
+            })
+        };
+
+        await tx.orderPayment.create({
+            data: {
+                orderId: orderId,
+                currency: paymentData.currency || 'USD',
+                totalAmount: paymentData.totalAmount?.toString() || '0',
+                subTotal: paymentData.subTotal?.toString() || '0',
+                tax: paymentData.tax?.toString() || '0',
+                channelData: JSON.stringify(paymentChannelData)
+            }
+        });
+    }
+
+    // ...existing code...
+
+    // Insert a new order and its associations, including payment and price details
+    private async insertOrderWithAssociations(
+        tx: any,
+        order: any,
+        shopId: string,
+        priceDetails: any = null
+    ) {
+        // Prepare channel data
+        const channelData = {
+            orderType: order.orderType,
+            fulfillmentType: order.fulfillmentType,
+            deliveryType: order.deliveryType,
+            paymentMethodName: order.paymentMethodName,
+            shippingProvider: order.shippingProvider,
+            deliveryOptionName: order.deliveryOptionName,
+            collectionTime: order.collectionTime,
+            userId: order.userId,
+            isOnHoldOrder: order.isOnHoldOrder,
+            splitOrCombineTag: order.splitOrCombineTag,
+            trackingNumber: order.trackingNumber,
+            warehouseId: order.warehouseId,
+            sellerNote: order.sellerNote,
+            cancelOrderSlaTime: order.cancelOrderSlaTime,
+            ttsSlaTime: order.ttsSlaTime,
+            rtsSlaTime: order.rtsSlaTime,
+            rtsTime: order.rtsTime,
+            ...(priceDetails && { 
+                priceDetails,
+                priceDetailsFetchedAt: Date.now(),
+                detailedBreakdown: this.extractPriceBreakdown(priceDetails)
+            })
+        };
+
+        // Create the order
+        const createdOrder = await tx.order.create({
+            data: {
+                orderId: order.id,
+                channel: Channel.TIKTOK,
+                buyerEmail: order.buyerEmail || "",
+                buyerMessage: order.buyerMessage || "",
+                createTime: order.createTime || Math.floor(Date.now() / 1000),
+                updateTime: order.updateTime || Math.floor(Date.now() / 1000),
+                status: order.status || "UNKNOWN",
+                totalAmount: order.payment?.totalAmount || null,
+                currency: order.payment?.currency || null,
+                paidTime: order.paidTime,
+                deliveryTime: order.deliveryTime,
+                channelData: JSON.stringify(channelData),
+                shopId: shopId,
+            }
+        });
+
+        // Create payment record if payment exists
+        if (order.payment) {
+            await this.createOrderPayment(tx, createdOrder.id, order.payment, priceDetails);
+        }
+    }
+}
+
+// Enhanced convenience function for syncing orders with price details
+export async function syncOrdersWithPriceDetails(
+    shop_id: string, 
+    order_ids: string[], 
+    options: Partial<OrderSyncOptions> = {}
+): Promise<OrderSyncResult> {
+    const sync = await TikTokOrderSync.create(shop_id);
+    return sync.syncOrders({
+        shop_id,
+        order_ids,
+        sync_all: false,
+        include_price_detail: true, // Always include price details
+        create_notifications: true,
+        timeout_seconds: 300, // Longer timeout for price detail fetching
+        ...options
+    });
+}
+
+export async function syncRecentOrdersWithPriceDetails(
+    shop_id: string, 
+    hours_back: number = 24, 
+    options: Partial<OrderSyncOptions> = {}
+): Promise<OrderSyncResult> {
+    const now = Math.floor(Date.now() / 1000);
+    const hoursBackSeconds = hours_back * 60 * 60;
+    const update_time_ge = now - hoursBackSeconds;
+
+    const sync = await TikTokOrderSync.create(shop_id);
+    return sync.syncOrders({
+        shop_id,
+        sync_all: true,
+        update_time_ge,
+        update_time_lt: now,
+        include_price_detail: true, // Always include price details
+        create_notifications: true,
+        page_size: 20, // Smaller page size when fetching price details
+        timeout_seconds: 600, // Longer timeout for price detail fetching
+        ...options
+    });
+}
+
+// Utility function to refresh price details for existing orders
+export async function refreshPriceDetailsForOrders(
+    shop_id: string,
+    order_ids: string[]
+): Promise<{
+    success: boolean;
+    processedCount: number;
+    successCount: number;
+    errors: { orderId: string; error: string }[];
+}> {
+    const sync = await TikTokOrderSync.create(shop_id);
+    const results = {
+        success: true,
+        processedCount: 0,
+        successCount: 0,
+        errors: [] as { orderId: string; error: string }[]
+    };
+
+    try {
+        for (const orderId of order_ids) {
+            results.processedCount++;
+            
+            try {
+                console.log(`Refreshing price details for order ${orderId}`);
+                
+                // Fetch price details
+                const priceResult = await sync.client.api.OrderV202407Api.OrdersOrderIdPriceDetailGet(
+                    orderId,
+                    sync.credentials.accessToken,
+                    "application/json",
+                    sync.shopCipher
+                );
+
+                if (priceResult?.body?.data) {
+                    // Find existing order
+                    const existingOrder = await prisma.order.findFirst({
+                        where: {
+                            orderId: orderId,
+                            shopId: sync.credentials.id
+                        }
+                    });
+
+                    if (existingOrder) {
+                        // Update order channel data with price details
+                        let channelData = {};
+                        try {
+                            channelData = JSON.parse(existingOrder.channelData || '{}');
+                        } catch (error) {
+                            console.warn('Failed to parse existing channelData');
+                        }
+
+                        const updatedChannelData = {
+                            ...channelData,
+                            priceDetails: priceResult.body.data,
+                            priceDetailsFetchedAt: Date.now(),
+                            detailedBreakdown: sync.extractPriceBreakdown(priceResult.body.data)
+                        };
+
+                        await prisma.order.update({
+                            where: { id: existingOrder.id },
+                            data: {
+                                channelData: JSON.stringify(updatedChannelData)
+                            }
+                        });
+
+                        // Also update payment record if exists using transaction
+                        await prisma.$transaction(async (tx) => {
+                            await sync.updateExistingPaymentWithPriceDetails(
+                                tx, 
+                                existingOrder.id, 
+                                priceResult.body.data
+                            );
+                        });
+
+                        results.successCount++;
+                        console.log(`Successfully refreshed price details for order ${orderId}`);
+                    } else {
+                        results.errors.push({
+                            orderId: orderId,
+                            error: 'Order not found in database'
+                        });
+                    }
+                } else {
+                    results.errors.push({
+                        orderId: orderId,
+                        error: 'No price data returned from API'
+                    });
+                }
+
+                // Rate limiting delay
+                await new Promise(resolve => setTimeout(resolve, 100));
+
+            } catch (error) {
+                console.error(`Failed to refresh price details for order ${orderId}:`, error);
+                results.errors.push({
+                    orderId: orderId,
+                    error: error instanceof Error ? error.message : String(error)
+                });
+            }
+        }
+
+        results.success = results.errors.length === 0;
+
+    } catch (error) {
+        console.error('Error refreshing price details:', error);
+        results.success = false;
+        results.errors.push({
+            orderId: 'bulk_operation',
+            error: error instanceof Error ? error.message : String(error)
+        });
+    }
+
+    return results;
+}

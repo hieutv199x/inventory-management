@@ -1,31 +1,34 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { NotificationService } from '@/lib/notification-service';
+import { NextRequest, NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 import { getUserWithShopAccess } from "@/lib/auth";
 
 const prisma = new PrismaClient();
 
-export async function PATCH(request: NextRequest) {
+export async function PATCH(req: NextRequest) {
     try {
-        // Use the same auth pattern as product API
-        const user = await getUserWithShopAccess(request, prisma);
-        if (!user) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
+        const { user } = await getUserWithShopAccess(req, prisma);
 
-        const userId = user.user.id;
-        const result = await NotificationService.markAllAsRead(userId);
-
-        return NextResponse.json({ 
-            success: true, 
-            updatedCount: result.count 
+        // Update all unread notifications for this user
+        await prisma.notification.updateMany({
+            where: { 
+                userId: user.id,
+                read: false
+            },
+            data: { 
+                read: true,
+                readAt: new Date()
+            }
         });
 
-    } catch (error) {
-        console.error('Error marking all notifications as read:', error);
-        return NextResponse.json(
-            { error: 'Failed to mark all notifications as read' },
-            { status: 500 }
-        );
+        return NextResponse.json({ success: true });
+
+    } catch (err: any) {
+        console.error("Error marking all notifications as read:", err);
+        if (err.message === 'Authentication required' || err.message === 'User not found') {
+            return NextResponse.json({ error: err.message }, { status: 401 });
+        }
+        return NextResponse.json({ error: err.message || "Internal error" }, { status: 500 });
+    } finally {
+        await prisma.$disconnect();
     }
 }

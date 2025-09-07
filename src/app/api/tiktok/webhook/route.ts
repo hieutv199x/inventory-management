@@ -3,6 +3,11 @@ import { PrismaClient, ShopAuthorization, NotificationType } from "@prisma/clien
 import crypto from 'crypto';
 import { Order202309GetOrderDetailResponseDataOrders, TikTokShopNodeApiClient } from "@/nodejs_sdk";
 import { NotificationService } from "@/lib/notification-service";
+// If syncOrderById is the default export:
+import { TikTokOrderSync } from "@/lib/tiktok-order-sync";
+
+// Or, if the correct named export is different, for example:
+// import { correctExportName } from "@/lib/tiktok-order-sync";
 
 const prisma = new PrismaClient();
 
@@ -182,24 +187,35 @@ async function handleOrderStatusChange(webhookData: TikTokWebhookData) {
 
         if (!existingOrder) {
             console.log(`Order ${order_id} not found in database, will sync from API`);
-            
+
             // Create notification about missing order being synced
             await NotificationService.createNotification({
-                type: NotificationType.SYSTEM_ALERT,
-                title: 'Webhook Processing Error',
-                message: `Order ${order_id} webhook received for unknown shop ${shop_id}`,
-                userId: 'system', // You might want to create a system user
+                type: NotificationType.NEW_ORDER,
+                title: 'Có đơn hàng mới',
+                message: `Có đơn hàng mới ${order_id} trên shop: ${credentials.managedName}`,
+                userId: 'system',
                 data: {
                     webhookType: 'ORDER_STATUS_CHANGE',
                     orderId: order_id,
                     shopId: shop_id,
                     timestamp: webhookData.timestamp,
-                    message: `Order ${order_id} not found locally, syncing from TikTok API`,
-                    webhookEvent: 'ORDER_STATUS_CHANGE'
+                    syncTriggered: true
                 }
             });
 
-            await syncOrderFromTikTok(credentials, order_id);
+            // Use the utility function instead of custom sync logic
+            setTimeout(async () => {
+                try {
+                    const syncResult = await syncOrderById(shop_id, order_id, {
+                        create_notifications: false, // Don't create duplicate notifications
+                        timeout_seconds: 60
+                    });
+                    console.log(`Webhook order sync completed:`, syncResult);
+                } catch (syncError) {
+                    console.error(`Failed to sync order ${order_id} from webhook:`, syncError);
+                }
+            }, 1000);
+
             return;
         }
 
@@ -264,7 +280,7 @@ async function handleOrderStatusChange(webhookData: TikTokWebhookData) {
 
     } catch (error) {
         console.error('Error handling order status change:', error);
-        
+
         // Create error notification
         try {
             await NotificationService.createNotification({
@@ -283,7 +299,7 @@ async function handleOrderStatusChange(webhookData: TikTokWebhookData) {
         } catch (notificationError) {
             console.error('Failed to create error notification:', notificationError);
         }
-        
+
         throw error;
     }
 }
@@ -334,7 +350,7 @@ async function handleSpecificStatusChanges(orderId: string, newStatus: string, w
                     data: { customStatus: 'DELIVERED' },
                     include: { payment: true, shop: true }
                 });
-                
+
                 // Create delivered notification with celebration
                 await NotificationService.createOrderNotification(
                     NotificationType.ORDER_DELIVERED,
@@ -346,7 +362,7 @@ async function handleSpecificStatusChanges(orderId: string, newStatus: string, w
                         deliveryConfirmed: true
                     }
                 );
-                
+
                 console.log(`Auto-updated customStatus to DELIVERED for order ${webhookData.data.order_id}`);
             } catch (error) {
                 console.error('Error updating customStatus:', error);
@@ -410,16 +426,16 @@ async function handleSpecificStatusChanges(orderId: string, newStatus: string, w
 async function handleCancellationStatusChange(webhookData: TikTokWebhookData) {
     try {
         const { shop_id, data } = webhookData;
-        const { 
-            order_id, 
-            cancellation_id, 
+        const {
+            order_id,
+            cancellation_id,
             cancellation_status,
             cancel_reason,
             cancel_user,
             cancel_user_id,
             cancel_time,
             line_items,
-            update_time 
+            update_time
         } = data;
 
         console.log(`Processing cancellation status change: ${order_id} -> ${cancellation_status} (ID: ${cancellation_id})`);
@@ -457,7 +473,7 @@ async function handleCancellationStatusChange(webhookData: TikTokWebhookData) {
 
         if (!existingOrder) {
             console.log(`Order ${order_id} not found in database, will sync from API first`);
-            
+
             // Create notification about missing order
             await NotificationService.createNotification({
                 type: NotificationType.SYSTEM_ALERT,
@@ -472,7 +488,19 @@ async function handleCancellationStatusChange(webhookData: TikTokWebhookData) {
                 }
             });
 
-            await syncOrderFromTikTok(credentials, order_id);
+            // Use the utility function
+            setTimeout(async () => {
+                try {
+                    const syncResult = await syncOrderById(shop_id, order_id, {
+                        create_notifications: false,
+                        timeout_seconds: 60
+                    });
+                    console.log(`Webhook cancellation sync completed:`, syncResult);
+                } catch (syncError) {
+                    console.error(`Failed to sync order ${order_id} from cancellation webhook:`, syncError);
+                }
+            }, 1000);
+
             return;
         }
 
@@ -543,7 +571,7 @@ async function handleCancellationStatusChange(webhookData: TikTokWebhookData) {
 
     } catch (error) {
         console.error('Error handling cancellation status change:', error);
-        
+
         // Create error notification
         try {
             await NotificationService.createNotification({
@@ -562,14 +590,14 @@ async function handleCancellationStatusChange(webhookData: TikTokWebhookData) {
         } catch (notificationError) {
             console.error('Failed to create error notification:', notificationError);
         }
-        
+
         throw error;
     }
 }
 
 async function handleSpecificCancellationStatusChanges(orderId: string, cancellationStatus: string, webhookData: TikTokWebhookData, shopId: string) {
     const { data } = webhookData;
-    
+
     switch (cancellationStatus?.toLowerCase()) {
         case 'buyer_cancelled':
             console.log(`Order ${data.order_id} was cancelled by buyer`);
@@ -630,13 +658,13 @@ async function handleSpecificCancellationStatusChanges(orderId: string, cancella
             try {
                 const order = await prisma.order.update({
                     where: { id: orderId },
-                    data: { 
+                    data: {
                         customStatus: null,
                         status: 'CANCELLED'
                     },
                     include: { payment: true, shop: true }
                 });
-                
+
                 // Create final cancellation notification
                 await NotificationService.createOrderNotification(
                     NotificationType.ORDER_CANCELLED,
@@ -650,7 +678,7 @@ async function handleSpecificCancellationStatusChanges(orderId: string, cancella
                         refundStatus: 'pending'
                     }
                 );
-                
+
                 console.log(`Order ${data.order_id} marked as fully cancelled`);
             } catch (error) {
                 console.error('Error updating order status to cancelled:', error);
@@ -693,249 +721,6 @@ async function handleSpecificCancellationStatusChanges(orderId: string, cancella
     }
 }
 
-async function syncOrderFromTikTok(credentials: any, orderId: string) {
-    try {
-        console.log(`Syncing order ${orderId} from TikTok API`);
-
-        if (!credentials || !credentials.app) {
-            console.error('Shop credentials not found for order sync');
-            return;
-        }
-
-        const app_key = credentials.app.appKey;
-        const app_secret = credentials.app.appSecret;
-        const baseUrl = process.env.TIKTOK_BASE_URL;
-        let shopCipher: string | undefined = credentials.shopCipher ?? undefined;
-
-        // Extract shopCipher from channelData if available
-        if (credentials.channelData) {
-            try {
-                const channelData = JSON.parse(credentials.channelData);
-                shopCipher = channelData.shopCipher ?? shopCipher;
-            } catch (error) {
-                console.warn('Failed to parse channelData, using legacy shopCipher');
-            }
-        }
-
-        const client = new TikTokShopNodeApiClient({
-            config: {
-                basePath: baseUrl,
-                app_key: app_key,
-                app_secret: app_secret,
-            },
-        });
-
-        // Fetch order details from TikTok API
-        const result = await client.api.OrderV202309Api.OrdersGet(
-            [orderId],
-            credentials.accessToken,
-            "application/json",
-            shopCipher
-        );
-
-        if (!result.body.data || !result.body.data.orders || result.body.data.orders.length === 0) {
-            console.error(`No order data returned for order ${orderId}`);
-            return;
-        }
-
-        const orderData = result.body.data.orders[0];
-        await insertOrderWithAssociations(orderData, credentials.id);
-
-        console.log(`Order ${orderId} sync completed successfully`);
-    } catch (error) {
-        console.error(`Error syncing order ${orderId}:`, error);
-    }
-}
-
-async function insertOrderWithAssociations(orderData: Order202309GetOrderDetailResponseDataOrders, shopId: any) {
-    try {
-        // Start a transaction to ensure data consistency
-        await prisma.$transaction(async (tx) => {
-            console.log(`Inserting order ${orderData.id} with all associations`);
-
-            // 1. Create the main order first (without relations)
-            const order = await tx.order.create({
-                data: {
-                    orderId: orderData.id ?? "",
-                    shopId: shopId,
-                    buyerEmail: orderData.buyerEmail || '',
-                    status: orderData.status || 'PENDING',
-                    createTime: orderData.createTime || Math.floor(Date.now() / 1000),
-                    updateTime: orderData.updateTime || Math.floor(Date.now() / 1000),
-                    paidTime: orderData.paidTime,
-                    deliveryTime: orderData.deliveryTime,
-                    currency: orderData.payment?.currency || 'USD',
-                    buyerMessage: orderData.buyerMessage,
-                    channel: 'TIKTOK',
-                    customStatus: null, // Will be set by business logic
-                    channelData: JSON.stringify({
-                        // Order-level TikTok specific data
-                        orderType: orderData.orderType,
-                        fulfillmentType: orderData.fulfillmentType,
-                        deliveryType: orderData.deliveryType,
-                        paymentMethodName: orderData.paymentMethodName,
-                        shippingProvider: orderData.shippingProvider,
-                        deliveryOptionName: orderData.deliveryOptionName,
-                        collectionTime: orderData.collectionTime,
-                        userId: orderData.userId,
-                        isOnHoldOrder: orderData.isOnHoldOrder,
-                        splitOrCombineTag: orderData.splitOrCombineTag,
-                        trackingNumber: orderData.trackingNumber,
-                        warehouseId: orderData.warehouseId,
-                        sellerNote: orderData.sellerNote
-                    })
-                }
-            });
-
-            // 2. Create recipient address if exists
-            if (orderData.recipientAddress) {
-                const addressData = orderData.recipientAddress;
-                await tx.orderRecipientAddress.create({
-                    data: {
-                        orderId: order.id,
-                        name: addressData.name || '',
-                        phoneNumber: addressData.phoneNumber || '',
-                        fullAddress: addressData.fullAddress || '',
-                        postalCode: addressData.postalCode || '',
-                        channelData: JSON.stringify({
-                            // TikTok specific address fields
-                            firstName: addressData.firstName,
-                            lastName: addressData.lastName,
-                            districtInfo: addressData.districtInfo,
-                            deliveryPreferences: addressData.deliveryPreferences,
-                            addressDetail: addressData.addressDetail,
-                            addressLine1: addressData.addressLine1,
-                            addressLine2: addressData.addressLine2,
-                            addressLine3: addressData.addressLine3,
-                            addressLine4: addressData.addressLine4
-                        })
-                    }
-                });
-            }
-
-            // 3. Create payment information if exists
-            if (orderData.payment) {
-                const paymentData = orderData.payment;
-                await tx.orderPayment.create({
-                    data: {
-                        orderId: order.id,
-                        currency: paymentData.currency || 'USD',
-                        totalAmount: paymentData.totalAmount?.toString() || '0',
-                        subTotal: paymentData.subTotal?.toString() || '0',
-                        channelData: JSON.stringify({
-                            // TikTok specific payment fields
-                            originalTotalProductPrice: paymentData.originalTotalProductPrice,
-                            originalShippingFee: paymentData.originalShippingFee,
-                            shippingFee: paymentData.shippingFee,
-                            retailDeliveryFee: paymentData.retailDeliveryFee,
-                            buyerServiceFee: paymentData.buyerServiceFee
-                        })
-                    }
-                });
-            }
-
-            // 4. Create line items
-            if (orderData.lineItems && orderData.lineItems.length > 0) {
-                for (const item of orderData.lineItems) {
-                    await tx.orderLineItem.create({
-                        data: {
-                            lineItemId: item.id?.toString() || crypto.randomUUID(),
-                            orderId: order.id,
-                            productId: item.productId?.toString() || '',
-                            productName: item.productName || '',
-                            skuId: item.skuId?.toString() || '',
-                            skuName: item.skuName || '',
-                            sellerSku: item.sellerSku || '',
-                            salePrice: item.salePrice?.toString() || '0',
-                            originalPrice: item.originalPrice?.toString() || '0',
-                            currency: item.currency || orderData.payment?.currency || 'USD',
-                            channelData: JSON.stringify({
-                                // TikTok specific line item fields
-                                skuImage: item.skuImage,
-                                displayStatus: item.displayStatus,
-                                packageId: item.packageId,
-                                packageStatus: item.packageStatus,
-                                skuType: item.skuType,
-                                isGift: item.isGift,
-                                platformDiscount: item.platformDiscount,
-                                sellerDiscount: item.sellerDiscount,
-                                trackingNumber: item.trackingNumber,
-                                smallOrderFee: item.smallOrderFee
-                            })
-                        }
-                    });
-                }
-            }
-
-            // Create notification for new order - Enhanced with more details
-            await NotificationService.createOrderNotification(
-                NotificationType.NEW_ORDER,
-                {
-                    id: order.id,
-                    orderId: orderData.id,
-                    buyerEmail: orderData.buyerEmail,
-                    totalAmount: orderData.payment?.totalAmount,
-                    currency: orderData.payment?.currency,
-                    status: orderData.status
-                },
-                shopId,
-                {
-                    syncedFromWebhook: true,
-                    orderType: orderData.orderType,
-                    fulfillmentType: orderData.fulfillmentType,
-                    itemCount: orderData.lineItems?.length || 0,
-                    priority: 'high', // New orders are high priority
-                    actionRequired: true
-                }
-            );
-
-            // Create additional notification if order has special conditions
-            if (orderData.isOnHoldOrder) {
-                await NotificationService.createNotification({
-                    type: NotificationType.SYSTEM_ALERT,
-                    title: '⏸️ Order On Hold',
-                    message: `New order ${orderData.id} is currently on hold and requires attention`,
-                    userId: shopId,
-                    orderId: order.id,
-                    shopId: shopId,
-                    data: {
-                        onHold: true,
-                        priority: 'urgent',
-                        actionRequired: true,
-                        reviewRequired: true
-                    }
-                });
-            }
-
-            console.log(`Successfully inserted order ${orderData.id} with ${orderData.lineItems?.length || 0} line items`);
-        });
-
-    } catch (error) {
-        console.error('Error inserting order with associations:', error);
-        
-        // Create error notification for failed order sync
-        try {
-            await NotificationService.createNotification({
-                type: NotificationType.WEBHOOK_ERROR,
-                title: 'Order Sync Failed',
-                message: `Failed to sync order ${orderData.id} from webhook: ${error instanceof Error ? error.message : String(error)}`,
-                userId: shopId,
-                shopId: shopId,
-                data: {
-                    orderId: orderData.id,
-                    error: error instanceof Error ? error.message : String(error),
-                    syncFailed: true,
-                    retryRequired: true
-                }
-            });
-        } catch (notificationError) {
-            console.error('Failed to create error notification:', notificationError);
-        }
-        
-        throw error;
-    }
-}
-
 // GET endpoint for webhook verification (if TikTok requires it)
 export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
@@ -952,4 +737,25 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json({ error: 'Invalid verification' }, { status: 403 });
+}
+
+async function syncOrderById(
+    shop_id: string,
+    order_id: string,
+    options: { create_notifications: boolean; timeout_seconds: number; }
+) {
+    // Use TikTokOrderSync utility to sync a single order by ID
+    try {
+        const tikTokOrderSync = await TikTokOrderSync.create(shop_id);
+        const syncResult = await tikTokOrderSync.syncOrders({
+            shop_id,
+            order_ids: [order_id],
+            create_notifications: options.create_notifications,
+            timeout_seconds: options.timeout_seconds
+        });
+        return syncResult;
+    } catch (error) {
+        console.error(`Error syncing order ${order_id} for shop ${shop_id}:`, error);
+        throw error;
+    }
 }
