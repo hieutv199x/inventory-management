@@ -64,6 +64,8 @@ model User {
   bankHistoryActions BankHistory[]
 
   userShopRoles UserShopRole[]
+
+  notifications Notification[]
 }
 
 enum UserRole {
@@ -164,6 +166,8 @@ model ShopAuthorization {
   conversations Conversation[]
 
   userShopRoles UserShopRole[]
+
+  notifications Notification[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -509,6 +513,8 @@ model Order {
   
   createdAt                       DateTime @default(now())
   updatedAt                       DateTime @updatedAt
+
+  notifications Notification[]
   
   @@map("orders")
 }
@@ -659,6 +665,8 @@ model Conversation {
   participants      ConversationParticipant[]
   messages          ConversationMessage[]
   latestMessage     ConversationMessage? @relation("LatestMessage")
+
+  notifications Notification[]
   
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
@@ -726,15 +734,44 @@ model ConversationMessage {
   @@map("conversation_messages")
 }
 
-// Remove all the channel-specific models:
-// - AmazonAuthorization
-// - ShopifyAuthorization  
-// - AlibabaAuthorization
-// - AmazonProduct
-// - ShopifyProduct
-// - AlibabaProduct
-// - AmazonOrder
-// - ShopifyOrder
-// - AlibabaOrder
-// - TikTokAuthorization (merged into ShopAuthorization)
-// - All TikTok-prefixed models (renamed to universal versions)
+// New notification models
+model Notification {
+  id          String            @id @default(auto()) @map("_id") @db.ObjectId
+  type        NotificationType
+  title       String
+  message     String
+  data        String?           // JSON string for additional notification data
+  read        Boolean           @default(false)
+  readAt      DateTime?
+  
+  // User relation
+  userId      String            @db.ObjectId
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Optional relations based on notification type
+  orderId     String?           @db.ObjectId
+  order       Order?            @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  
+  conversationId String?        @db.ObjectId
+  conversation   Conversation?  @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  
+  shopId      String?           @db.ObjectId
+  shop        ShopAuthorization? @relation(fields: [shopId], references: [id], onDelete: SetNull)
+  
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  
+  @@map("notifications")
+}
+
+enum NotificationType {
+  NEW_ORDER          // New order received
+  ORDER_STATUS_CHANGE // Order status changed
+  ORDER_CANCELLED    // Order was cancelled
+  ORDER_DELIVERED    // Order was delivered
+  NEW_MESSAGE        // New message in conversation
+  PAYMENT_RECEIVED   // Payment notification
+  LOW_INVENTORY      // Stock running low
+  SYSTEM_ALERT       // System notifications
+  WEBHOOK_ERROR      // Webhook processing errors
+}

@@ -164,6 +164,49 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({ order, isOpen, onCl
                                         )}
                                     </div>
                                 )}
+                                {/* Cancellation Information */}
+                                {orderChannelData.cancellationId && (
+                                    <div className="md:col-span-3 bg-red-50 dark:bg-red-900/20 p-4 rounded-lg border border-red-200 dark:border-red-800">
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                            <div>
+                                                <dt className="text-sm font-medium text-red-700 dark:text-red-400">Cancellation ID</dt>
+                                                <dd className="mt-1 text-sm text-red-800 dark:text-red-300 font-mono">
+                                                    {orderChannelData.cancellationId}
+                                                </dd>
+                                            </div>
+                                            <div>
+                                                <dt className="text-sm font-medium text-red-700 dark:text-red-400">Cancellation Status</dt>
+                                                <dd className="mt-1">
+                                                    <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-400">
+                                                        {orderChannelData.cancellationStatus}
+                                                    </span>
+                                                </dd>
+                                            </div>
+                                            <div>
+                                                <dt className="text-sm font-medium text-red-700 dark:text-red-400">Cancelled By</dt>
+                                                <dd className="mt-1 text-sm text-red-800 dark:text-red-300">
+                                                    {orderChannelData.cancelUser || 'N/A'}
+                                                </dd>
+                                            </div>
+                                            {orderChannelData.cancelReason && (
+                                                <div className="md:col-span-3">
+                                                    <dt className="text-sm font-medium text-red-700 dark:text-red-400">Cancellation Reason</dt>
+                                                    <dd className="mt-1 text-sm text-red-800 dark:text-red-300">
+                                                        {orderChannelData.cancelReason}
+                                                    </dd>
+                                                </div>
+                                            )}
+                                            {orderChannelData.cancelTime && (
+                                                <div>
+                                                    <dt className="text-sm font-medium text-red-700 dark:text-red-400">Cancelled At</dt>
+                                                    <dd className="mt-1 text-sm text-red-800 dark:text-red-300">
+                                                        {formatTimestamp(orderChannelData.cancelTime)}
+                                                    </dd>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         </div>
 
@@ -282,8 +325,36 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({ order, isOpen, onCl
                             <div className="space-y-4">
                                 {order.lineItems?.map((item: any) => {
                                     const itemChannelData = parseChannelData(item.channelData);
+                                    // Check if this item was cancelled
+                                    const cancelledItem = orderChannelData.cancelledLineItems?.find(
+                                        (cancelled: any) => cancelled.id === item.lineItemId
+                                    );
+                                    const isCancelled = !!cancelledItem;
+                                    
                                     return (
-                                        <div key={item.id} className="border border-gray-200 dark:border-gray-600 rounded-lg p-4">
+                                        <div 
+                                            key={item.id} 
+                                            className={`border rounded-lg p-4 ${
+                                                isCancelled 
+                                                    ? 'border-red-200 dark:border-red-600 bg-red-50 dark:bg-red-900/10' 
+                                                    : 'border-gray-200 dark:border-gray-600'
+                                            }`}
+                                        >
+                                            {isCancelled && (
+                                                <div className="mb-3 p-2 bg-red-100 dark:bg-red-900/20 rounded border border-red-200 dark:border-red-800">
+                                                    <div className="flex items-center gap-2 text-sm text-red-800 dark:text-red-300">
+                                                        <X className="h-4 w-4" />
+                                                        <span className="font-medium">Item Cancelled</span>
+                                                        <span>({cancelledItem.cancel_quantity} units)</span>
+                                                    </div>
+                                                    {cancelledItem.cancel_reason && (
+                                                        <div className="mt-1 text-xs text-red-700 dark:text-red-400">
+                                                            Reason: {cancelledItem.cancel_reason}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+                                            
                                             <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
                                                 {/* Product Image */}
                                                 <div>

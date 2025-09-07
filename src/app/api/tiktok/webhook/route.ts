@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { PrismaClient, ShopAuthorization } from "@prisma/client";
+import { PrismaClient, ShopAuthorization, NotificationType } from "@prisma/client";
 import crypto from 'crypto';
 import { Order202309GetOrderDetailResponseDataOrders, TikTokShopNodeApiClient } from "@/nodejs_sdk";
+import { NotificationService } from "@/lib/notification-service";
 
 const prisma = new PrismaClient();
 
@@ -11,10 +12,22 @@ interface TikTokWebhookData {
     shop_id: string;
     timestamp: number;
     data: {
-        is_on_hold_order: boolean;
+        is_on_hold_order?: boolean;
         order_id: string;
-        order_status: string;
+        order_status?: string;
         update_time: number;
+        // Cancellation specific fields
+        cancellation_id?: string;
+        cancellation_status?: string;
+        cancel_reason?: string;
+        cancel_user?: string;
+        cancel_user_id?: string;
+        cancel_time?: number;
+        line_items?: Array<{
+            id: string;
+            cancel_quantity: number;
+            cancel_reason?: string;
+        }>;
         fulfillment_orders?: {
             fulfillment_order_id: string;
             fulfillment_order_status: string;
@@ -28,23 +41,14 @@ interface TikTokWebhookData {
                 fulfillment_status: string;
             }[];
         }[];
-        cancel_reason?: string;
-        cancel_user?: string;
     };
 }
 
 export async function POST(request: NextRequest) {
     try {
         const body = await request.text();
-        // const signature = request.headers.get('x-tts-signature');
-        // const timestamp = request.headers.get('x-tts-timestamp');
-
-        // console.log('TikTok Webhook received:', {
-        //     signature: signature ? 'present' : 'missing',
-        //     timestamp,
-        //     bodyLength: body.length,
-        //     body: body
-        // });
+        const signature = request.headers.get('x-tts-signature');
+        const timestamp = request.headers.get('x-tts-timestamp');
 
         // Parse the webhook data
         let webhookData: TikTokWebhookData;
@@ -59,25 +63,26 @@ export async function POST(request: NextRequest) {
             }, { status: 400 });
         }
 
-        console.log('Parsed webhook data:', JSON.stringify(webhookData, null, 2));
-
         // Verify webhook signature if signature is provided
-        // if (signature && timestamp) {
-        //     const isValid = await verifyWebhookSignature(body, signature, webhookData.shop_id, timestamp);
-        //     if (!isValid) {
-        //         console.error('Invalid webhook signature');
-        //         return NextResponse.json({
-        //             code: 40003,
-        //             message: 'Invalid signature',
-        //             data: null
-        //         }, { status: 401 });
-        //     }
-        // }
+        if (signature && timestamp) {
+            const isValid = await verifyWebhookSignature(body, signature, webhookData.shop_id, timestamp);
+            if (!isValid) {
+                console.error('Invalid webhook signature');
+                return NextResponse.json({
+                    code: 40003,
+                    message: 'Invalid signature',
+                    data: null
+                }, { status: 401 });
+            }
+        }
 
         // Handle different webhook types
         switch (webhookData.type) {
             case 1: // ORDER_STATUS_CHANGE
                 await handleOrderStatusChange(webhookData);
+                break;
+            case 11: // CANCELLATION_STATUS_CHANGE
+                await handleCancellationStatusChange(webhookData);
                 break;
             default:
                 console.log(`Unhandled webhook type: ${webhookData.type}`);
@@ -149,7 +154,6 @@ async function handleOrderStatusChange(webhookData: TikTokWebhookData) {
             include: { app: true }
         });
 
-
         // Find the order in our database
         const existingOrder = await prisma.order.findFirst({
             where: {
@@ -198,8 +202,23 @@ async function handleOrderStatusChange(webhookData: TikTokWebhookData) {
 
         console.log(`Successfully updated order ${order_id} status to ${order_status}`);
 
+        // Create notification for order status change
+        if (credentials?.id) {
+            await NotificationService.createOrderNotification(
+                NotificationType.ORDER_STATUS_CHANGE,
+                { ...existingOrder, status: order_status },
+                credentials.id,
+                {
+                    previousStatus: existingOrder.status,
+                    newStatus: order_status,
+                    webhookTimestamp: webhookData.timestamp,
+                    isOnHold: is_on_hold_order
+                }
+            );
+        }
+
         // Handle specific status changes for business logic
-        await handleSpecificStatusChanges(existingOrder.id, order_status, webhookData);
+        await handleSpecificStatusChanges(existingOrder.id, order_status ?? '', webhookData);
 
     } catch (error) {
         console.error('Error handling order status change:', error);
@@ -225,10 +244,20 @@ async function handleSpecificStatusChanges(orderId: string, newStatus: string, w
             // Could trigger completion workflows, review requests, etc.
             // Auto-update customStatus to DELIVERED
             try {
-                await prisma.order.update({
+                const order = await prisma.order.update({
                     where: { id: orderId },
                     data: { customStatus: 'DELIVERED' }
                 });
+                
+                // Create delivered notification
+                if (order.shopId) {
+                    await NotificationService.createOrderNotification(
+                        NotificationType.ORDER_DELIVERED,
+                        order,
+                        order.shopId
+                    );
+                }
+                
                 console.log(`Auto-updated customStatus to DELIVERED for order ${webhookData.data.order_id}`);
             } catch (error) {
                 console.error('Error updating customStatus:', error);
@@ -242,6 +271,200 @@ async function handleSpecificStatusChanges(orderId: string, newStatus: string, w
 
         default:
             console.log(`Order ${webhookData.data.order_id} status changed to ${newStatus}`);
+    }
+}
+
+async function handleCancellationStatusChange(webhookData: TikTokWebhookData) {
+    try {
+        const { shop_id, data } = webhookData;
+        const { 
+            order_id, 
+            cancellation_id, 
+            cancellation_status,
+            cancel_reason,
+            cancel_user,
+            cancel_user_id,
+            cancel_time,
+            line_items,
+            update_time 
+        } = data;
+
+        console.log(`Processing cancellation status change: ${order_id} -> ${cancellation_status} (ID: ${cancellation_id})`);
+
+        // Get shop credentials
+        const credentials = await prisma.shopAuthorization.findUnique({
+            where: { shopId: shop_id },
+            include: { app: true }
+        });
+
+        // Find the order in our database
+        const existingOrder = await prisma.order.findFirst({
+            where: {
+                orderId: order_id,
+                shopId: credentials?.id
+            }
+        });
+
+        if (!existingOrder) {
+            console.log(`Order ${order_id} not found in database, will sync from API first`);
+            await syncOrderFromTikTok(credentials, order_id);
+            
+            // Try to find the order again after sync
+            const syncedOrder = await prisma.order.findFirst({
+                where: {
+                    orderId: order_id,
+                    shopId: credentials?.id
+                }
+            });
+            
+            if (!syncedOrder) {
+                console.error(`Order ${order_id} still not found after sync`);
+                return;
+            }
+        }
+
+        // Update order with cancellation information
+        const updateData: any = {
+            updateTime: update_time,
+        };
+
+        // Handle cancellation data
+        let channelData = {};
+        try {
+            channelData = JSON.parse(existingOrder?.channelData || '{}');
+        } catch (error) {
+            console.warn('Failed to parse existing channelData');
+        }
+
+        channelData = {
+            ...channelData,
+            lastWebhookUpdate: Date.now(),
+            lastWebhookTimestamp: webhookData.timestamp,
+            notificationId: webhookData.tts_notification_id,
+            // Cancellation specific data
+            cancellationId: cancellation_id,
+            cancellationStatus: cancellation_status,
+            cancelReason: cancel_reason,
+            cancelUser: cancel_user,
+            cancelUserId: cancel_user_id,
+            cancelTime: cancel_time,
+            cancelledLineItems: line_items
+        };
+        updateData.channelData = JSON.stringify(channelData);
+
+        // Update order status if fully cancelled
+        if (cancellation_status === 'CANCELLED') {
+            updateData.status = 'CANCELLED';
+        }
+
+        // Update the order in database
+        await prisma.order.update({
+            where: { id: existingOrder?.id },
+            data: updateData
+        });
+
+        console.log(`Successfully updated order ${order_id} with cancellation status ${cancellation_status}`);
+
+        // Handle specific cancellation status changes
+        await handleSpecificCancellationStatusChanges(existingOrder?.id ?? "", cancellation_status ?? "", webhookData);
+
+    } catch (error) {
+        console.error('Error handling cancellation status change:', error);
+        throw error;
+    }
+}
+
+async function handleSpecificCancellationStatusChanges(orderId: string, cancellationStatus: string, webhookData: TikTokWebhookData) {
+    const { data } = webhookData;
+    
+    switch (cancellationStatus?.toLowerCase()) {
+        case 'buyer_cancelled':
+            console.log(`Order ${data.order_id} was cancelled by buyer`);
+            console.log(`Reason: ${data.cancel_reason}`);
+            // Handle buyer cancellation logic
+            // - Send notification to seller
+            // - Update inventory if needed
+            // - Trigger refund process
+            break;
+
+        case 'seller_cancelled':
+            console.log(`Order ${data.order_id} was cancelled by seller`);
+            console.log(`Reason: ${data.cancel_reason}`);
+            // Handle seller cancellation logic
+            // - Send notification to buyer
+            // - Trigger refund process
+            // - Update seller performance metrics
+            break;
+
+        case 'system_cancelled':
+            console.log(`Order ${data.order_id} was cancelled by system`);
+            console.log(`Reason: ${data.cancel_reason}`);
+            // Handle system cancellation logic
+            // - Automatic refund
+            // - Update inventory
+            // - Log for analysis
+            break;
+
+        case 'cancelled':
+            console.log(`Order ${data.order_id} cancellation completed`);
+            // Handle final cancellation status
+            // - Finalize refund
+            // - Update order status to CANCELLED
+            // - Release inventory
+            try {
+                const order = await prisma.order.update({
+                    where: { id: orderId },
+                    data: { 
+                        customStatus: null,
+                        status: 'CANCELLED'
+                    }
+                });
+                
+                // Create cancellation notification
+                if (order.shopId) {
+                    await NotificationService.createOrderNotification(
+                        NotificationType.ORDER_CANCELLED,
+                        order,
+                        order.shopId,
+                        {
+                            cancellationReason: data.cancel_reason,
+                            cancelledBy: data.cancel_user,
+                            cancellationId: data.cancellation_id
+                        }
+                    );
+                }
+                
+                console.log(`Order ${data.order_id} marked as fully cancelled`);
+            } catch (error) {
+                console.error('Error updating order status to cancelled:', error);
+            }
+            break;
+
+        case 'cancellation_rejected':
+            console.log(`Cancellation request for order ${data.order_id} was rejected`);
+            console.log(`Reason: ${data.cancel_reason}`);
+            // Handle cancellation rejection
+            // - Notify requesting party
+            // - Revert any temporary changes
+            break;
+
+        case 'partial_cancelled':
+            console.log(`Order ${data.order_id} was partially cancelled`);
+            console.log(`Cancelled items: ${data.line_items?.length || 0}`);
+            // Handle partial cancellation
+            // - Update specific line items
+            // - Calculate partial refund
+            // - Update inventory for cancelled items only
+            if (data.line_items && data.line_items.length > 0) {
+                for (const cancelledItem of data.line_items) {
+                    console.log(`Item ${cancelledItem.id} cancelled: ${cancelledItem.cancel_quantity} units`);
+                    // Update specific line item status or quantity
+                }
+            }
+            break;
+
+        default:
+            console.log(`Unhandled cancellation status: ${cancellationStatus} for order ${data.order_id}`);
     }
 }
 
@@ -418,6 +641,20 @@ async function insertOrderWithAssociations(orderData: Order202309GetOrderDetailR
                     });
                 }
             }
+
+            // Create notification for new order
+            await NotificationService.createOrderNotification(
+                NotificationType.NEW_ORDER,
+                {
+                    id: order.id,
+                    orderId: orderData.id,
+                    buyerEmail: orderData.buyerEmail,
+                    totalAmount: orderData.payment?.totalAmount,
+                    currency: orderData.payment?.currency,
+                    status: orderData.status
+                },
+                shopId
+            );
 
             console.log(`Successfully inserted order ${orderData.id} with ${orderData.lineItems?.length || 0} line items`);
         });
