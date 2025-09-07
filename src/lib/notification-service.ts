@@ -39,7 +39,7 @@ export class NotificationService {
   }
 
   static async createOrderNotification(
-    type: NotificationType.NEW_ORDER | NotificationType.ORDER_STATUS_CHANGE | NotificationType.ORDER_CANCELLED | NotificationType.ORDER_DELIVERED,
+    type: 'NEW_ORDER' | 'ORDER_STATUS_CHANGE' | 'ORDER_CANCELLED' | 'ORDER_DELIVERED',
     order: any,
     shopId: string,
     additionalData?: any
