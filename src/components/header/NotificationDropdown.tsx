@@ -54,7 +54,7 @@ export default function NotificationDropdown() {
     try {
       setLoading(true);
       const response = await httpClient.get<NotificationResponse>(
-        "/api/notifications?limit=10"
+        "/notifications?limit=10"
       );
       setNotifications(response.notifications);
       setUnreadCount(response.unreadCount);
@@ -67,7 +67,7 @@ export default function NotificationDropdown() {
 
   const markAsRead = async (notificationId: string) => {
     try {
-      await httpClient.patch(`/api/notifications/${notificationId}/read`);
+      await httpClient.patch(`/notifications/${notificationId}/read`);
 
       setNotifications((prev) =>
         prev.map((notification) =>
@@ -84,7 +84,7 @@ export default function NotificationDropdown() {
 
   const markAllAsRead = async () => {
     try {
-      await httpClient.patch("/api/notifications/read-all");
+      await httpClient.patch("/notifications/read-all");
 
       setNotifications((prev) =>
         prev.map((notification) => ({ ...notification, read: true }))

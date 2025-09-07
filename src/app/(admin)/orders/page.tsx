@@ -299,10 +299,7 @@ export default function OrdersPage() {
             `Order ID: ${order.orderId}`,
             `Customer: ${order.recipientAddress?.name || 'N/A'}`,
             `Phone: ${order.recipientAddress?.phoneNumber || 'N/A'}`,
-            `Email: ${order.buyerEmail}`,
             `Address: ${order.recipientAddress?.fullAddress || 'N/A'}`,
-            `Items: ${order.lineItemsCount || order.lineItems?.length || 0} item(s)`,
-            `Total: ${order.payment?.totalAmount ? formatCurrency(order.payment.totalAmount, order.payment.currency) : 'N/A'}`
         ].join('\n');
         return customerInfo;
     };
@@ -322,11 +319,11 @@ export default function OrdersPage() {
         try {
             setUpdatingStatus(orderId);
             await httpClient.patch(`/orders/${orderId}/custom-status`, { customStatus });
-            
+
             // Update local state
-            setOrders(prevOrders => 
-                prevOrders.map(order => 
-                    order.orderId === orderId 
+            setOrders(prevOrders =>
+                prevOrders.map(order =>
+                    order.orderId === orderId
                         ? { ...order, customStatus }
                         : order
                 )
@@ -501,7 +498,6 @@ export default function OrdersPage() {
                         >
                             <option value="">All Custom Status</option>
                             <option value="NOT_SET" title="Orders with no custom status set">Not Set</option>
-                            <option value="START" title="Order needs to be delivered">START</option>
                             <option value="DELIVERED" title="Order has been delivered internally">DELIVERED</option>
                         </select>
                     </div>
@@ -576,18 +572,6 @@ export default function OrdersPage() {
                                 </span>
                             </div>
                         </div>
-                        <div>
-                            <h5 className="text-xs font-medium text-gray-600 dark:text-gray-300 mb-2">Custom Status:</h5>
-                            <div className="flex flex-wrap gap-2 text-xs">
-                                <span className="inline-flex items-center px-2 py-1 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-400">
-                                    START (Need to Deliver)
-                                </span>
-                                <span className="text-gray-400">→</span>
-                                <span className="inline-flex items-center px-2 py-1 rounded-full bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-400">
-                                    DELIVERED
-                                </span>
-                            </div>
-                        </div>
                     </div>
                 </div>
             </div>
@@ -620,13 +604,12 @@ export default function OrdersPage() {
                                     const itemImages = getLineItemImages(order);
                                     const isNotDelivered = !order.customStatus || order.customStatus !== 'DELIVERED';
                                     return (
-                                        <tr 
-                                            key={order.id} 
-                                            className={`hover:bg-gray-50 dark:hover:bg-gray-700 ${
-                                                isNotDelivered 
-                                                    ? 'bg-yellow-50 dark:bg-yellow-900/20 border-l-4 border-yellow-400 dark:border-yellow-500' 
+                                        <tr
+                                            key={order.id}
+                                            className={`hover:bg-gray-50 dark:hover:bg-gray-700 ${isNotDelivered
+                                                    ? 'bg-yellow-50 dark:bg-yellow-900/20 border-l-4 border-yellow-400 dark:border-yellow-500'
                                                     : ''
-                                            }`}
+                                                }`}
                                         >
                                             {/* Update index calculation for server-side pagination */}
                                             <td className="px-6 py-4 whitespace-nowrap">
@@ -659,12 +642,6 @@ export default function OrdersPage() {
                                                     <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full w-fit ${getStatusColor(order.status)}`}>
                                                         {order.status}
                                                     </span>
-                                                    {/* Custom Status Display Only */}
-                                                    <div className="flex items-center gap-1">
-                                                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getCustomStatusColor(order.customStatus)}`}>
-                                                            {order.customStatus || 'Not Set'}
-                                                        </span>
-                                                    </div>
                                                 </div>
                                             </td>
 
@@ -777,34 +754,21 @@ export default function OrdersPage() {
                                                         className="inline-flex items-center px-2 py-1 text-xs font-medium text-blue-600 hover:text-blue-900 border border-blue-300 rounded hover:bg-blue-50 dark:border-blue-800 dark:bg-blue-900 dark:text-blue-400 dark:hover:bg-blue-700"
                                                     >
                                                         <Eye className="h-3 w-3 mr-1" />
-                                                        View Details
+                                                        Xem
                                                     </button>
-                                                    
+
                                                     {/* Custom Status Action Buttons */}
                                                     {order.customStatus !== 'DELIVERED' && (
                                                         <div className="flex flex-col gap-1">
-                                                            {!order.customStatus && (
-                                                                <button
-                                                                    onClick={() => updateCustomStatus(order.orderId, 'START')}
-                                                                    disabled={updatingStatus === order.orderId}
-                                                                    className="inline-flex items-center px-2 py-1 text-xs font-medium text-blue-600 hover:text-blue-900 border border-blue-300 rounded hover:bg-blue-50 dark:border-blue-800 dark:bg-blue-900 dark:text-blue-400 dark:hover:bg-blue-700 disabled:opacity-50"
-                                                                    title="Mark as START (needs delivery)"
-                                                                >
-                                                                    <Package className="h-3 w-3 mr-1" />
-                                                                    {updatingStatus === order.orderId ? 'Starting...' : 'Mark Start'}
-                                                                </button>
-                                                            )}
-                                                            {order.customStatus === 'START' && (
-                                                                <button
-                                                                    onClick={() => updateCustomStatus(order.orderId, 'DELIVERED')}
-                                                                    disabled={updatingStatus === order.orderId}
-                                                                    className="inline-flex items-center px-2 py-1 text-xs font-medium text-green-600 hover:text-green-900 border border-green-300 rounded hover:bg-green-50 dark:border-green-800 dark:bg-green-900 dark:text-green-400 dark:hover:bg-green-700 disabled:opacity-50"
-                                                                    title="Mark as DELIVERED"
-                                                                >
-                                                                    <Check className="h-3 w-3 mr-1" />
-                                                                    {updatingStatus === order.orderId ? 'Delivering...' : 'Mark Delivered'}
-                                                                </button>
-                                                            )}
+                                                            <button
+                                                                onClick={() => updateCustomStatus(order.orderId, 'DELIVERED')}
+                                                                disabled={updatingStatus === order.orderId}
+                                                                className="inline-flex items-center px-2 py-1 text-xs font-medium text-green-600 hover:text-green-900 border border-green-300 rounded hover:bg-green-50 dark:border-green-800 dark:bg-green-900 dark:text-green-400 dark:hover:bg-green-700 disabled:opacity-50"
+                                                                title="Mark as DELIVERED"
+                                                            >
+                                                                <Check className="h-3 w-3 mr-1" />
+                                                                Đã chuyển
+                                                            </button>
                                                         </div>
                                                     )}
 
@@ -818,7 +782,7 @@ export default function OrdersPage() {
                                                         <svg className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                                                         </svg>
-                                                        Chat Support
+                                                        Hỗ trợ
                                                     </button>
                                                 </div>
                                             </td>
