@@ -150,7 +150,7 @@ const ShopSelector: React.FC<ShopSelectorProps> = ({
 
   const handleSelect = (shop: ShopAuthorization) => {
     setSelectedShop(shop);
-    onChange(shop.shopId, shop);
+    onChange(shop.id, shop);
     setIsOpen(false);
     setSearchTerm('');
   };

@@ -149,14 +149,6 @@ export default function Shops() {
     fetchShops(1, searchTerm, newLimit);
   };
 
-  // Group shops by status for kanban view
-  const groupedShops = {
-    active: shops.filter(shop => ['active', 'live'].includes(shop.status?.toLowerCase() || '')),
-    pending: shops.filter(shop => ['jumio', 'up doc'].includes(shop.status?.toLowerCase() || '')),
-    inactive: shops.filter(shop => ['inactive', 'die 7 days', 'shop closed'].includes(shop.status?.toLowerCase() || '')),
-    unknown: shops.filter(shop => !shop.status || !['active', 'live', 'jumio', 'up doc', 'inactive', 'die 7 days', 'shop closed'].includes(shop.status.toLowerCase()))
-  };
-
   // Helper to render status badge
   function getStatusBadge(status?: string | null) {
     const normalized = status?.toLowerCase() || '';

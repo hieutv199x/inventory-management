@@ -116,6 +116,14 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({ order, isOpen, onCl
                                     </dd>
                                 </div>
                                 <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
+                                    <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Custom Status</dt>
+                                    <dd className="mt-2">
+                                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${order.customStatus === 'DELIVERED' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-400' : order.customStatus === 'START' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-400' : 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-400'}`}>
+                                            {order.customStatus || 'Not Set'}
+                                        </span>
+                                    </dd>
+                                </div>
+                                <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
                                     <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Channel</dt>
                                     <dd className="mt-2 text-sm text-gray-900 dark:text-white">{order.channel}</dd>
                                 </div>
@@ -143,6 +151,19 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({ order, isOpen, onCl
                                         {order.shop?.shopName} ({order.shop?.shopId})
                                     </dd>
                                 </div>
+                                {orderChannelData.lastWebhookUpdate && (
+                                    <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
+                                        <dt className="text-sm font-medium text-blue-700 dark:text-blue-400">Last Webhook Update</dt>
+                                        <dd className="mt-2 text-sm text-blue-800 dark:text-blue-300">
+                                            {format(new Date(orderChannelData.lastWebhookUpdate), 'MMM dd, yyyy HH:mm:ss')}
+                                        </dd>
+                                        {orderChannelData.notificationId && (
+                                            <dd className="mt-1 text-xs text-blue-600 dark:text-blue-400">
+                                                ID: {orderChannelData.notificationId}
+                                            </dd>
+                                        )}
+                                    </div>
+                                )}
                             </div>
                         </div>
 
@@ -294,7 +315,11 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({ order, isOpen, onCl
                                                         <p>SKU ID: {item.skuId}</p>
                                                         <p>SKU Name: {item.skuName}</p>
                                                         <p>Seller SKU: {item.sellerSku}</p>
+                                                        <p>Quantity: {itemChannelData.quantity}</p>
                                                         <p>Package ID: {itemChannelData.packageId}</p>
+                                                        {itemChannelData.trackingNumber && (
+                                                            <p>Tracking: {itemChannelData.trackingNumber}</p>
+                                                        )}
                                                         <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(itemChannelData.displayStatus || 'unknown')}`}>
                                                             {itemChannelData.displayStatus || 'N/A'}
                                                         </span>
@@ -317,12 +342,23 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({ order, isOpen, onCl
                                                             </dd>
                                                         </div>
                                                         <div>
+                                                            <dt className="text-xs font-medium text-gray-500 dark:text-gray-400">Total Discount</dt>
+                                                            <dd className="text-xs text-red-600 dark:text-red-400">
+                                                                -{formatCurrency(itemChannelData.totalDiscount || '0', item.currency)}
+                                                            </dd>
+                                                        </div>
+                                                        <div>
                                                             <dt className="text-xs font-medium text-gray-500 dark:text-gray-400">Discounts</dt>
                                                             <dd className="text-xs text-gray-600 dark:text-gray-400">
                                                                 Seller: {formatCurrency(itemChannelData.sellerDiscount || '0', item.currency)}<br/>
                                                                 Platform: {formatCurrency(itemChannelData.platformDiscount || '0', item.currency)}
                                                             </dd>
                                                         </div>
+                                                        {itemChannelData.isGift && (
+                                                            <div className="text-xs text-purple-600 dark:text-purple-400">
+                                                                🎁 Gift Item
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 </div>
                                             </div>
@@ -358,9 +394,26 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({ order, isOpen, onCl
                                     </dd>
                                 </div>
                                 <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
+                                    <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Original Product Price</dt>
+                                    <dd className="mt-2 text-sm text-gray-900 dark:text-white">
+                                        {formatCurrency(paymentChannelData.originalTotalProductPrice || '0', order.currency)}
+                                    </dd>
+                                </div>
+                                <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
+                                    <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Total Discounts</dt>
+                                    <dd className="mt-2 text-sm text-red-600 dark:text-red-400">
+                                        -{formatCurrency(paymentChannelData.totalDiscountAmount || '0', order.currency)}
+                                    </dd>
+                                </div>
+                                <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
                                     <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Shipping Fee</dt>
                                     <dd className="mt-2 text-sm text-gray-900 dark:text-white">
                                         {formatCurrency(paymentChannelData.shippingFee || '0', order.currency)}
+                                        {paymentChannelData.originalShippingFee && paymentChannelData.originalShippingFee !== paymentChannelData.shippingFee && (
+                                            <span className="text-xs text-gray-500 line-through ml-2">
+                                                {formatCurrency(paymentChannelData.originalShippingFee, order.currency)}
+                                            </span>
+                                        )}
                                     </dd>
                                 </div>
                                 <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
