@@ -33,6 +33,13 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url);
+
+    // Pagination parameters
+    const page = parseInt(searchParams.get('page') || '1');
+    const limit = parseInt(searchParams.get('limit') || '25');
+    const offset = (page - 1) * limit;
+
+    // Filter parameters
     const shopId = searchParams.get('shop_id');
     const startDate = searchParams.get('start_date');
     const endDate = searchParams.get('end_date');
@@ -95,23 +102,59 @@ export async function GET(request: NextRequest) {
       };
     }
 
-    // Get payments with user access control
+    // Get total count for pagination
+    const totalItems = await prisma.payment.count({ where: whereClause });
+    const totalPages = Math.ceil(totalItems / limit);
+
+    // Get payments with pagination
     const payments = await prisma.payment.findMany({
       where: whereClause,
       include: {
         shop: {
           select: {
-            shopId: true,
             shopName: true,
+            shopId: true,
           },
         },
       },
       orderBy: {
         createTime: 'desc',
       },
+      skip: offset,
+      take: limit,
     });
 
-    return NextResponse.json(payments);
+    // Transform data for response
+    const transformedPayments = payments.map((payment) => ({
+      id: payment.id,
+      paymentId: payment.paymentId,
+      shopId: payment.shopId,
+      amountValue: payment.amountValue || '0',
+      amountCurrency: payment.amountCurrency || 'USD',
+      settlementAmountValue: payment.settlementAmountValue,
+      settlementAmountCurrency: payment.settlementAmountCurrency,
+      createTime: payment.createTime,
+      paidTime: payment.paidTime,
+      status: payment.status,
+      bankAccount: payment.bankAccount,
+      shop: {
+        shopName: payment.shop?.shopName || '',
+        shopId: payment.shop?.shopId || '',
+      },
+    }));
+
+    return NextResponse.json({
+      success: true,
+      data: transformedPayments,
+      pagination: {
+        currentPage: page,
+        totalPages,
+        totalItems,
+        itemsPerPage: limit,
+        hasNext: page < totalPages,
+        hasPrev: page > 1,
+      },
+    });
   } catch (error) {
     console.error('Error fetching payments:', error);
     return NextResponse.json(

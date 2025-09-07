@@ -1,167 +1,91 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
-import jwt from 'jsonwebtoken';
+import { getUserWithShopAccess } from '@/lib/auth';
 
 const prisma = new PrismaClient();
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 
-const verifyToken = (request: NextRequest) => {
-  const authHeader = request.headers.get('Authorization');
-  const token = authHeader?.replace('Bearer ', '');
-
-  if (!token) {
-    throw new Error('Authentication required');
-  }
-
-  return jwt.verify(token, JWT_SECRET) as any;
-};
-
-export async function GET(request: NextRequest) {
+export async function GET(req: NextRequest) {
   try {
-    const decoded = verifyToken(request);
+    const { user, accessibleShopIds, isAdmin } = await getUserWithShopAccess(req, prisma);
+    const { searchParams } = new URL(req.url);
 
-    // Get current user
-    const currentUser = await prisma.user.findUnique({
-      where: { id: decoded.userId },
-    });
+    // Pagination parameters
+    const page = parseInt(searchParams.get('page') || '1');
+    const limit = parseInt(searchParams.get('limit') || '25');
+    const offset = (page - 1) * limit;
 
-    if (!currentUser) {
-      return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
-      );
-    }
-
-    const { searchParams } = new URL(request.url);
+    // Filter parameters
     const shopId = searchParams.get('shop_id');
     const startDate = searchParams.get('start_date');
     const endDate = searchParams.get('end_date');
 
-    // Build where clause based on user permissions
-    let whereClause: any = {};
+    // Build where clause
+    const where: any = {};
 
-    // If user is not ADMIN or MANAGER, filter by user shop roles
-    if (!['ADMIN', 'MANAGER'].includes(currentUser.role)) {
-      // Get shops that the user has access to through UserShopRole
-      const userShopRoles = await prisma.userShopRole.findMany({
-        where: {
-          userId: currentUser.id,
-        },
-        select: {
-          shop: {
-            select: {
-              id: true, // MongoDB ObjectID
-              shopId: true,
-            },
-          }
-        },
+    // Shop access control
+    if (!isAdmin) {
+      where.shopId = { in: accessibleShopIds };
+    } else if (shopId && shopId !== 'all') {
+      const shop = await prisma.shopAuthorization.findUnique({
+        where: { shopId: shopId }
       });
-
-      // Use MongoDB _id for filtering
-      const accessibleShopIds = userShopRoles
-        .map((usr) => usr.shop?.id)
-        .filter((id): id is string => !!id);
-
-      // If user has no shop assignments, return empty result
-      if (accessibleShopIds.length === 0) {
-        return NextResponse.json([]);
+      if (shop) {
+        where.shopId = shop.id;
       }
-
-      // If specific shop is requested (not 'all'), check if user has access to it
-      if (shopId && shopId !== 'all') {
-        // Find the shop's _id by TikTok shopId
-        const matchedShop = userShopRoles.find(usr => String(usr.shop?.shopId) === String(shopId));
-        if (matchedShop && matchedShop.shop?.id) {
-          whereClause.shopId = matchedShop.shop.id;
-        } else {
-          // User doesn't have access to the requested shop
-          return NextResponse.json([]);
-        }
-      } else {
-        // shopId is 'all' or not provided, filter by accessible shops
-        whereClause.shopId = {
-          in: accessibleShopIds,
-        };
-      }
-    } else {
-      // Admin/Manager can access all shops
-      if (shopId && shopId !== 'all') {
-        // Find the shop's _id by TikTok shopId
-        const shop = await prisma.shopAuthorization.findUnique({
-          where: { shopId: shopId },
-          select: { id: true },
-        });
-        if (shop?.id) {
-          whereClause.shopId = shop.id;
-        } else {
-          return NextResponse.json([]);
-        }
-      }
-      // If shopId is 'all' or not provided, don't add shopId filter (get all shops)
     }
 
-    // Add date range filter if provided
-    if (startDate && endDate) {
-      whereClause.createTime = {
-        gte: parseInt(startDate),
-        lte: parseInt(endDate),
-      };
-    }
-
-    // Get active shops list to filter withdrawals
-    const activeShopAuthorizations = await prisma.shopAuthorization.findMany({
-      where: { status: 'ACTIVE' },
-      select: { shopId: true },
-    });
-    const activeShopTikTokIds = activeShopAuthorizations
-      .map(shop => shop.shopId)
-      .filter((id): id is string => !!id);
-
-    // Fetch Shop documents to get their MongoDB _id for active shops
-    const activeShops = await prisma.shopAuthorization.findMany({
-      where: { shopId: { in: activeShopTikTokIds } },
-      select: { id: true, shopId: true },
-    });
-    const activeShopIds = activeShops.map(shop => shop.id);
-
-    // Filter whereClause to only get withdrawals from active shops
-    if (whereClause.shopId) {
-      if (typeof whereClause.shopId === 'object' && whereClause.shopId.in) {
-        whereClause.shopId.in = whereClause.shopId.in.filter((id: string) => activeShopIds.includes(id));
-        if (whereClause.shopId.in.length === 0) {
-          return NextResponse.json([]);
-        }
-      } else if (!activeShopIds.includes(whereClause.shopId)) {
-        // If shopId is not active, return empty result
-        return NextResponse.json([]);
+    // Date range filter
+    if (startDate || endDate) {
+      where.createTime = {};
+      if (startDate) {
+        where.createTime.gte = parseInt(startDate);
       }
-    } else {
-      whereClause.shopId = { in: activeShopIds };
+      if (endDate) {
+        where.createTime.lte = parseInt(endDate);
+      }
     }
 
-    // Get withdrawals with active shop filtering
+    // Get total count for pagination
+    const totalItems = await prisma.withdrawal.count({ where });
+    const totalPages = Math.ceil(totalItems / limit);
+
+    // Get withdrawals with pagination
     const withdrawals = await prisma.withdrawal.findMany({
-      where: whereClause,
+      where,
       include: {
         shop: {
           select: {
             shopName: true,
-            status: true,
-          },
-        },
+            shopId: true
+          }
+        }
       },
       orderBy: {
-        createTime: 'desc',
+        createTime: 'desc'
       },
+      skip: offset,
+      take: limit
     });
 
-    return NextResponse.json(withdrawals);
-  } catch (error) {
-    console.error('Error fetching withdrawals:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch withdrawals' },
-      { status: 500 }
-    );
+    return NextResponse.json({
+      success: true,
+      data: withdrawals,
+      pagination: {
+        currentPage: page,
+        totalPages,
+        totalItems,
+        itemsPerPage: limit,
+        hasNext: page < totalPages,
+        hasPrev: page > 1
+      }
+    });
+
+  } catch (err: any) {
+    console.error('Error fetching withdrawals:', err);
+    return NextResponse.json({ 
+      success: false,
+      error: err.message || 'Internal error' 
+    }, { status: 500 });
   } finally {
     await prisma.$disconnect();
   }

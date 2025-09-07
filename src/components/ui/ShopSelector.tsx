@@ -27,6 +27,7 @@ interface ShopSelectorProps {
   error?: string;
   label?: string;
   showAllShops?: boolean; // If true, shows all shops regardless of user permissions
+  showSelected?: boolean; // If true, shows selected shop details
 }
 
 const ShopSelector: React.FC<ShopSelectorProps> = ({
@@ -38,7 +39,8 @@ const ShopSelector: React.FC<ShopSelectorProps> = ({
   required = false,
   error,
   label,
-  showAllShops = false
+  showAllShops = false,
+  showSelected = true,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -288,7 +290,7 @@ const ShopSelector: React.FC<ShopSelectorProps> = ({
       )}
 
       {/* Selected shop details (optional) */}
-      {selectedShop && (
+      {selectedShop && showSelected && (
         <div className="mt-2 p-2 bg-gray-50 dark:bg-gray-700 rounded text-xs text-gray-600 dark:text-gray-400">
           <div>Selected: {selectedShop.managedName || selectedShop.shopName}</div>
           <div>App: {selectedShop.app.appName} ({selectedShop.app.channel})</div>

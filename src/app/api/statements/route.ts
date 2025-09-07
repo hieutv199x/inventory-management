@@ -1,169 +1,91 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
-import { getUserWithShopAccess, validateShopAccess, getActiveShopIds } from '@/lib/auth';
+import { NextRequest, NextResponse } from "next/server";
+import { PrismaClient } from "@prisma/client";
+import { getUserWithShopAccess } from "@/lib/auth";
 
 const prisma = new PrismaClient();
 
-export async function GET(request: NextRequest) {
+export async function GET(req: NextRequest) {
   try {
-    const { user, accessibleShopIds, isAdmin } = await getUserWithShopAccess(request, prisma);
+    const { user, accessibleShopIds, isAdmin } = await getUserWithShopAccess(req, prisma);
+    const { searchParams } = new URL(req.url);
 
-    const { searchParams } = new URL(request.url);
+    // Pagination parameters
+    const page = parseInt(searchParams.get('page') || '1');
+    const limit = parseInt(searchParams.get('limit') || '25');
+    const offset = (page - 1) * limit;
+
+    // Filter parameters
     const shopId = searchParams.get('shop_id');
     const startDate = searchParams.get('start_date');
     const endDate = searchParams.get('end_date');
-    const page = parseInt(searchParams.get('page') || '1');
-    const pageSize = parseInt(searchParams.get('pageSize') || '20');
-    const offset = (page - 1) * pageSize;
 
-    const activeShopIds = await getActiveShopIds(prisma);
+    // Build where clause
+    const where: any = {};
 
-    // Build where clause based on user permissions
-    let whereClause: any = {};
-
-    // Handle 'all' parameter for shopId
-    const requestedShopId = shopId === 'all' ? null : shopId;
-
-    // Map accessibleShopIds (TikTok shopId) to Shop _id (ObjectID)
-    let accessibleShopObjectIds: string[] = [];
-    if (accessibleShopIds && accessibleShopIds.length > 0) {
-      const shops = await prisma.shopAuthorization.findMany({
-        where: { shopId: { in: accessibleShopIds } },
-        select: { id: true, shopId: true },
-      });
-      accessibleShopObjectIds = shops.map(shop => shop.id);
-    }
-
-    // Map activeShopIds (TikTok shopId) to Shop _id (ObjectID)
-    let activeShopObjectIds: string[] = [];
-    if (activeShopIds && activeShopIds.length > 0) {
-      const shops = await prisma.shopAuthorization.findMany({
-        where: { shopId: { in: activeShopIds } },
-        select: { id: true, shopId: true },
-      });
-      activeShopObjectIds = shops.map(shop => shop.id);
-    }
-
-    // Determine shop filter using ObjectIDs
-    let shopObjectIdFilter: any = undefined;
-    if (requestedShopId) {
-      // Find the Shop _id by TikTok shopId
+    // Shop access control
+    if (!isAdmin) {
+      where.shopId = { in: accessibleShopIds };
+    } else if (shopId && shopId !== 'all') {
       const shop = await prisma.shopAuthorization.findUnique({
-        where: { shopId: requestedShopId },
-        select: { id: true },
+        where: { shopId: shopId }
       });
-      if (!shop?.id) {
-        return NextResponse.json({
-          statements: [],
-          pagination: {
-            total: 0,
-            page,
-            pageSize,
-            totalPages: 0,
-            hasMore: false
-          }
-        });
+      if (shop) {
+        where.shopId = shop.id;
       }
-      shopObjectIdFilter = shop.id;
-    } else if (isAdmin) {
-      // Admin: all active shops
-      shopObjectIdFilter = { in: activeShopObjectIds };
-    } else {
-      // Non-admin: only accessible and active shops
-      const filteredIds = accessibleShopObjectIds.filter(id => activeShopObjectIds.includes(id));
-      if (filteredIds.length === 0) {
-        return NextResponse.json({
-          statements: [],
-          pagination: {
-            total: 0,
-            page,
-            pageSize,
-            totalPages: 0,
-            hasMore: false
-          }
-        });
+    }
+
+    // Date range filter
+    if (startDate || endDate) {
+      where.statementTime = {};
+      if (startDate) {
+        where.statementTime.gte = parseInt(startDate);
       }
-      shopObjectIdFilter = { in: filteredIds };
+      if (endDate) {
+        where.statementTime.lte = parseInt(endDate);
+      }
     }
 
-    if (shopObjectIdFilter !== undefined && shopObjectIdFilter !== null) {
-      whereClause.shopId = shopObjectIdFilter;
-    }
+    // Get total count for pagination
+    const totalItems = await prisma.statement.count({ where });
+    const totalPages = Math.ceil(totalItems / limit);
 
-    // Add date range filter if provided
-    if (startDate && endDate) {
-      whereClause.statementTime = {
-        gte: parseInt(startDate),
-        lte: parseInt(endDate),
-      };
-    }
-
-    // Get statements với shop active with pagination
-    const [statements, total] = await Promise.all([
-      prisma.statement.findMany({
-        where: whereClause,
-        include: {
-          shop: {
-            select: {
-              shopName: true,
-              status: true,
-            },
-          },
-        },
-        orderBy: {
-          statementTime: 'desc',
-        },
-        take: pageSize,
-        skip: offset,
-      }),
-      prisma.statement.count({ where: whereClause })
-    ]);
-
-    // Lấy thêm thông tin bankAccount từ Payment dựa vào paymentId
-    const statementsWithBankAccount = await Promise.all(
-      statements.map(async (statement) => {
-        let bankAccount = null;
-        
-        if (statement.paymentId) {
-          try {
-            const payment = await prisma.payment.findUnique({
-              where: { paymentId: statement.paymentId },
-              select: { bankAccount: true }
-            });
-            bankAccount = payment?.bankAccount || null;
-          } catch (error) {
-            console.warn(`Failed to fetch payment for paymentId ${statement.paymentId}:`, error);
+    // Get statements with pagination
+    const statements = await prisma.statement.findMany({
+      where,
+      include: {
+        shop: {
+          select: {
+            shopName: true,
+            shopId: true
           }
         }
-
-        return {
-          ...statement,
-          bankAccount
-        };
-      })
-    );
-
-    const totalPages = Math.ceil(total / pageSize);
+      },
+      orderBy: {
+        statementTime: 'desc'
+      },
+      skip: offset,
+      take: limit
+    });
 
     return NextResponse.json({
-      statements: statementsWithBankAccount,
+      success: true,
+      data: statements,
       pagination: {
-        total,
-        page,
-        pageSize,
+        currentPage: page,
         totalPages,
-        hasMore: offset + pageSize < total
+        totalItems,
+        itemsPerPage: limit,
+        hasNext: page < totalPages,
+        hasPrev: page > 1
       }
     });
-  } catch (error) {
-    console.error('Error fetching statements:', error);
-    if (error instanceof Error && (error.message === 'Authentication required' || error.message === 'User not found')) {
-      return NextResponse.json({ error: error.message }, { status: 401 });
-    }
-    return NextResponse.json(
-      { error: 'Failed to fetch statements' },
-      { status: 500 }
-    );
+
+  } catch (err: any) {
+    console.error("Error fetching statements:", err);
+    return NextResponse.json({ 
+      success: false,
+      error: err.message || "Internal error" 
+    }, { status: 500 });
   } finally {
     await prisma.$disconnect();
   }

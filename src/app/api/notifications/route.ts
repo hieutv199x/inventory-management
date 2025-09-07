@@ -8,12 +8,46 @@ export async function GET(req: NextRequest) {
     try {
         const { user } = await getUserWithShopAccess(req, prisma);
         const { searchParams } = new URL(req.url);
+        
+        // Pagination parameters
+        const page = parseInt(searchParams.get('page') || '1');
         const limit = parseInt(searchParams.get('limit') || '10');
-        const offset = parseInt(searchParams.get('offset') || '0');
+        const offset = (page - 1) * limit;
+        
+        // Filter parameters
+        const type = searchParams.get('type');
+        const read = searchParams.get('read');
+        const dateFrom = searchParams.get('dateFrom');
+        const dateTo = searchParams.get('dateTo');
 
-        // Get notifications for the user
+        // Build where clause
+        const where: any = { userId: user.id };
+
+        if (type && type !== 'all') {
+            where.type = type;
+        }
+
+        if (read !== null && read !== 'all') {
+            where.read = read === 'true';
+        }
+
+        if (dateFrom || dateTo) {
+            where.createdAt = {};
+            if (dateFrom) {
+                where.createdAt.gte = new Date(dateFrom);
+            }
+            if (dateTo) {
+                where.createdAt.lte = new Date(dateTo + 'T23:59:59');
+            }
+        }
+
+        // Get total count for pagination
+        const totalItems = await prisma.notification.count({ where });
+        const totalPages = Math.ceil(totalItems / limit);
+
+        // Get notifications with pagination
         const notifications = await prisma.notification.findMany({
-            where: { userId: user.id },
+            where,
             include: {
                 order: {
                     select: {
@@ -31,8 +65,8 @@ export async function GET(req: NextRequest) {
                 }
             },
             orderBy: { createdAt: 'desc' },
-            take: limit,
-            skip: offset
+            skip: offset,
+            take: limit
         });
 
         // Get unread count
@@ -65,9 +99,17 @@ export async function GET(req: NextRequest) {
         }));
 
         return NextResponse.json({
+            success: true,
             notifications: transformedNotifications,
-            unreadCount,
-            hasMore: notifications.length === limit
+            pagination: {
+                currentPage: page,
+                totalPages,
+                totalItems,
+                itemsPerPage: limit,
+                hasNext: page < totalPages,
+                hasPrev: page > 1
+            },
+            unreadCount
         });
 
     } catch (err: any) {

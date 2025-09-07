@@ -1,114 +1,109 @@
 import { NextRequest, NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
-import { getUserWithShopAccess, getActiveShopIds } from "@/lib/auth";
+import { PrismaClient, Channel } from "@prisma/client";
+import { getUserWithShopAccess } from "@/lib/auth";
 
 const prisma = new PrismaClient();
 
-export async function GET(request: NextRequest) {
-    try {
-        const { searchParams } = new URL(request.url);
-        
-        // Extract parameters including customStatus
-        const page = parseInt(searchParams.get('page') || '1');
-        const pageSize = parseInt(searchParams.get('pageSize') || '20');
-        const shopId = searchParams.get('shopId');
-        const status = searchParams.get('status');
-        const customStatus = searchParams.get('customStatus');
-        const keyword = searchParams.get('keyword');
-        const createTimeGe = searchParams.get('createTimeGe');
-        const createTimeLt = searchParams.get('createTimeLt');
+export async function GET(req: NextRequest) {
+  try {
+    const { user, accessibleShopIds, isAdmin } = await getUserWithShopAccess(req, prisma);
+    const { searchParams } = new URL(req.url);
 
-        // Build Prisma where clause
-        const whereClause: any = {};
-        
-        if (shopId) whereClause.shopId = shopId;
-        if (status) whereClause.status = status;
-        
-        // Handle customStatus filter with Prisma syntax
-        if (customStatus) {
-            if (customStatus === 'NOT_SET') {
-                whereClause.OR = [
-                    { customStatus: null },
-                    { customStatus: '' }
-                ];
-            } else {
-                whereClause.customStatus = customStatus;
-            }
-        }
-        
-        // Handle date range filters
-        if (createTimeGe || createTimeLt) {
-            whereClause.createTime = {};
-            if (createTimeGe) whereClause.createTime.gte = parseInt(createTimeGe);
-            if (createTimeLt) whereClause.createTime.lt = parseInt(createTimeLt);
-        }
+    // Pagination parameters
+    const page = parseInt(searchParams.get('page') || '1');
+    const limit = parseInt(searchParams.get('limit') || '25');
+    const offset = (page - 1) * limit;
 
-        // Handle keyword search with Prisma syntax
-        if (keyword) {
-            whereClause.OR = [
-                { orderId: { contains: keyword, mode: 'insensitive' } },
-                { buyerEmail: { contains: keyword, mode: 'insensitive' } },
-                { 
-                    recipientAddress: {
-                        name: { contains: keyword, mode: 'insensitive' }
-                    }
-                },
-                {
-                    lineItems: {
-                        some: {
-                            productName: { contains: keyword, mode: 'insensitive' }
-                        }
-                    }
-                }
-            ];
-        }
+    // Filter parameters
+    const shopId = searchParams.get('shopId');
+    const status = searchParams.get('status');
+    const channelParam = searchParams.get('channel');
+    const channel = channelParam && channelParam !== 'all' ? channelParam as Channel : null;
+    const search = searchParams.get('search');
+    const dateFrom = searchParams.get('dateFrom');
+    const dateTo = searchParams.get('dateTo');
+    const sortBy = searchParams.get('sortBy') || 'createTime';
+    const sortOrder = (searchParams.get('sortOrder') || 'desc').toLowerCase();
 
-        // Execute Prisma query with customStatus filter
-        const [orders, totalCount] = await Promise.all([
-            prisma.order.findMany({
-                where: whereClause,
-                include: {
-                    lineItems: true,
-                    payment: true,
-                    recipientAddress: true,
-                    shop: true,
-                },
-                orderBy: {
-                    createTime: 'desc'
-                },
-                skip: (page - 1) * pageSize,
-                take: pageSize
-            }),
-            prisma.order.count({
-                where: whereClause
-            })
-        ]);
+    // Build where clause
+    const where: any = {};
 
-        const totalPages = Math.ceil(totalCount / pageSize);
-
-        // Transform orders to include lineItemsCount
-        const transformedOrders = orders.map(order => ({
-            ...order,
-            lineItemsCount: order.lineItems.length
-        }));
-
-        return NextResponse.json({
-            orders: transformedOrders,
-            pagination: {
-                currentPage: page,
-                pageSize,
-                totalItems: totalCount,
-                totalPages,
-                hasNextPage: page < totalPages,
-                hasPreviousPage: page > 1
-            }
-        });
-
-    } catch (error) {
-        console.error('Error fetching orders:', error);
-        return NextResponse.json(
-            { error: 'Failed to fetch orders' },
-            { status: 500 }
-        );
+    // Shop access control
+    if (!isAdmin) {
+      where.shopId = { in: accessibleShopIds };
+    } else if (shopId) {
+      where.shopId = shopId;
     }
+
+    // Other filters
+    if (status && status !== 'all') {
+      where.status = status;
+    }
+    if (channel) {
+      where.channel = channel;
+    }
+
+    if (search) {
+      where.OR = [
+        { orderId: { contains: search, mode: 'insensitive' } },
+        { buyerEmail: { contains: search, mode: 'insensitive' } },
+        { buyerMessage: { contains: search, mode: 'insensitive' } }
+      ];
+    }
+
+    // Date range filter
+    if (dateFrom || dateTo) {
+      where.createTime = {};
+      if (dateFrom) {
+        where.createTime.gte = Math.floor(new Date(dateFrom).getTime() / 1000);
+      }
+      if (dateTo) {
+        where.createTime.lte = Math.floor(new Date(dateTo + 'T23:59:59').getTime() / 1000);
+      }
+    }
+
+    // Get total count for pagination
+    const totalItems = await prisma.order.count({ where });
+    const totalPages = Math.ceil(totalItems / limit);
+
+    // Get orders with pagination
+    const orders = await prisma.order.findMany({
+      where,
+      include: {
+        payment: true,
+        lineItems: true,
+        recipientAddress: true,
+        shop: {
+          select: {
+            shopName: true,
+            shopId: true
+          }
+        }
+      },
+      orderBy: {
+        [sortBy]: sortOrder as 'asc' | 'desc'
+      },
+      skip: offset,
+      take: limit
+    });
+
+    return NextResponse.json({
+      success: true,
+      data: orders,
+      pagination: {
+        currentPage: page,
+        totalPages,
+        totalItems,
+        itemsPerPage: limit,
+        hasNext: page < totalPages,
+        hasPrev: page > 1
+      }
+    });
+
+  } catch (err: any) {
+    console.error("Error fetching orders:", err);
+    return NextResponse.json({ error: err.message || "Internal error" }, { status: 500 });
+  } finally {
+    await prisma.$disconnect();
+  }
 }

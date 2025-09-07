@@ -7,6 +7,8 @@ import SelectShop from "@/components/common/SelectShop";
 import { httpClient } from "@/lib/http-client";
 import DatePicker from "@/components/form/date-picker";
 import { formatCurrency, formatDate } from "@/utils/common/functionFormat";
+import { Pagination } from "@/components/ui/pagination/Pagination";
+import ShopSelector from "../ui/ShopSelector";
 
 interface Statement {
   statementId: string;
@@ -59,102 +61,234 @@ export const StatementBank = () => {
   const [startDate, setStartDate] = useState<string>("");
   const [endDate, setEndDate] = useState<string>("");
 
-  const fetchStatements = async () => {
+  // Pagination states for all tabs
+  const [statementsPagination, setStatementsPagination] = useState({
+    currentPage: 1,
+    totalPages: 0,
+    totalItems: 0,
+    itemsPerPage: 10
+  });
+
+  const [historyPagination, setHistoryPagination] = useState({
+    currentPage: 1,
+    totalPages: 0,
+    totalItems: 0,
+    itemsPerPage: 10
+  });
+
+  const [withdrawalsPagination, setWithdrawalsPagination] = useState({
+    currentPage: 1,
+    totalPages: 0,
+    totalItems: 0,
+    itemsPerPage: 10
+  });
+
+  const fetchStatements = async (page: number = 1, pageSize: number = 25) => {
     if (!selectedShop) return;
     setLoading(true);
     setError(null);
     try {
-      let url = `/statements?shop_id=${selectedShop}`;
+      const params = new URLSearchParams({
+        shop_id: selectedShop,
+        page: page.toString(),
+        limit: pageSize.toString()
+      });
+
       if (startDate && endDate) {
         const startTimestamp = Math.floor(new Date(startDate).getTime() / 1000);
         const endTimestamp = Math.floor(new Date(endDate).getTime() / 1000);
-        url += `&start_date=${startTimestamp}&end_date=${endTimestamp}`;
+        params.append('start_date', startTimestamp.toString());
+        params.append('end_date', endTimestamp.toString());
       }
 
-      const res = await httpClient.get(url);
-      const rawStatements = Array.isArray(res) ? res : (res?.statements || res?.data || []);
+      const res = await httpClient.get(`/statements?${params}`);
 
-      const mappedStatements: Statement[] = rawStatements.map((item: any) => {
-        // Parse channelData for TikTok-specific fields
-        let channelData = {};
-        try {
-          channelData = item.channelData ? JSON.parse(item.channelData) : {};
-        } catch (error) {
-          console.warn('Failed to parse channelData for statement:', item.statementId);
-        }
+      if (res.success) {
+        const rawStatements = res.data || [];
+        const mappedStatements: Statement[] = rawStatements.map((item: any) => {
+          // Parse channelData for TikTok-specific fields
+          let channelData = {};
+          try {
+            channelData = item.channelData ? JSON.parse(item.channelData) : {};
+          } catch (error) {
+            console.warn('Failed to parse channelData for statement:', item.statementId);
+          }
 
-        return {
-          statementId: item.statementId,
-          shopId: item.shop?.shopId || item.shopId || '',
-          shopName: item.shop?.shopName || '',
-          revenue: (channelData as any).revenueAmount || item.revenueAmount || '0',
-          holdAmount: (channelData as any).adjustmentAmount || item.adjustmentAmount || '0',
-          paidAmount: item.settlementAmount || '0',
-          holdDate: item.statementTime,
-          bankAccount: item.bankAccount || '',
-          currency: item.currency || 'USD',
-        };
-      });
+          return {
+            statementId: item.statementId,
+            shopId: item.shop?.shopId || item.shopId || '',
+            shopName: item.shop?.shopName || '',
+            revenue: (channelData as any).revenueAmount || item.revenueAmount || '0',
+            holdAmount: (channelData as any).adjustmentAmount || item.adjustmentAmount || '0',
+            paidAmount: item.settlementAmount || '0',
+            holdDate: item.statementTime,
+            bankAccount: item.bankAccount || '',
+            currency: item.currency || 'USD',
+          };
+        });
 
-      setStatements(mappedStatements);
+        setStatements(mappedStatements);
+        setStatementsPagination(res.pagination || {
+          currentPage: page,
+          totalPages: Math.ceil(rawStatements.length / pageSize),
+          totalItems: rawStatements.length,
+          itemsPerPage: pageSize
+        });
+      } else {
+        // Handle legacy response format
+        const rawStatements = Array.isArray(res) ? res : (res?.statements || res?.data || []);
+        const mappedStatements: Statement[] = rawStatements.map((item: any) => {
+          // Parse channelData for TikTok-specific fields
+          let channelData = {};
+          try {
+            channelData = item.channelData ? JSON.parse(item.channelData) : {};
+          } catch (error) {
+            console.warn('Failed to parse channelData for statement:', item.statementId);
+          }
+
+          return {
+            statementId: item.statementId,
+            shopId: item.shop?.shopId || item.shopId || '',
+            shopName: item.shop?.shopName || '',
+            revenue: (channelData as any).revenueAmount || item.revenueAmount || '0',
+            holdAmount: (channelData as any).adjustmentAmount || item.adjustmentAmount || '0',
+            paidAmount: item.settlementAmount || '0',
+            holdDate: item.statementTime,
+            bankAccount: item.bankAccount || '',
+            currency: item.currency || 'USD',
+          };
+        });
+
+        setStatements(mappedStatements);
+        setStatementsPagination({
+          currentPage: 1,
+          totalPages: 1,
+          totalItems: mappedStatements.length,
+          itemsPerPage: pageSize
+        });
+      }
     } catch (error) {
       const err = error as Error;
       console.error("Failed to fetch statements:", error);
       setError(err.message);
+      setStatements([]);
     }
     setLoading(false);
   };
 
-  const fetchPaidHistory = async () => {
+  const fetchPaidHistory = async (page: number = 1, pageSize: number = 25) => {
     setLoading(true);
     setError(null);
     try {
-      let url = `/Payments/?shop_id=${selectedShop}`;
+      const params = new URLSearchParams({
+        shop_id: selectedShop || 'all',
+        page: page.toString(),
+        limit: pageSize.toString()
+      });
+
       if (startDate && endDate) {
         const startTimestamp = Math.floor(new Date(startDate).getTime() / 1000);
         const endTimestamp = Math.floor(new Date(endDate).getTime() / 1000);
-        url += `&start_date=${startTimestamp}&end_date=${endTimestamp}`;
+        params.append('start_date', startTimestamp.toString());
+        params.append('end_date', endTimestamp.toString());
       }
 
-      const res = await httpClient.get(url);
-      setPaidHistories(res || []);
+      const res = await httpClient.get(`/Payments?${params}`);
+
+      if (res.success) {
+        setPaidHistories(res.data || []);
+        setHistoryPagination(res.pagination || {
+          currentPage: page,
+          totalPages: Math.ceil((res.data?.length || 0) / pageSize),
+          totalItems: res.data?.length || 0,
+          itemsPerPage: pageSize
+        });
+      } else {
+        // Handle legacy response format
+        setPaidHistories(res || []);
+        setHistoryPagination({
+          currentPage: 1,
+          totalPages: 1,
+          totalItems: (res || []).length,
+          itemsPerPage: pageSize
+        });
+      }
     } catch (error) {
       console.error("Failed to fetch paid history:", error);
+      setError("Failed to fetch payment history");
+      setPaidHistories([]);
     }
     setLoading(false);
   };
 
-  const fetchWithdrawals = async () => {
+  const fetchWithdrawals = async (page: number = 1, pageSize: number = 25) => {
     setLoading(true);
     setError(null);
     try {
-      let url = `/withdrawals?shop_id=${selectedShop}`;
+      const params = new URLSearchParams({
+        shop_id: selectedShop || 'all',
+        page: page.toString(),
+        limit: pageSize.toString()
+      });
+
       if (startDate && endDate) {
         const startTimestamp = Math.floor(new Date(startDate).getTime() / 1000);
         const endTimestamp = Math.floor(new Date(endDate).getTime() / 1000);
-        url += `&start_date=${startTimestamp}&end_date=${endTimestamp}`;
+        params.append('start_date', startTimestamp.toString());
+        params.append('end_date', endTimestamp.toString());
       }
 
-      const res = await httpClient.get(url);
-      const rawWithdrawals = res || [];
+      const res = await httpClient.get(`/withdrawals?${params}`);
 
-      const mappedWithdrawals: Withdrawal[] = rawWithdrawals.map((item: any) => ({
-        id: item.id,
-        withdrawalId: item.withdrawalId,
-        shopId: item.shopId,
-        amount: item.amount || '0',
-        currency: item.currency || 'USD',
-        status: item.status || 'UNKNOWN',
-        createTime: item.createTime,
-        bankAccount: item.bankAccount || '',
-        shopName: item.shop?.shopName || '',
-      }));
+      if (res.success) {
+        const rawWithdrawals = res.data || [];
+        const mappedWithdrawals: Withdrawal[] = rawWithdrawals.map((item: any) => ({
+          id: item.id,
+          withdrawalId: item.withdrawalId,
+          shopId: item.shopId,
+          amount: item.amount || '0',
+          currency: item.currency || 'USD',
+          status: item.status || 'UNKNOWN',
+          createTime: item.createTime,
+          bankAccount: item.bankAccount || '',
+          shopName: item.shop?.shopName || '',
+        }));
 
-      setWithdrawals(mappedWithdrawals);
+        setWithdrawals(mappedWithdrawals);
+        setWithdrawalsPagination(res.pagination || {
+          currentPage: page,
+          totalPages: Math.ceil(rawWithdrawals.length / pageSize),
+          totalItems: rawWithdrawals.length,
+          itemsPerPage: pageSize
+        });
+      } else {
+        // Handle legacy response format
+        const rawWithdrawals = res || [];
+        const mappedWithdrawals: Withdrawal[] = rawWithdrawals.map((item: any) => ({
+          id: item.id,
+          withdrawalId: item.withdrawalId,
+          shopId: item.shopId,
+          amount: item.amount || '0',
+          currency: item.currency || 'USD',
+          status: item.status || 'UNKNOWN',
+          createTime: item.createTime,
+          bankAccount: item.bankAccount || '',
+          shopName: item.shop?.shopName || '',
+        }));
+
+        setWithdrawals(mappedWithdrawals);
+        setWithdrawalsPagination({
+          currentPage: 1,
+          totalPages: 1,
+          totalItems: mappedWithdrawals.length,
+          itemsPerPage: pageSize
+        });
+      }
     } catch (error) {
       const err = error as Error;
       console.error("Failed to fetch withdrawals:", error);
       setError(err.message);
+      setWithdrawals([]);
     }
     setLoading(false);
   };
@@ -211,22 +345,45 @@ export const StatementBank = () => {
 
   const handleSearch = () => {
     if (activeTab === "shops") {
-      fetchStatements();
+      fetchStatements(1, statementsPagination.itemsPerPage);
     } else if (activeTab === "history") {
-      fetchPaidHistory();
+      fetchPaidHistory(1, historyPagination.itemsPerPage);
     } else {
-      fetchWithdrawals();
+      fetchWithdrawals(1, withdrawalsPagination.itemsPerPage);
     }
+  };
+
+  // Pagination handlers
+  const handleStatementsPageChange = (page: number) => {
+    fetchStatements(page, statementsPagination.itemsPerPage);
+  };
+
+  const handleStatementsPageSizeChange = (pageSize: number) => {
+    fetchStatements(1, pageSize);
+  };
+
+  const handleHistoryPageChange = (page: number) => {
+    fetchPaidHistory(page, historyPagination.itemsPerPage);
+  };
+
+  const handleHistoryPageSizeChange = (pageSize: number) => {
+    fetchPaidHistory(1, pageSize);
+  };
+
+  const handleWithdrawalsPageChange = (page: number) => {
+    fetchWithdrawals(page, withdrawalsPagination.itemsPerPage);
+  };
+
+  const handleWithdrawalsPageSizeChange = (pageSize: number) => {
+    fetchWithdrawals(1, pageSize);
   };
 
   useEffect(() => {
     // Initial load without date filters
-    if (activeTab === "shops") fetchStatements();
-    else if (activeTab === "history") fetchPaidHistory();
-    else fetchWithdrawals();
+    if (activeTab === "shops") fetchStatements(1, statementsPagination.itemsPerPage);
+    else if (activeTab === "history") fetchPaidHistory(1, historyPagination.itemsPerPage);
+    else fetchWithdrawals(1, withdrawalsPagination.itemsPerPage);
   }, [activeTab, selectedShop]);
-
-  
 
   return (
     <div className="p-6 space-y-6">
@@ -241,10 +398,9 @@ export const StatementBank = () => {
       <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow-sm border border-gray-200 dark:border-gray-700">
         <div className="flex flex-wrap items-end gap-4">
           <div className="min-w-[200px]">
-            <SelectShop
-              onChange={(val) => setSelectedShop(val)}
-              placeholder="Tất cả shop"
-              enablePlaceholder={false}
+            <ShopSelector
+              onChange={(shopId: string | null, shop: any | null) => setSelectedShop(shopId)}
+              showSelected={false}
             />
           </div>
 
@@ -296,11 +452,11 @@ export const StatementBank = () => {
 
         {/* Filter Summary */}
         <div className="mt-3 flex flex-wrap gap-2">
-          {selectedShop && selectedShop !== 'all' && (
+          {/* {selectedShop && selectedShop !== 'all' && (
             <span className="px-2 py-1 bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 rounded-md text-xs font-medium">
               Shop: {selectedShop}
             </span>
-          )}
+          )} */}
           {startDate && (
             <span className="px-2 py-1 bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 rounded-md text-xs font-medium">
               Từ: {new Date(startDate).toLocaleDateString('vi-VN')}
@@ -320,8 +476,8 @@ export const StatementBank = () => {
           <nav className="flex space-x-8 px-6">
             <button
               className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === "shops"
-                  ? "border-blue-500 text-blue-600 dark:text-blue-400"
-                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300"
+                ? "border-blue-500 text-blue-600 dark:text-blue-400"
+                : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300"
                 }`}
               onClick={() => setActiveTab("shops")}
             >
@@ -329,8 +485,8 @@ export const StatementBank = () => {
             </button>
             <button
               className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === "history"
-                  ? "border-blue-500 text-blue-600 dark:text-blue-400"
-                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300"
+                ? "border-blue-500 text-blue-600 dark:text-blue-400"
+                : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300"
                 }`}
               onClick={() => setActiveTab("history")}
             >
@@ -338,8 +494,8 @@ export const StatementBank = () => {
             </button>
             <button
               className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === "withdrawal"
-                  ? "border-blue-500 text-blue-600 dark:text-blue-400"
-                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300"
+                ? "border-blue-500 text-blue-600 dark:text-blue-400"
+                : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300"
                 }`}
               onClick={() => setActiveTab("withdrawal")}
             >
@@ -352,95 +508,121 @@ export const StatementBank = () => {
         <div className="p-6">
           {activeTab === "shops" && (
             <div>
-              <Table>
-                <TableHeader className="border-gray-100 dark:border-gray-700 border-y">
-                  <TableRow>
-                    <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
-                      Mã báo cáo
-                    </TableCell>
-                    <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
-                      Shop ID
-                    </TableCell>
-                    <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
-                      Tên shop
-                    </TableCell>
-                    <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
-                      Doanh thu
-                    </TableCell>
-                    <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
-                      Tiền giữ
-                    </TableCell>
-                    <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
-                      Đã thanh toán
-                    </TableCell>
-                    <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
-                      Ngày báo cáo
-                    </TableCell>
-                    <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
-                      Tài khoản ngân hàng
-                    </TableCell>
-                  </TableRow>
-                </TableHeader>
-                <TableBody className="divide-y divide-gray-100 dark:divide-gray-700">
-                  {loading ? (
-                    <TableRow>
-                      <TableCell colSpan={8} className="py-12 text-center">
-                        <div className="flex items-center justify-center space-x-2">
-                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
-                          <span className="text-gray-500 dark:text-gray-400">Đang tải dữ liệu...</span>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ) : error ? (
-                    <TableRow>
-                      <TableCell colSpan={8} className="py-12 text-center">
-                        <div className="text-red-500 dark:text-red-400">
-                          <p className="font-medium">Có lỗi xảy ra</p>
-                          <p className="text-sm mt-1">{error}</p>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ) : statements.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={8} className="py-12 text-center">
-                        <div className="text-gray-500 dark:text-gray-400">
-                          <p className="font-medium">Không có dữ liệu</p>
-                          <p className="text-sm mt-1">Chọn shop và khoảng thời gian để xem báo cáo</p>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    statements.map((s) => (
-                      <TableRow key={s.statementId} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                        <TableCell className="py-3 text-gray-900 dark:text-gray-100 font-mono text-sm">
-                          {s.statementId}
+              {loading ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mr-3"></div>
+                  <span className="text-gray-600 dark:text-gray-400">Đang tải lịch sử thanh toán...</span>
+                </div>
+              ) : (
+                <>
+                  <div className="mb-4 flex items-center justify-between">
+                    <h3 className="text-lg font-medium text-gray-900 dark:text-white">
+                      Lịch sử thanh toán
+                    </h3>
+                    <div className="text-sm text-gray-500 dark:text-gray-400">
+                      Tổng: {statementsPagination.totalItems} báo cáo
+                    </div>
+                  </div>
+
+                  <Table>
+                    <TableHeader className="border-gray-100 dark:border-gray-700 border-y">
+                      <TableRow>
+                        <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
+                          Mã báo cáo
                         </TableCell>
-                        <TableCell className="py-3 text-gray-700 dark:text-gray-300">
-                          {s.shopId}
+                        <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
+                          Shop ID
                         </TableCell>
-                        <TableCell className="py-3 text-gray-700 dark:text-gray-300 font-medium">
-                          {s.shopName}
+                        <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
+                          Tên shop
                         </TableCell>
-                        <TableCell className="py-3 text-gray-700 dark:text-gray-300 font-medium">
-                          {formatCurrency(s.revenue, s.currency)}
+                        <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
+                          Doanh thu
                         </TableCell>
-                        <TableCell className="py-3 text-gray-700 dark:text-gray-300 font-medium">
-                          {formatCurrency(s.holdAmount, s.currency)}
+                        <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
+                          Tiền giữ
                         </TableCell>
-                        <TableCell className="py-3 text-green-600 dark:text-green-400 font-medium">
-                          {formatCurrency(s.paidAmount, s.currency)}
+                        <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
+                          Đã thanh toán
                         </TableCell>
-                        <TableCell className="py-3 text-gray-700 dark:text-gray-300">
-                          {formatDate(s.holdDate)}
+                        <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
+                          Ngày báo cáo
                         </TableCell>
-                        <TableCell className="py-3 text-gray-700 dark:text-gray-300">
-                          {s.bankAccount || '—'}
+                        <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
+                          Tài khoản ngân hàng
                         </TableCell>
                       </TableRow>
-                    ))
+                    </TableHeader>
+                    <TableBody className="divide-y divide-gray-100 dark:divide-gray-700">
+                      {error ? (
+                        <TableRow>
+                          <TableCell colSpan={8} className="py-12 text-center">
+                            <div className="text-red-500 dark:text-red-400">
+                              <p className="font-medium">Có lỗi xảy ra</p>
+                              <p className="text-sm mt-1">{error}</p>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ) : statements.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={8} className="py-12 text-center">
+                            <div className="text-gray-500 dark:text-gray-400">
+                              <p className="font-medium">Không có dữ liệu</p>
+                              <p className="text-sm mt-1">Chọn shop và khoảng thời gian để xem báo cáo</p>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        statements.map((s) => (
+                          <TableRow key={s.statementId} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                            <TableCell className="py-3 text-gray-900 dark:text-gray-100 font-mono text-sm">
+                              {s.statementId}
+                            </TableCell>
+                            <TableCell className="py-3 text-gray-700 dark:text-gray-300">
+                              {s.shopId}
+                            </TableCell>
+                            <TableCell className="py-3 text-gray-700 dark:text-gray-300 font-medium">
+                              {s.shopName}
+                            </TableCell>
+                            <TableCell className="py-3 text-gray-700 dark:text-gray-300 font-medium">
+                              {formatCurrency(s.revenue, s.currency)}
+                            </TableCell>
+                            <TableCell className="py-3 text-gray-700 dark:text-gray-300 font-medium">
+                              {formatCurrency(s.holdAmount, s.currency)}
+                            </TableCell>
+                            <TableCell className="py-3 text-green-600 dark:text-green-400 font-medium">
+                              {formatCurrency(s.paidAmount, s.currency)}
+                            </TableCell>
+                            <TableCell className="py-3 text-gray-700 dark:text-gray-300">
+                              {formatDate(s.holdDate)}
+                            </TableCell>
+                            <TableCell className="py-3 text-gray-700 dark:text-gray-300">
+                              {s.bankAccount || '—'}
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+
+                  {/* Pagination for Statements Tab */}
+                  {statementsPagination.totalPages > 1 && (
+                    <div className="mt-6 border-t border-gray-200 dark:border-gray-700 pt-4">
+                      <Pagination
+                        currentPage={statementsPagination.currentPage}
+                        totalPages={statementsPagination.totalPages}
+                        totalItems={statementsPagination.totalItems}
+                        itemsPerPage={statementsPagination.itemsPerPage}
+                        onPageChange={handleStatementsPageChange}
+                        onPageSizeChange={handleStatementsPageSizeChange}
+                        pageSizeOptions={[10, 25, 50, 100]}
+                        showPageSizeSelector={true}
+                        showItemsInfo={true}
+                      />
+                    </div>
                   )}
-                </TableBody>
-              </Table>
+                </>
+              )}
             </div>
           )}
 
@@ -452,82 +634,119 @@ export const StatementBank = () => {
                   <span className="text-gray-600 dark:text-gray-400">Đang tải lịch sử thanh toán...</span>
                 </div>
               ) : (
-                <Table>
-                  <TableHeader className="border-gray-100 dark:border-gray-700 border-y">
-                    <TableRow>
-                      <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
-                        ID
-                      </TableCell>
-                      <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
-                        Shop Name
-                      </TableCell>
-                      <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
-                        Mã giao dịch
-                      </TableCell>
-                      <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
-                        Số tiền
-                      </TableCell>
-                      <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
-                        Tiền tệ
-                      </TableCell>
-                      <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
-                        Trạng thái
-                      </TableCell>
-                      <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
-                        Tài khoản NH
-                      </TableCell>
-                      <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
-                        Thời gian
-                      </TableCell>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody className="divide-y divide-gray-100 dark:divide-gray-700">
-                    {paidHistories.length === 0 ? (
+                <>
+                  <div className="mb-4 flex items-center justify-between">
+                    <h3 className="text-lg font-medium text-gray-900 dark:text-white">
+                      Lịch sử tiền về
+                    </h3>
+                    <div className="text-sm text-gray-500 dark:text-gray-400">
+                      Tổng: {historyPagination.totalItems} giao dịch
+                    </div>
+                  </div>
+
+                  <Table>
+                    <TableHeader className="border-gray-100 dark:border-gray-700 border-y">
                       <TableRow>
-                        <TableCell colSpan={8} className="py-12 text-center">
-                          <div className="text-gray-500 dark:text-gray-400">
-                            <p className="font-medium">Không có lịch sử thanh toán</p>
-                            <p className="text-sm mt-1">Chọn shop để xem lịch sử thanh toán</p>
-                          </div>
+                        <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
+                          ID
+                        </TableCell>
+                        <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
+                          Shop Name
+                        </TableCell>
+                        <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
+                          Mã giao dịch
+                        </TableCell>
+                        <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
+                          Số tiền
+                        </TableCell>
+                        <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
+                          Tiền tệ
+                        </TableCell>
+                        <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
+                          Trạng thái
+                        </TableCell>
+                        <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
+                          Tài khoản NH
+                        </TableCell>
+                        <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
+                          Thời gian
                         </TableCell>
                       </TableRow>
-                    ) : (
-                      paidHistories.map((p) => (
-                        <TableRow key={p.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                          <TableCell className="py-3 text-gray-900 dark:text-gray-100 font-mono text-sm">
-                            {p.id}
-                          </TableCell>
-                          <TableCell className="py-3 text-gray-700 dark:text-gray-300">
-                            {p.shop.shopName}
-                          </TableCell>
-                          <TableCell className="py-3 text-gray-700 dark:text-gray-300 font-mono">
-                            {p.paymentId}
-                          </TableCell>
-                          <TableCell className="py-3 text-gray-700 dark:text-gray-300 font-medium">
-                            {formatCurrency(p.amountValue, p.amountCurrency)}
-                          </TableCell>
-                          <TableCell className="py-3 text-gray-700 dark:text-gray-300">
-                            {p.amountCurrency}
-                          </TableCell>
-                          <TableCell className="py-3">
-                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${p.status === 'PAID'
-                                ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-                                : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
-                              }`}>
-                              {p.status}
-                            </span>
-                          </TableCell>
-                          <TableCell className="py-3 text-gray-700 dark:text-gray-300">
-                            {p.bankAccount || '—'}
-                          </TableCell>
-                          <TableCell className="py-3 text-gray-700 dark:text-gray-300">
-                            {formatDate(p.createTime)}
+                    </TableHeader>
+                    <TableBody className="divide-y divide-gray-100 dark:divide-gray-700">
+                      {error ? (
+                        <TableRow>
+                          <TableCell colSpan={8} className="py-12 text-center">
+                            <div className="text-red-500 dark:text-red-400">
+                              <p className="font-medium">Có lỗi xảy ra</p>
+                              <p className="text-sm mt-1">{error}</p>
+                            </div>
                           </TableCell>
                         </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
+                      ) : paidHistories.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={8} className="py-12 text-center">
+                            <div className="text-gray-500 dark:text-gray-400">
+                              <p className="font-medium">Không có lịch sử thanh toán</p>
+                              <p className="text-sm mt-1">Chọn shop để xem lịch sử thanh toán</p>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        paidHistories.map((p) => (
+                          <TableRow key={p.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                            <TableCell className="py-3 text-gray-900 dark:text-gray-100 font-mono text-sm">
+                              {p.id}
+                            </TableCell>
+                            <TableCell className="py-3 text-gray-700 dark:text-gray-300">
+                              {p.shop.shopName}
+                            </TableCell>
+                            <TableCell className="py-3 text-gray-700 dark:text-gray-300 font-mono">
+                              {p.paymentId}
+                            </TableCell>
+                            <TableCell className="py-3 text-gray-700 dark:text-gray-300 font-medium">
+                              {formatCurrency(p.amountValue, p.amountCurrency)}
+                            </TableCell>
+                            <TableCell className="py-3 text-gray-700 dark:text-gray-300">
+                              {p.amountCurrency}
+                            </TableCell>
+                            <TableCell className="py-3">
+                              <span className={`px-2 py-1 rounded-full text-xs font-medium ${p.status === 'PAID'
+                                ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                                : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
+                                }`}>
+                                {p.status}
+                              </span>
+                            </TableCell>
+                            <TableCell className="py-3 text-gray-700 dark:text-gray-300">
+                              {p.bankAccount || '—'}
+                            </TableCell>
+                            <TableCell className="py-3 text-gray-700 dark:text-gray-300">
+                              {formatDate(p.createTime)}
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+
+                  {/* Pagination for History Tab */}
+                  {historyPagination.totalPages > 1 && (
+                    <div className="mt-6 border-t border-gray-200 dark:border-gray-700 pt-4">
+                      <Pagination
+                        currentPage={historyPagination.currentPage}
+                        totalPages={historyPagination.totalPages}
+                        totalItems={historyPagination.totalItems}
+                        itemsPerPage={historyPagination.itemsPerPage}
+                        onPageChange={handleHistoryPageChange}
+                        onPageSizeChange={handleHistoryPageSizeChange}
+                        pageSizeOptions={[10, 25, 50, 100]}
+                        showPageSizeSelector={true}
+                        showItemsInfo={true}
+                      />
+                    </div>
+                  )}
+                </>
               )}
             </div>
           )}
@@ -539,96 +758,123 @@ export const StatementBank = () => {
                   <span className="text-gray-600 dark:text-gray-400">Đang tải lịch sử rút tiền...</span>
                 </div>
               ) : (
-                <Table>
-                  <TableHeader className="border-gray-100 dark:border-gray-700 border-y">
-                    <TableRow>
-                      <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
-                        ID rút tiền
-                      </TableCell>
-                      <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
-                        Shop ID
-                      </TableCell>
-                      <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
-                        Tên shop
-                      </TableCell>
-                      <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
-                        Số tiền
-                      </TableCell>
-                      <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
-                        Tiền tệ
-                      </TableCell>
-                      <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
-                        Trạng thái
-                      </TableCell>
-                      <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
-                        Tài khoản NH
-                      </TableCell>
-                      <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
-                        Thời gian
-                      </TableCell>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody className="divide-y divide-gray-100 dark:divide-gray-700">
-                    {error ? (
+                <>
+                  <div className="mb-4 flex items-center justify-between">
+                    <h3 className="text-lg font-medium text-gray-900 dark:text-white">
+                      Lịch sử rút tiền
+                    </h3>
+                    <div className="text-sm text-gray-500 dark:text-gray-400">
+                      Tổng: {withdrawalsPagination.totalItems} giao dịch
+                    </div>
+                  </div>
+
+                  <Table>
+                    <TableHeader className="border-gray-100 dark:border-gray-700 border-y">
                       <TableRow>
-                        <TableCell colSpan={8} className="py-12 text-center">
-                          <div className="text-red-500 dark:text-red-400">
-                            <p className="font-medium">Có lỗi xảy ra</p>
-                            <p className="text-sm mt-1">{error}</p>
-                          </div>
+                        <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
+                          ID rút tiền
+                        </TableCell>
+                        <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
+                          Shop ID
+                        </TableCell>
+                        <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
+                          Tên shop
+                        </TableCell>
+                        <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
+                          Số tiền
+                        </TableCell>
+                        <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
+                          Tiền tệ
+                        </TableCell>
+                        <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
+                          Trạng thái
+                        </TableCell>
+                        <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
+                          Tài khoản NH
+                        </TableCell>
+                        <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
+                          Thời gian
                         </TableCell>
                       </TableRow>
-                    ) : withdrawals.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={8} className="py-12 text-center">
-                          <div className="text-gray-500 dark:text-gray-400">
-                            <p className="font-medium">Không có lịch sử rút tiền</p>
-                            <p className="text-sm mt-1">Chọn shop và khoảng thời gian để xem lịch sử rút tiền</p>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      withdrawals.map((w) => (
-                        <TableRow key={w.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                          <TableCell className="py-3 text-gray-900 dark:text-gray-100 font-mono text-sm">
-                            {w.withdrawalId}
-                          </TableCell>
-                          <TableCell className="py-3 text-gray-700 dark:text-gray-300">
-                            {w.shopId}
-                          </TableCell>
-                          <TableCell className="py-3 text-gray-700 dark:text-gray-300 font-medium">
-                            {w.shopName}
-                          </TableCell>
-                          <TableCell className="py-3 text-gray-700 dark:text-gray-300 font-medium">
-                            {formatCurrency(w.amount, w.currency)}
-                          </TableCell>
-                          <TableCell className="py-3 text-gray-700 dark:text-gray-300">
-                            {w.currency}
-                          </TableCell>
-                          <TableCell className="py-3">
-                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                              w.status === 'COMPLETED' || w.status === 'SUCCESS'
-                                ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-                                : w.status === 'PENDING' || w.status === 'PROCESSING'
-                                ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
-                                : w.status === 'FAILED' || w.status === 'REJECTED'
-                                ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
-                                : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
-                            }`}>
-                              {w.status}
-                            </span>
-                          </TableCell>
-                          <TableCell className="py-3 text-gray-700 dark:text-gray-300">
-                            {w.bankAccount || '—'}
-                          </TableCell>
-                          <TableCell className="py-3 text-gray-700 dark:text-gray-300">
-                            {formatDate(w.createTime)}
+                    </TableHeader>
+                    <TableBody className="divide-y divide-gray-100 dark:divide-gray-700">
+                      {error ? (
+                        <TableRow>
+                          <TableCell colSpan={8} className="py-12 text-center">
+                            <div className="text-red-500 dark:text-red-400">
+                              <p className="font-medium">Có lỗi xảy ra</p>
+                              <p className="text-sm mt-1">{error}</p>
+                            </div>
                           </TableCell>
                         </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
+                      ) : withdrawals.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={8} className="py-12 text-center">
+                            <div className="text-gray-500 dark:text-gray-400">
+                              <p className="font-medium">Không có lịch sử rút tiền</p>
+                              <p className="text-sm mt-1">Chọn shop và khoảng thời gian để xem lịch sử rút tiền</p>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        withdrawals.map((w) => (
+                          <TableRow key={w.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                            <TableCell className="py-3 text-gray-900 dark:text-gray-100 font-mono text-sm">
+                              {w.withdrawalId}
+                            </TableCell>
+                            <TableCell className="py-3 text-gray-700 dark:text-gray-300">
+                              {w.shopId}
+                            </TableCell>
+                            <TableCell className="py-3 text-gray-700 dark:text-gray-300 font-medium">
+                              {w.shopName}
+                            </TableCell>
+                            <TableCell className="py-3 text-gray-700 dark:text-gray-300 font-medium">
+                              {formatCurrency(w.amount, w.currency)}
+                            </TableCell>
+                            <TableCell className="py-3 text-gray-700 dark:text-gray-300">
+                              {w.currency}
+                            </TableCell>
+                            <TableCell className="py-3">
+                              <span className={`px-2 py-1 rounded-full text-xs font-medium ${w.status === 'COMPLETED' || w.status === 'SUCCESS'
+                                  ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                                  : w.status === 'PENDING' || w.status === 'PROCESSING'
+                                    ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
+                                    : w.status === 'FAILED' || w.status === 'REJECTED'
+                                      ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+                                      : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
+                                }`}>
+                                {w.status}
+                              </span>
+                            </TableCell>
+                            <TableCell className="py-3 text-gray-700 dark:text-gray-300">
+                              {w.bankAccount || '—'}
+                            </TableCell>
+                            <TableCell className="py-3 text-gray-700 dark:text-gray-300">
+                              {formatDate(w.createTime)}
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+
+                  {/* Pagination for Withdrawals Tab */}
+                  {withdrawalsPagination.totalPages > 1 && (
+                    <div className="mt-6 border-t border-gray-200 dark:border-gray-700 pt-4">
+                      <Pagination
+                        currentPage={withdrawalsPagination.currentPage}
+                        totalPages={withdrawalsPagination.totalPages}
+                        totalItems={withdrawalsPagination.totalItems}
+                        itemsPerPage={withdrawalsPagination.itemsPerPage}
+                        onPageChange={handleWithdrawalsPageChange}
+                        onPageSizeChange={handleWithdrawalsPageSizeChange}
+                        pageSizeOptions={[10, 25, 50, 100]}
+                        showPageSizeSelector={true}
+                        showItemsInfo={true}
+                      />
+                    </div>
+                  )}
+                </>
               )}
             </div>
           )}

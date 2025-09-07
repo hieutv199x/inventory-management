@@ -38,11 +38,16 @@ export default function NotificationDropdown() {
   const [notifications, setNotifications] = useState<NotificationData[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
 
   function toggleDropdown() {
     setIsOpen(!isOpen);
     if (!isOpen) {
-      fetchNotifications();
+      // Reset pagination when opening dropdown
+      setCurrentPage(1);
+      setNotifications([]);
+      fetchNotifications(1);
     }
   }
 
@@ -50,14 +55,26 @@ export default function NotificationDropdown() {
     setIsOpen(false);
   }
 
-  const fetchNotifications = async () => {
+  const fetchNotifications = async (page: number = 1) => {
     try {
       setLoading(true);
-      const response = await httpClient.get<NotificationResponse>(
-        "/notifications?limit=10"
-      );
-      setNotifications(response.notifications);
+      const response = await httpClient.get<{
+        notifications: NotificationData[];
+        unreadCount: number;
+        pagination: {
+          hasNext: boolean;
+        };
+      }>(`/notifications?page=${page}&limit=10`);
+
+      if (page === 1) {
+        setNotifications(response.notifications);
+      } else {
+        setNotifications((prev) => [...prev, ...response.notifications]);
+      }
+
       setUnreadCount(response.unreadCount);
+      setHasMore(response.pagination?.hasNext || false);
+      setCurrentPage(page);
     } catch (error) {
       console.error("Error fetching notifications:", error);
     } finally {
@@ -158,6 +175,12 @@ export default function NotificationDropdown() {
     return () => clearInterval(interval);
   }, []);
 
+  function loadMore(event: React.MouseEvent<HTMLButtonElement, MouseEvent>): void {
+    event.preventDefault();
+    if (!loading && hasMore) {
+      fetchNotifications(currentPage + 1);
+    }
+  }
   return (
     <div className="relative">
       <button
@@ -231,18 +254,18 @@ export default function NotificationDropdown() {
           </div>
         </div>
 
-        {loading ? (
-          <div className="flex items-center justify-center h-32">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-          </div>
-        ) : (
-          <ul className="flex flex-col h-auto overflow-y-auto custom-scrollbar">
-            {notifications.length === 0 ? (
-              <li className="flex items-center justify-center h-32 text-gray-500 dark:text-gray-400">
-                No notifications yet
-              </li>
-            ) : (
-              notifications.map((notification) => (
+        <ul className="flex flex-col h-auto overflow-y-auto custom-scrollbar">
+          {notifications.length === 0 ? (
+            <li className="flex items-center justify-center h-32 text-gray-500 dark:text-gray-400">
+              {loading ? (
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+              ) : (
+                "No notifications yet"
+              )}
+            </li>
+          ) : (
+            <>
+              {notifications.map((notification) => (
                 <li key={notification.id}>
                   <DropdownItem
                     onItemClick={() => {
@@ -282,10 +305,23 @@ export default function NotificationDropdown() {
                     </span>
                   </DropdownItem>
                 </li>
-              ))
-            )}
-          </ul>
-        )}
+              ))}
+
+              {/* Load more button */}
+              {hasMore && (
+                <li className="p-2">
+                  <button
+                    onClick={loadMore}
+                    disabled={loading}
+                    className="w-full py-2 text-sm text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 disabled:opacity-50"
+                  >
+                    {loading ? 'Loading...' : 'Load more'}
+                  </button>
+                </li>
+              )}
+            </>
+          )}
+        </ul>
 
         <Link
           href="/notifications"
