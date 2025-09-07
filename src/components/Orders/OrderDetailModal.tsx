@@ -1,6 +1,6 @@
 "use client";
 import React from "react";
-import { X, Package, MapPin, CreditCard, Truck, User, Calendar, ShoppingBag, Info } from 'lucide-react';
+import { X, Package, MapPin, CreditCard, Truck, User, Calendar, ShoppingBag, Info, Copy, Check } from 'lucide-react';
 import Image from "next/image";
 import { Modal } from "../ui/modal";
 import { format } from 'date-fns';
@@ -12,6 +12,8 @@ interface OrderDetailModalProps {
 }
 
 const OrderDetailModal: React.FC<OrderDetailModalProps> = ({ order, isOpen, onClose }) => {
+    const [copiedField, setCopiedField] = React.useState<string | null>(null);
+
     if (!isOpen || !order) return null;
 
     const formatTimestamp = (timestamp: number) => {
@@ -43,6 +45,36 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({ order, isOpen, onCl
     const orderChannelData = parseChannelData(order.channelData);
     const paymentChannelData = parseChannelData(order.payment?.channelData);
     const addressChannelData = parseChannelData(order.recipientAddress?.channelData);
+
+    const copyToClipboard = async (text: string, fieldName: string) => {
+        try {
+            await navigator.clipboard.writeText(text);
+            setCopiedField(fieldName);
+            setTimeout(() => setCopiedField(null), 2000);
+        } catch (err) {
+            console.error('Failed to copy text: ', err);
+        }
+    };
+
+    const formatCustomerInfo = () => {
+        const customerInfo = [
+            `Buyer Email: ${order.buyerEmail}`,
+            `User ID: ${orderChannelData.userId || 'N/A'}`,
+            order.buyerMessage ? `Buyer Message: ${order.buyerMessage}` : ''
+        ].filter(Boolean).join('\n');
+        return customerInfo;
+    };
+
+    const formatDeliveryAddress = () => {
+        const address = [
+            `Recipient: ${addressChannelData.firstName} ${addressChannelData.lastName || order.recipientAddress?.name}`,
+            `Phone: ${order.recipientAddress?.phoneNumber}`,
+            `Address: ${order.recipientAddress?.fullAddress}`,
+            `Postal Code: ${order.recipientAddress?.postalCode}`,
+            `Region: ${addressChannelData.regionCode}`
+        ].filter(line => !line.includes('undefined') && !line.endsWith(': ')).join('\n');
+        return address;
+    };
 
     return (
         <Modal isOpen={isOpen} onClose={onClose} className="max-w-[95vw] max-h-[95vh] overflow-hidden">
@@ -116,9 +148,28 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({ order, isOpen, onCl
 
                         {/* 2. Customer Information */}
                         <div>
-                            <div className="flex items-center gap-2 mb-4">
-                                <User className="h-5 w-5 text-green-600" />
-                                <h4 className="text-lg font-semibold text-gray-900 dark:text-white">Customer Information</h4>
+                            <div className="flex items-center justify-between mb-4">
+                                <div className="flex items-center gap-2">
+                                    <User className="h-5 w-5 text-green-600" />
+                                    <h4 className="text-lg font-semibold text-gray-900 dark:text-white">Customer Information</h4>
+                                </div>
+                                <button
+                                    onClick={() => copyToClipboard(formatCustomerInfo(), 'customer')}
+                                    className="inline-flex items-center gap-1 px-2 py-1 text-xs text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 transition-colors"
+                                    title="Copy customer information"
+                                >
+                                    {copiedField === 'customer' ? (
+                                        <>
+                                            <Check className="h-3 w-3" />
+                                            Copied
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Copy className="h-3 w-3" />
+                                            Copy
+                                        </>
+                                    )}
+                                </button>
                             </div>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
@@ -142,9 +193,28 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({ order, isOpen, onCl
 
                         {/* 3. Delivery Address */}
                         <div>
-                            <div className="flex items-center gap-2 mb-4">
-                                <MapPin className="h-5 w-5 text-purple-600" />
-                                <h4 className="text-lg font-semibold text-gray-900 dark:text-white">Delivery Address</h4>
+                            <div className="flex items-center justify-between mb-4">
+                                <div className="flex items-center gap-2">
+                                    <MapPin className="h-5 w-5 text-purple-600" />
+                                    <h4 className="text-lg font-semibold text-gray-900 dark:text-white">Delivery Address</h4>
+                                </div>
+                                <button
+                                    onClick={() => copyToClipboard(formatDeliveryAddress(), 'address')}
+                                    className="inline-flex items-center gap-1 px-2 py-1 text-xs text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 transition-colors"
+                                    title="Copy delivery address"
+                                >
+                                    {copiedField === 'address' ? (
+                                        <>
+                                            <Check className="h-3 w-3" />
+                                            Copied
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Copy className="h-3 w-3" />
+                                            Copy
+                                        </>
+                                    )}
+                                </button>
                             </div>
                             <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

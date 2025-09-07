@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Loader2, Search, RefreshCw, Eye, Package, Calendar, User, X, MapPin, CreditCard, Truck } from 'lucide-react';
+import { Loader2, Search, RefreshCw, Eye, Package, Calendar, User, X, MapPin, CreditCard, Truck, Copy, Check } from 'lucide-react';
 import { format } from 'date-fns';
+import Image from 'next/image';
 import { httpClient } from '@/lib/http-client';
 import { useLoading } from '@/context/loadingContext';
 import OrderDetailModal from '@/components/Orders/OrderDetailModal';
@@ -14,6 +15,7 @@ interface Order {
     orderId: string;
     buyerEmail: string;
     status: string;
+    customStatus?: string; // Added customStatus field
     createTime: number;
     updateTime?: number;
     totalAmount?: string;
@@ -42,6 +44,7 @@ interface LineItem {
     currency: string;
     displayStatus?: string;
     skuImage?: string; // Added skuImage field
+    channelData?: string; // Added channelData field
 }
 
 interface Payment {
@@ -82,6 +85,7 @@ export default function OrdersPage() {
     const [filters, setFilters] = useState({
         shopId: '',
         status: '',
+        customStatus: '', // Added customStatus filter
         dateFrom: '',
         dateTo: '',
         keyword: '',
@@ -105,6 +109,8 @@ export default function OrdersPage() {
 
     const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
     const [showOrderModal, setShowOrderModal] = useState(false);
+    const [copiedCustomer, setCopiedCustomer] = useState<string | null>(null);
+    const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
 
     useEffect(() => {
         fetchOrders();
@@ -136,6 +142,7 @@ export default function OrdersPage() {
             // Add filter params
             if (filters.shopId) params.append('shopId', filters.shopId);
             if (filters.status) params.append('status', filters.status);
+            if (filters.customStatus) params.append('customStatus', filters.customStatus);
             if (filters.keyword) params.append('keyword', filters.keyword);
             if (filters.dateFrom) {
                 params.append('createTimeGe', Math.floor(new Date(filters.dateFrom).getTime() / 1000).toString());
@@ -260,6 +267,25 @@ export default function OrdersPage() {
         }
     };
 
+    const parseChannelData = (channelData: string) => {
+        try {
+            return JSON.parse(channelData || '{}');
+        } catch {
+            return {};
+        }
+    };
+
+    const getLineItemImages = (order: Order) => {
+        return order.lineItems?.map(item => {
+            const itemChannelData = parseChannelData(item.channelData ?? '');
+            return {
+                image: itemChannelData.skuImage,
+                productName: item.productName,
+                id: item.id
+            };
+        }).filter(item => item.image) || [];
+    };
+
     // Filter orders based on search term
     const filteredOrders = orders.filter(order =>
         order.orderId.toLowerCase().includes(filters.keyword.toLowerCase()) ||
@@ -267,6 +293,59 @@ export default function OrdersPage() {
         (order.recipientAddress?.name || '').toLowerCase().includes(filters.keyword.toLowerCase()) ||
         order.lineItems.some(item => item.productName.toLowerCase().includes(filters.keyword.toLowerCase()))
     );
+
+    const formatCustomerInfo = (order: Order) => {
+        const customerInfo = [
+            `Order ID: ${order.orderId}`,
+            `Customer: ${order.recipientAddress?.name || 'N/A'}`,
+            `Phone: ${order.recipientAddress?.phoneNumber || 'N/A'}`,
+            `Email: ${order.buyerEmail}`,
+            `Address: ${order.recipientAddress?.fullAddress || 'N/A'}`,
+            `Items: ${order.lineItemsCount || order.lineItems?.length || 0} item(s)`,
+            `Total: ${order.payment?.totalAmount ? formatCurrency(order.payment.totalAmount, order.payment.currency) : 'N/A'}`
+        ].join('\n');
+        return customerInfo;
+    };
+
+    const copyCustomerInfo = async (order: Order) => {
+        try {
+            const customerInfo = formatCustomerInfo(order);
+            await navigator.clipboard.writeText(customerInfo);
+            setCopiedCustomer(order.orderId);
+            setTimeout(() => setCopiedCustomer(null), 2000);
+        } catch (err) {
+            console.error('Failed to copy customer info: ', err);
+        }
+    };
+
+    const updateCustomStatus = async (orderId: string, customStatus: string) => {
+        try {
+            setUpdatingStatus(orderId);
+            await httpClient.patch(`/orders/${orderId}/custom-status`, { customStatus });
+            
+            // Update local state
+            setOrders(prevOrders => 
+                prevOrders.map(order => 
+                    order.orderId === orderId 
+                        ? { ...order, customStatus }
+                        : order
+                )
+            );
+        } catch (error) {
+            console.error('Error updating custom status:', error);
+            alert('Failed to update custom status');
+        } finally {
+            setUpdatingStatus(null);
+        }
+    };
+
+    const getCustomStatusColor = (customStatus?: string) => {
+        switch (customStatus) {
+            case 'START': return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-400';
+            case 'DELIVERED': return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-400';
+            default: return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-400';
+        }
+    };
 
     return (
         <div>
@@ -373,7 +452,7 @@ export default function OrdersPage() {
                 </div>
 
                 {/* Filters Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2 dark:text-gray-400">Shop</label>
                         <ShopSelector
@@ -407,6 +486,23 @@ export default function OrdersPage() {
                                 <option value="COMPLETED" title="Order completed, no returns/refunds allowed">COMPLETED</option>
                                 <option value="CANCELLED" title="Order cancelled by buyer/seller/system/operator">CANCELLED</option>
                             </optgroup>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2 dark:text-gray-400">
+                            Custom Status
+                            <span className="ml-1 text-xs text-gray-500 cursor-help" title="Internal delivery tracking status">📦</span>
+                        </label>
+                        <select
+                            value={filters.customStatus}
+                            onChange={(e) => handleFilterChange('customStatus', e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+                        >
+                            <option value="">All Custom Status</option>
+                            <option value="NOT_SET" title="Orders with no custom status set">Not Set</option>
+                            <option value="START" title="Order needs to be delivered">START</option>
+                            <option value="DELIVERED" title="Order has been delivered internally">DELIVERED</option>
                         </select>
                     </div>
 
@@ -447,35 +543,51 @@ export default function OrdersPage() {
 
                 {/* Status Legend */}
                 <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
-                    <h5 className="text-xs font-medium text-gray-600 dark:text-gray-300 mb-2">Order Status Flow:</h5>
-                    <div className="flex flex-wrap gap-2 text-xs">
-                        <span className="inline-flex items-center px-2 py-1 rounded-full bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-400">
-                            UNPAID
-                        </span>
-                        <span className="text-gray-400">→</span>
-                        <span className="inline-flex items-center px-2 py-1 rounded-full bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-400">
-                            ON_HOLD
-                        </span>
-                        <span className="text-gray-400">→</span>
-                        <span className="inline-flex items-center px-2 py-1 rounded-full bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-400">
-                            AWAITING_SHIPMENT
-                        </span>
-                        <span className="text-gray-400">→</span>
-                        <span className="inline-flex items-center px-2 py-1 rounded-full bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-400">
-                            AWAITING_COLLECTION
-                        </span>
-                        <span className="text-gray-400">→</span>
-                        <span className="inline-flex items-center px-2 py-1 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-400">
-                            IN_TRANSIT
-                        </span>
-                        <span className="text-gray-400">→</span>
-                        <span className="inline-flex items-center px-2 py-1 rounded-full bg-teal-100 text-teal-700 dark:bg-teal-900 dark:text-teal-400">
-                            DELIVERED
-                        </span>
-                        <span className="text-gray-400">→</span>
-                        <span className="inline-flex items-center px-2 py-1 rounded-full bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-400">
-                            COMPLETED
-                        </span>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <h5 className="text-xs font-medium text-gray-600 dark:text-gray-300 mb-2">Order Status Flow:</h5>
+                            <div className="flex flex-wrap gap-2 text-xs">
+                                <span className="inline-flex items-center px-2 py-1 rounded-full bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-400">
+                                    UNPAID
+                                </span>
+                                <span className="text-gray-400">→</span>
+                                <span className="inline-flex items-center px-2 py-1 rounded-full bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-400">
+                                    ON_HOLD
+                                </span>
+                                <span className="text-gray-400">→</span>
+                                <span className="inline-flex items-center px-2 py-1 rounded-full bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-400">
+                                    AWAITING_SHIPMENT
+                                </span>
+                                <span className="text-gray-400">→</span>
+                                <span className="inline-flex items-center px-2 py-1 rounded-full bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-400">
+                                    AWAITING_COLLECTION
+                                </span>
+                                <span className="text-gray-400">→</span>
+                                <span className="inline-flex items-center px-2 py-1 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-400">
+                                    IN_TRANSIT
+                                </span>
+                                <span className="text-gray-400">→</span>
+                                <span className="inline-flex items-center px-2 py-1 rounded-full bg-teal-100 text-teal-700 dark:bg-teal-900 dark:text-teal-400">
+                                    DELIVERED
+                                </span>
+                                <span className="text-gray-400">→</span>
+                                <span className="inline-flex items-center px-2 py-1 rounded-full bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-400">
+                                    COMPLETED
+                                </span>
+                            </div>
+                        </div>
+                        <div>
+                            <h5 className="text-xs font-medium text-gray-600 dark:text-gray-300 mb-2">Custom Status:</h5>
+                            <div className="flex flex-wrap gap-2 text-xs">
+                                <span className="inline-flex items-center px-2 py-1 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-400">
+                                    START (Need to Deliver)
+                                </span>
+                                <span className="text-gray-400">→</span>
+                                <span className="inline-flex items-center px-2 py-1 rounded-full bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-400">
+                                    DELIVERED
+                                </span>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -489,6 +601,8 @@ export default function OrdersPage() {
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Account/Seller</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Items Images</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer Info</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order Info</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
@@ -497,113 +611,220 @@ export default function OrdersPage() {
                         <tbody className="bg-white divide-y divide-gray-200 dark:divide-gray-700 dark:border-gray-800 dark:bg-white/[0.03]">
                             {orders.length === 0 ? (
                                 <tr>
-                                    <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
+                                    <td colSpan={8} className="px-6 py-8 text-center text-gray-500">
                                         No orders found with the selected filters.
                                     </td>
                                 </tr>
                             ) : (
-                                orders.map((order, index) => (
-                                    <tr key={order.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
-                                        {/* Update index calculation for server-side pagination */}
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <div className="text-sm font-medium text-gray-900 dark:text-gray-400">
-                                                #{((pagination.currentPage - 1) * pagination.pageSize) + index + 1}
-                                            </div>
-                                        </td>
-
-                                        {/* Account/Seller - Thông tin tên shop, seller vận hành */}
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <div className="flex flex-col">
+                                orders.map((order, index) => {
+                                    const itemImages = getLineItemImages(order);
+                                    const isNotDelivered = !order.customStatus || order.customStatus !== 'DELIVERED';
+                                    return (
+                                        <tr 
+                                            key={order.id} 
+                                            className={`hover:bg-gray-50 dark:hover:bg-gray-700 ${
+                                                isNotDelivered 
+                                                    ? 'bg-yellow-50 dark:bg-yellow-900/20 border-l-4 border-yellow-400 dark:border-yellow-500' 
+                                                    : ''
+                                            }`}
+                                        >
+                                            {/* Update index calculation for server-side pagination */}
+                                            <td className="px-6 py-4 whitespace-nowrap">
                                                 <div className="text-sm font-medium text-gray-900 dark:text-gray-400">
-                                                    {order.shop.shopName || 'N/A'}
+                                                    #{((pagination.currentPage - 1) * pagination.pageSize) + index + 1}
                                                 </div>
-                                                <div className="text-xs text-gray-500 dark:text-gray-400">
-                                                    Shop ID: {order.shopId}
-                                                </div>
-                                            </div>
-                                        </td>
+                                            </td>
 
-                                        {/* Order - Mã đơn hàng tiktok, thời gian đặt hàng, trạng thái đơn hàng */}
-                                        <td className="px-6 py-4">
-                                            <div className="flex flex-col space-y-1">
-                                                <div className="font-mono text-sm font-medium text-gray-900 dark:text-gray-400">
-                                                    {order.orderId}
-                                                </div>
-                                                <div className="text-xs text-gray-600 dark:text-gray-400">
-                                                    {formatTimestamp(order.createTime)}
-                                                </div>
-                                                <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full w-fit ${getStatusColor(order.status)}`}>
-                                                    {order.status}
-                                                </span>
-                                            </div>
-                                        </td>
-
-                                        {/* Order Info - Thông tin nhận hàng và thanh toán của khách hàng */}
-                                        <td className="px-6 py-4">
-                                            <div className="flex flex-col space-y-1">
-                                                <div className="text-sm font-medium text-gray-900 dark:text-gray-400">
-                                                    {order.recipientAddress?.name || 'N/A'}
-                                                </div>
-                                                <div className="text-xs text-gray-500 truncate max-w-48 dark:text-gray-400">
-                                                    {order.recipientAddress?.phoneNumber || 'N/A'}
-                                                </div>
-                                                <div className="text-xs text-gray-500 truncate max-w-48 dark:text-gray-400">
-                                                    {order.buyerEmail}
-                                                </div>
-                                                <div className="text-xs text-blue-600 dark:text-blue-400">
-                                                    {order.lineItemsCount || order.lineItems?.length || 0} item(s)
-                                                </div>
-                                            </div>
-                                        </td>
-
-                                        {/* Price - Các chi phí của đơn hàng */}
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <div className="flex flex-col space-y-1">
-                                                <div className="text-sm font-medium text-gray-900 dark:text-gray-400">
-                                                    {order.payment?.totalAmount ?
-                                                        formatCurrency(order.payment.totalAmount, order.payment.currency) :
-                                                        'N/A'
-                                                    }
-                                                </div>
-                                                {order.payment?.subTotal && (
-                                                    <div className="text-xs text-gray-500 font-mono">
-                                                        Subtotal: {formatCurrency(order.payment.subTotal, order.payment.currency)}
+                                            {/* Account/Seller - Thông tin tên shop, seller vận hành */}
+                                            <td className="px-6 py-4 whitespace-nowrap">
+                                                <div className="flex flex-col">
+                                                    <div className="text-sm font-medium text-gray-900 dark:text-gray-400">
+                                                        {order.shop.shopName || 'N/A'}
                                                     </div>
-                                                )}
-                                                {order.trackingNumber && (
-                                                    <div className="text-xs font-mono text-blue-600 truncate max-w-48">
-                                                        Track: {order.trackingNumber}
+                                                    <div className="text-xs text-gray-500 dark:text-gray-400">
+                                                        Shop ID: {order.shopId}
                                                     </div>
-                                                )}
-                                            </div>
-                                        </td>
+                                                </div>
+                                            </td>
 
-                                        {/* Actions - Chat trò chuyện (support) khách hàng */}
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <div className="flex flex-col space-y-2">
-                                                <button
-                                                    onClick={() => openOrderModal(order)}
-                                                    className="inline-flex items-center px-2 py-1 text-xs font-medium text-blue-600 hover:text-blue-900 border border-blue-300 rounded hover:bg-blue-50 dark:border-blue-800 dark:bg-blue-900 dark:text-blue-400 dark:hover:bg-blue-700"
-                                                >
-                                                    <Eye className="h-3 w-3 mr-1" />
-                                                    View Details
-                                                </button>
-                                                <button
-                                                    className="inline-flex items-center px-2 py-1 text-xs font-medium text-green-600 hover:text-green-900 border border-green-300 rounded hover:bg-green-50 dark:border-green-800 dark:bg-green-900 dark:text-green-400 dark:hover:bg-green-700"
-                                                    onClick={() => {
-                                                        // TODO: Implement customer support chat
-                                                        alert('Customer support chat feature will be implemented');
-                                                    }}
-                                                >
-                                                    <svg className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                                                    </svg>
-                                                    Chat Support
-                                                </button>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))
+                                            {/* Order - Mã đơn hàng tiktok, thời gian đặt hàng, trạng thái đơn hàng */}
+                                            <td className="px-6 py-4">
+                                                <div className="flex flex-col space-y-1">
+                                                    <div className="font-mono text-sm font-medium text-gray-900 dark:text-gray-400">
+                                                        {order.orderId}
+                                                    </div>
+                                                    <div className="text-xs text-gray-600 dark:text-gray-400">
+                                                        {formatTimestamp(order.createTime)}
+                                                    </div>
+                                                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full w-fit ${getStatusColor(order.status)}`}>
+                                                        {order.status}
+                                                    </span>
+                                                    {/* Custom Status Display Only */}
+                                                    <div className="flex items-center gap-1">
+                                                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getCustomStatusColor(order.customStatus)}`}>
+                                                            {order.customStatus || 'Not Set'}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </td>
+
+                                            {/* Items Images - Product images from line items */}
+                                            <td className="px-6 py-4">
+                                                <div className="flex flex-wrap gap-1 max-w-32">
+                                                    {itemImages.length > 0 ? (
+                                                        itemImages.slice(0, 4).map((item, imgIndex) => (
+                                                            <div
+                                                                key={`${item.id}-${imgIndex}`}
+                                                                className="relative w-12 h-12 bg-gray-100 dark:bg-gray-700 rounded overflow-hidden"
+                                                            >
+                                                                <Image
+                                                                    src={item.image}
+                                                                    alt={item.productName}
+                                                                    width={48}
+                                                                    height={48}
+                                                                    className="w-full h-full object-cover"
+                                                                    unoptimized
+                                                                />
+                                                            </div>
+                                                        ))
+                                                    ) : (
+                                                        <div className="w-12 h-12 bg-gray-100 dark:bg-gray-700 rounded flex items-center justify-center">
+                                                            <Package className="h-4 w-4 text-gray-400" />
+                                                        </div>
+                                                    )}
+                                                    {itemImages.length > 4 && (
+                                                        <div className="w-12 h-12 bg-gray-200 dark:bg-gray-600 rounded flex items-center justify-center">
+                                                            <span className="text-xs font-medium text-gray-600 dark:text-gray-300">
+                                                                +{itemImages.length - 4}
+                                                            </span>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </td>
+
+                                            {/* Customer Info - Customer information with copy functionality */}
+                                            <td className="px-6 py-4">
+                                                <div className="flex flex-col space-y-1">
+                                                    <div className="flex items-center justify-between">
+                                                        <div className="text-sm font-medium text-gray-900 dark:text-gray-400">
+                                                            {order.recipientAddress?.name || 'N/A'}
+                                                        </div>
+                                                        <button
+                                                            onClick={() => copyCustomerInfo(order)}
+                                                            className="ml-2 p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                                                            title="Copy customer information"
+                                                        >
+                                                            {copiedCustomer === order.orderId ? (
+                                                                <Check className="h-3 w-3 text-green-500" />
+                                                            ) : (
+                                                                <Copy className="h-3 w-3" />
+                                                            )}
+                                                        </button>
+                                                    </div>
+                                                    <div className="text-xs text-gray-500 truncate max-w-48 dark:text-gray-400">
+                                                        {order.recipientAddress?.phoneNumber || 'N/A'}
+                                                    </div>
+                                                    <div className="text-xs text-gray-500 truncate max-w-48 dark:text-gray-400">
+                                                        {order.buyerEmail}
+                                                    </div>
+                                                    <div className="text-xs text-gray-500 truncate max-w-48 dark:text-gray-400">
+                                                        {order.recipientAddress?.fullAddress || 'N/A'}
+                                                    </div>
+                                                </div>
+                                            </td>
+
+                                            {/* Order Info - Thông tin nhận hàng và thanh toán của khách hàng */}
+                                            <td className="px-6 py-4">
+                                                <div className="flex flex-col space-y-1">
+                                                    <div className="text-xs text-blue-600 dark:text-blue-400">
+                                                        {order.lineItemsCount || order.lineItems?.length || 0} item(s)
+                                                    </div>
+                                                    {order.trackingNumber && (
+                                                        <div className="text-xs font-mono text-purple-600 truncate max-w-48">
+                                                            Track: {order.trackingNumber}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </td>
+
+                                            {/* Price - Các chi phí của đơn hàng */}
+                                            <td className="px-6 py-4 whitespace-nowrap">
+                                                <div className="flex flex-col space-y-1">
+                                                    <div className="text-sm font-medium text-gray-900 dark:text-gray-400">
+                                                        {order.payment?.totalAmount ?
+                                                            formatCurrency(order.payment.totalAmount, order.payment.currency) :
+                                                            'N/A'
+                                                        }
+                                                    </div>
+                                                    {order.payment?.subTotal && (
+                                                        <div className="text-xs text-gray-500 font-mono">
+                                                            Subtotal: {formatCurrency(order.payment.subTotal, order.payment.currency)}
+                                                        </div>
+                                                    )}
+                                                    {order.trackingNumber && (
+                                                        <div className="text-xs font-mono text-blue-600 truncate max-w-48">
+                                                            Track: {order.trackingNumber}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </td>
+
+                                            {/* Actions - Chat trò chuyện (support) khách hàng */}
+                                            <td className="px-6 py-4 whitespace-nowrap">
+                                                <div className="flex flex-col space-y-2">
+                                                    <button
+                                                        onClick={() => openOrderModal(order)}
+                                                        className="inline-flex items-center px-2 py-1 text-xs font-medium text-blue-600 hover:text-blue-900 border border-blue-300 rounded hover:bg-blue-50 dark:border-blue-800 dark:bg-blue-900 dark:text-blue-400 dark:hover:bg-blue-700"
+                                                    >
+                                                        <Eye className="h-3 w-3 mr-1" />
+                                                        View Details
+                                                    </button>
+                                                    
+                                                    {/* Custom Status Action Buttons */}
+                                                    {order.customStatus !== 'DELIVERED' && (
+                                                        <div className="flex flex-col gap-1">
+                                                            {!order.customStatus && (
+                                                                <button
+                                                                    onClick={() => updateCustomStatus(order.orderId, 'START')}
+                                                                    disabled={updatingStatus === order.orderId}
+                                                                    className="inline-flex items-center px-2 py-1 text-xs font-medium text-blue-600 hover:text-blue-900 border border-blue-300 rounded hover:bg-blue-50 dark:border-blue-800 dark:bg-blue-900 dark:text-blue-400 dark:hover:bg-blue-700 disabled:opacity-50"
+                                                                    title="Mark as START (needs delivery)"
+                                                                >
+                                                                    <Package className="h-3 w-3 mr-1" />
+                                                                    {updatingStatus === order.orderId ? 'Starting...' : 'Mark Start'}
+                                                                </button>
+                                                            )}
+                                                            {order.customStatus === 'START' && (
+                                                                <button
+                                                                    onClick={() => updateCustomStatus(order.orderId, 'DELIVERED')}
+                                                                    disabled={updatingStatus === order.orderId}
+                                                                    className="inline-flex items-center px-2 py-1 text-xs font-medium text-green-600 hover:text-green-900 border border-green-300 rounded hover:bg-green-50 dark:border-green-800 dark:bg-green-900 dark:text-green-400 dark:hover:bg-green-700 disabled:opacity-50"
+                                                                    title="Mark as DELIVERED"
+                                                                >
+                                                                    <Check className="h-3 w-3 mr-1" />
+                                                                    {updatingStatus === order.orderId ? 'Delivering...' : 'Mark Delivered'}
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    )}
+
+                                                    <button
+                                                        className="inline-flex items-center px-2 py-1 text-xs font-medium text-green-600 hover:text-green-900 border border-green-300 rounded hover:bg-green-50 dark:border-green-800 dark:bg-green-900 dark:text-green-400 dark:hover:bg-green-700"
+                                                        onClick={() => {
+                                                            // TODO: Implement customer support chat
+                                                            alert('Customer support chat feature will be implemented');
+                                                        }}
+                                                    >
+                                                        <svg className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                                                        </svg>
+                                                        Chat Support
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    );
+                                })
                             )}
                         </tbody>
                     </table>

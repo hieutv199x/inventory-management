@@ -4,174 +4,87 @@ import { getUserWithShopAccess, getActiveShopIds } from "@/lib/auth";
 
 const prisma = new PrismaClient();
 
-export async function GET(req: NextRequest) {
+export async function GET(request: NextRequest) {
     try {
-        const { user, accessibleShopIds, isAdmin } = await getUserWithShopAccess(req, prisma);
-        const activeShopIds = await getActiveShopIds(prisma);
-
-        // Extract query parameters
-        const { searchParams } = new URL(req.url);
+        const { searchParams } = new URL(request.url);
+        
+        // Extract parameters including customStatus
+        const page = parseInt(searchParams.get('page') || '1');
+        const pageSize = parseInt(searchParams.get('pageSize') || '20');
         const shopId = searchParams.get('shopId');
         const status = searchParams.get('status');
+        const customStatus = searchParams.get('customStatus');
         const keyword = searchParams.get('keyword');
         const createTimeGe = searchParams.get('createTimeGe');
         const createTimeLt = searchParams.get('createTimeLt');
-        
-        // Pagination parameters
-        const page = parseInt(searchParams.get('page') || '1', 10);
-        const pageSize = parseInt(searchParams.get('pageSize') || '20', 10);
-        const offset = (page - 1) * pageSize;
 
-        // Build where condition
-        let whereCondition: any = {};
-
-        // Shop access control
-        let allowedShopObjectIds: string[] = [];
+        // Build Prisma where clause
+        const whereClause: any = {};
         
-        if (!isAdmin) {
-            // For non-admin users, get ObjectIDs of accessible shops
-            const accessibleShops = await prisma.shopAuthorization.findMany({
-                where: {
-                    shopId: { in: accessibleShopIds.filter(id => activeShopIds.includes(id)) }
-                },
-                select: { id: true }
-            });
-            allowedShopObjectIds = accessibleShops.map(shop => shop.id);
-        } else {
-            // For admin users, get all active shops unless specific shop is requested
-            if (!shopId) {
-                const activeShops = await prisma.shopAuthorization.findMany({
-                    where: { shopId: { in: activeShopIds } },
-                    select: { id: true }
-                });
-                allowedShopObjectIds = activeShops.map(shop => shop.id);
+        if (shopId) whereClause.shopId = shopId;
+        if (status) whereClause.status = status;
+        
+        // Handle customStatus filter with Prisma syntax
+        if (customStatus) {
+            if (customStatus === 'NOT_SET') {
+                whereClause.OR = [
+                    { customStatus: null },
+                    { customStatus: '' }
+                ];
+            } else {
+                whereClause.customStatus = customStatus;
             }
         }
-
-        // Apply shop filter
-        if (shopId) {
-            // Find the ObjectID for the specific shopId
-            const targetShop = await prisma.shopAuthorization.findUnique({
-                where: { shopId: shopId },
-                select: { id: true }
-            });
-            
-            if (!targetShop) {
-                return NextResponse.json({
-                    orders: [],
-                    pagination: {
-                        currentPage: page,
-                        pageSize,
-                        totalItems: 0,
-                        totalPages: 0,
-                        hasNextPage: false,
-                        hasPreviousPage: false
-                    }
-                });
-            }
-            
-            whereCondition.shopId = targetShop.id;
-        } else if (allowedShopObjectIds.length > 0) {
-            whereCondition.shopId = { in: allowedShopObjectIds };
-        } else {
-            // No accessible shops, return empty result
-            return NextResponse.json({
-                orders: [],
-                pagination: {
-                    currentPage: page,
-                    pageSize,
-                    totalItems: 0,
-                    totalPages: 0,
-                    hasNextPage: false,
-                    hasPreviousPage: false
-                }
-            });
+        
+        // Handle date range filters
+        if (createTimeGe || createTimeLt) {
+            whereClause.createTime = {};
+            if (createTimeGe) whereClause.createTime.gte = parseInt(createTimeGe);
+            if (createTimeLt) whereClause.createTime.lt = parseInt(createTimeLt);
         }
 
-        // Apply other filters
-        if (status) {
-            whereCondition.status = status.toUpperCase();
-        }
-
+        // Handle keyword search with Prisma syntax
         if (keyword) {
-            whereCondition.OR = [
+            whereClause.OR = [
                 { orderId: { contains: keyword, mode: 'insensitive' } },
                 { buyerEmail: { contains: keyword, mode: 'insensitive' } },
-                { recipientAddress: { name: { contains: keyword, mode: 'insensitive' } } },
-                { lineItems: { some: { productName: { contains: keyword, mode: 'insensitive' } } } }
+                { 
+                    recipientAddress: {
+                        name: { contains: keyword, mode: 'insensitive' }
+                    }
+                },
+                {
+                    lineItems: {
+                        some: {
+                            productName: { contains: keyword, mode: 'insensitive' }
+                        }
+                    }
+                }
             ];
         }
 
-        if (createTimeGe) {
-            whereCondition.createTime = { 
-                ...whereCondition.createTime,
-                gte: parseInt(createTimeGe) 
-            };
-        }
-
-        if (createTimeLt) {
-            whereCondition.createTime = { 
-                ...whereCondition.createTime,
-                lt: parseInt(createTimeLt) 
-            };
-        }
-
-        // Get total count for pagination
-        const totalItems = await prisma.order.count({
-            where: whereCondition
-        });
-
-        // Get paginated orders
-        const orders = await prisma.order.findMany({
-            where: whereCondition,
-            include: {
-                shop: {
-                    select: {
-                        shopName: true,
-                        shopId: true
-                    }
+        // Execute Prisma query with customStatus filter
+        const [orders, totalCount] = await Promise.all([
+            prisma.order.findMany({
+                where: whereClause,
+                include: {
+                    lineItems: true,
+                    payment: true,
+                    recipientAddress: true,
+                    shop: true,
                 },
-                lineItems: {
-                    select: {
-                        id: true,
-                        lineItemId: true,
-                        productId: true,
-                        productName: true,
-                        skuId: true,
-                        skuName: true,
-                        sellerSku: true,
-                        salePrice: true,
-                        originalPrice: true,
-                        currency: true,
-                        channelData: true,
-                        createdAt: true,
-                        updatedAt: true
-                    }
+                orderBy: {
+                    createTime: 'desc'
                 },
-                payment: {
-                    select: {
-                        currency: true,
-                        totalAmount: true,
-                        subTotal: true,
-                        tax: true
-                    }
-                },
-                recipientAddress: {
-                    select: {
-                        name: true,
-                        phoneNumber: true,
-                        fullAddress: true
-                    }
-                }
-            },
-            orderBy: {
-                createTime: 'desc'
-            },
-            skip: offset,
-            take: pageSize
-        });
+                skip: (page - 1) * pageSize,
+                take: pageSize
+            }),
+            prisma.order.count({
+                where: whereClause
+            })
+        ]);
 
-        const totalPages = Math.ceil(totalItems / pageSize);
+        const totalPages = Math.ceil(totalCount / pageSize);
 
         // Transform orders to include lineItemsCount
         const transformedOrders = orders.map(order => ({
@@ -184,20 +97,18 @@ export async function GET(req: NextRequest) {
             pagination: {
                 currentPage: page,
                 pageSize,
-                totalItems,
+                totalItems: totalCount,
                 totalPages,
                 hasNextPage: page < totalPages,
                 hasPreviousPage: page > 1
             }
         });
 
-    } catch (err: any) {
-        console.error("Error fetching orders:", err);
-        if (err.message === 'Authentication required' || err.message === 'User not found') {
-            return NextResponse.json({ error: err.message }, { status: 401 });
-        }
-        return NextResponse.json({ error: err.message || "Internal error" }, { status: 500 });
-    } finally {
-        await prisma.$disconnect();
+    } catch (error) {
+        console.error('Error fetching orders:', error);
+        return NextResponse.json(
+            { error: 'Failed to fetch orders' },
+            { status: 500 }
+        );
     }
 }
