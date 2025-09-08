@@ -41,7 +41,7 @@ export const getUserWithShopAccess = async (request: NextRequest, prisma: Prisma
 
     // Get accessible shop IDs (now using the unified shopId field)
     const accessibleShopIds = currentUser.userShopRoles
-        .map(role => role.shop?.shopId)
+        .map(role => role.shop?.id)
         .filter(Boolean) as string[];
 
     return {

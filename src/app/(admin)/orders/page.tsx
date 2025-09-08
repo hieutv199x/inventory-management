@@ -153,7 +153,8 @@ export default function OrdersPage() {
 
             const response = await httpClient.get(`/orders?${params.toString()}`);
 
-            setOrders(response.orders || []);
+            console.log({response});
+            setOrders(response.data || []);
             setPagination(response.pagination || {
                 currentPage: 1,
                 pageSize: 20,

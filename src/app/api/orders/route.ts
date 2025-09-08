@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
     const where: any = {};
 
     // Shop access control
-    if (!isAdmin) {
+    if (!isAdmin && !shopId) {
       where.shopId = { in: accessibleShopIds };
     } else if (shopId) {
       where.shopId = shopId;
@@ -94,9 +94,9 @@ export async function GET(req: NextRequest) {
         currentPage: page,
         totalPages,
         totalItems,
-        itemsPerPage: limit,
-        hasNext: page < totalPages,
-        hasPrev: page > 1
+        pageSize: limit,
+        hasNextPage: page < totalPages,
+        hasPreviousPage: page > 1,
       }
     });
 
