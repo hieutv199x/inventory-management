@@ -56,13 +56,6 @@ const AppListModal: React.FC<AppListModalProps> = ({
         <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
           Danh sách App
         </h2>
-        <button 
-          onClick={onClose} 
-          className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-          title="Đóng"
-        >
-          <FaTimes className="h-5 w-5" />
-        </button>
       </div>
 
       <div className="overflow-x-auto">
@@ -166,7 +159,7 @@ const AppListModal: React.FC<AppListModalProps> = ({
                               onClick={() => onSaveAppSecret(app.id)}
                             >
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                                <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round"/>
+                                <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
                               </svg>
                             </button>
                             <button
@@ -175,27 +168,30 @@ const AppListModal: React.FC<AppListModalProps> = ({
                               onClick={onCancelEdit}
                             >
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                                <path d="M6 18L18 6M6 6l12 12" strokeLinecap="round" strokeLinejoin="round"/>
+                                <path d="M6 18L18 6M6 6l12 12" strokeLinecap="round" strokeLinejoin="round" />
                               </svg>
                             </button>
                           </>
                         ) : (
                           <>
-                            <button
-                              className="text-amber-600 hover:text-amber-800 dark:text-amber-400 transition-colors"
-                              title="Sửa"
-                              onClick={() => onEditAppSecret(app)}
-                            >
-                              <FaEdit className="w-4 h-4" />
-                            </button>
+
                             {(canDelete && app.isActive) && (
-                              <button
-                                onClick={() => onDeleteApp(app)}
-                                className="text-red-600 hover:text-red-800 dark:text-red-400 transition-colors"
-                                title="Xóa"
-                              >
-                                <FaTrash className="w-4 h-4" />
-                              </button>
+                              <>
+                                <button
+                                  className="text-amber-600 hover:text-amber-800 dark:text-amber-400 transition-colors"
+                                  title="Sửa"
+                                  onClick={() => onEditAppSecret(app)}
+                                >
+                                  <FaEdit className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => onDeleteApp(app)}
+                                  className="text-red-600 hover:text-red-800 dark:text-red-400 transition-colors"
+                                  title="Xóa"
+                                >
+                                  <FaTrash className="w-4 h-4" />
+                                </button>
+                              </>
                             )}
                           </>
                         )}

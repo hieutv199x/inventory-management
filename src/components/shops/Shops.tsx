@@ -47,7 +47,7 @@ interface App {
 export default function Shops() {
   const { user } = useAuth();
   const { showLoading, hideLoading } = useLoading();
-  
+
   const [shops, setShops] = useState<Shop[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -74,7 +74,7 @@ export default function Shops() {
   const [editAppSecret, setEditAppSecret] = useState<string>("");
   const [selectedApp, setSelectedApp] = useState<App | null>(null);
   const [showDeleteAppModal, setShowDeleteAppModal] = useState(false);
-  
+
   const [formData, setFormData] = useState({
     country: 'US',
     serviceId: '',
@@ -99,7 +99,7 @@ export default function Shops() {
       if (search) {
         showLoading('Searching shops...');
       }
-      
+
       setLoading(true);
       const params = new URLSearchParams({
         page: page.toString(),
@@ -109,9 +109,9 @@ export default function Shops() {
         // Add user role filter - if not admin/manager, only get assigned shops
         ...(user?.id && !canViewAllShops && { userId: user.id })
       });
-      
+
       const data = await httpClient.get(`/shops?${params}`);
-      
+
       setShops(data.shops || []);
       setPagination({
         page: data.pagination?.page || 1,
@@ -205,9 +205,11 @@ export default function Shops() {
   // App List functionality
   const handleOpenAppList = async () => {
     try {
+      showLoading('Loading apps...');
       const res = await httpClient.get("/app");
       setAppList(res.app || []);
       setShowAppListModal(true);
+      hideLoading();
     } catch (err) {
       console.error("Error fetching apps:", err);
       setError('Không thể tải danh sách app');
@@ -254,7 +256,7 @@ export default function Shops() {
 
   const handleCopyAuthUrl = async (serviceId: string, appName: string) => {
     const authUrl = `https://services.tiktokshop.com/open/authorize?service_id=${serviceId}`;
-    
+
     try {
       await navigator.clipboard.writeText(authUrl);
       setSuccess(`Đã sao chép URL ủy quyền cho app "${appName}"`);
@@ -284,18 +286,18 @@ export default function Shops() {
     try {
       setUpdatingManagedName(prev => ({ ...prev, [shopId]: true }));
       showLoading('Updating shop name...');
-      
+
       await httpClient.post('/tiktok/update-shop-name', {
         shopId: shopId,
         managedName: managedName.trim()
       });
-      
+
       // Reset editing state
       handleCancelEditManagedName(shopId);
       setSuccess('Cập nhật tên quản lý thành công');
       setEditingManagedName(prev => ({ ...prev, [shopId]: false }));
       await fetchShops(pagination.page, searchTerm, pagination.limit);
-      
+
     } catch (error: any) {
       setError(error.message || 'Có lỗi xảy ra khi cập nhật tên quản lý');
     } finally {
@@ -326,7 +328,7 @@ export default function Shops() {
   // Handle modal save
   const handleSaveManagedNameFromModal = async () => {
     if (!selectedShopForEdit) return;
-    
+
     const newName = editManagedNameValue[selectedShopForEdit.id] || '';
     if (newName.trim().length < 2 || newName.trim().length > 50) {
       setError('Tên quản lý phải từ 2-50 ký tự');
@@ -414,47 +416,46 @@ export default function Shops() {
           <div className="flex bg-gray-200 dark:bg-gray-700 rounded-lg p-1">
             <button
               onClick={() => setViewMode('grid')}
-              className={`p-2 rounded-md transition-colors ${
-                viewMode === 'grid'
+              className={`p-2 rounded-md transition-colors ${viewMode === 'grid'
                   ? 'bg-white dark:bg-gray-600 text-brand-600 shadow-sm'
                   : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
-              }`}
+                }`}
               title="Chế độ lưới"
             >
               <FaTh className="h-4 w-4" />
             </button>
             <button
               onClick={() => setViewMode('table')}
-              className={`p-2 rounded-md transition-colors ${
-                viewMode === 'table'
+              className={`p-2 rounded-md transition-colors ${viewMode === 'table'
                   ? 'bg-white dark:bg-gray-600 text-brand-600 shadow-sm'
                   : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
-              }`}
+                }`}
               title="Chế độ bảng"
             >
               <FaList className="h-4 w-4" />
             </button>
           </div>
-          
+
           {canAdd && (
             <>
-              <button 
+              <button
                 onClick={() => setShowAddModal(true)}
                 className="px-4 py-2 bg-brand-500 text-white rounded-lg hover:bg-brand-600 transition-colors flex items-center space-x-2"
               >
                 <FaPlus className="h-4 w-4" />
                 <span>Thêm APP</span>
               </button>
-              
-              <button 
-                onClick={handleOpenAppList}
-                className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors flex items-center space-x-2"
-              >
-                <FaKey className="h-4 w-4" />
-                <span>Danh sách APP</span>
-              </button>
+
             </>
           )}
+
+          <button
+            onClick={handleOpenAppList}
+            className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors flex items-center space-x-2"
+          >
+            <FaKey className="h-4 w-4" />
+            <span>Danh sách APP</span>
+          </button>
         </div>
       </div>
 
@@ -522,13 +523,13 @@ export default function Shops() {
                 {searchTerm ? 'Không tìm thấy shop' : 'Chưa có shop nào'}
               </h3>
               <p className="text-gray-600 dark:text-gray-400 mb-4">
-                {searchTerm 
+                {searchTerm
                   ? `Không có shop nào khớp với "${searchTerm}". Thử tìm kiếm khác.`
                   : 'Bắt đầu bằng cách thêm shop đầu tiên của bạn.'
                 }
               </p>
               {!searchTerm && canAdd && (
-                <button 
+                <button
                   onClick={() => setShowAddModal(true)}
                   className="px-4 py-2 bg-brand-500 text-white rounded-lg hover:bg-brand-600 transition-colors"
                 >
@@ -603,7 +604,7 @@ export default function Shops() {
 
                 {/* Actions */}
                 <div className="flex space-x-2 pt-4 border-t border-gray-200 dark:border-gray-700">
-                  <button 
+                  <button
                     onClick={() => {
                       setSelectedShop(shop);
                       setShowDetailsModal(true);
@@ -614,7 +615,7 @@ export default function Shops() {
                     <span>Chi tiết</span>
                   </button>
                   {canDelete && (
-                    <button 
+                    <button
                       onClick={() => {
                         setSelectedShop(shop);
                         setShowDeleteModal(true);
@@ -664,7 +665,7 @@ export default function Shops() {
                 {shops.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
-                      {searchTerm 
+                      {searchTerm
                         ? `Không có shop nào khớp với "${searchTerm}". Thử tìm kiếm khác.`
                         : 'Chưa có shop nào. Bắt đầu bằng cách thêm shop đầu tiên của bạn.'
                       }
@@ -695,9 +696,9 @@ export default function Shops() {
                               <input
                                 type="text"
                                 value={editManagedNameValue[shop.id] || ''}
-                                onChange={(e) => setEditManagedNameValue(prev => ({ 
-                                  ...prev, 
-                                  [shop.id]: e.target.value 
+                                onChange={(e) => setEditManagedNameValue(prev => ({
+                                  ...prev,
+                                  [shop.id]: e.target.value
                                 }))}
                                 className="flex-1 px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                                 placeholder="Enter managed name..."
@@ -791,7 +792,7 @@ export default function Shops() {
                       </td>
                       <td className="px-6 py-4 text-sm font-medium">
                         <div className="flex items-center space-x-3">
-                          <button 
+                          <button
                             onClick={() => {
                               setSelectedShop(shop);
                               setShowDetailsModal(true);
@@ -802,7 +803,7 @@ export default function Shops() {
                             <span>Chi tiết</span>
                           </button>
                           {canDelete && (
-                            <button 
+                            <button
                               onClick={() => {
                                 setSelectedShop(shop);
                                 setShowDeleteModal(true);
@@ -835,7 +836,7 @@ export default function Shops() {
             >
               Trước
             </button>
-            
+
             <div className="flex items-center space-x-1">
               {Array.from({ length: Math.min(5, pagination.totalPages) }, (_, i) => {
                 let pageNum;
@@ -848,23 +849,22 @@ export default function Shops() {
                 } else {
                   pageNum = pagination.page - 2 + i;
                 }
-                
+
                 return (
                   <button
                     key={pageNum}
                     onClick={() => handlePageChange(pageNum)}
-                    className={`px-3 py-2 border rounded-md text-sm ${
-                      pagination.page === pageNum
+                    className={`px-3 py-2 border rounded-md text-sm ${pagination.page === pageNum
                         ? 'bg-brand-500 text-white border-brand-500'
                         : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
-                    }`}
+                      }`}
                   >
                     {pageNum}
                   </button>
                 );
               })}
             </div>
-            
+
             <button
               onClick={() => handlePageChange(pagination.page + 1)}
               disabled={pagination.page === pagination.totalPages}
@@ -873,7 +873,7 @@ export default function Shops() {
               Tiếp theo
             </button>
           </div>
-          
+
           <div className="text-sm text-gray-700 dark:text-gray-300">
             Trang {pagination.page} / {pagination.totalPages}
           </div>
@@ -1023,9 +1023,9 @@ export default function Shops() {
         onSave={handleSaveManagedNameFromModal}
         onValueChange={(value) => {
           if (selectedShopForEdit) {
-            setEditManagedNameValue(prev => ({ 
-              ...prev, 
-              [selectedShopForEdit.id]: value 
+            setEditManagedNameValue(prev => ({
+              ...prev,
+              [selectedShopForEdit.id]: value
             }));
           }
         }}

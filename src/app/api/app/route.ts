@@ -19,13 +19,6 @@ export async function GET(request: NextRequest) {
             );
         }
 
-        if (!['ADMIN'].includes(user.role)) {
-            return NextResponse.json(
-                { message: 'Insufficient permissions' },
-                { status: 403 }
-            );
-        }
-
         // Admin/Manager can see all shops
         const app = await prisma.channelApp.findMany({
             where: {
