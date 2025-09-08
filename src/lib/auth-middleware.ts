@@ -31,7 +31,6 @@ export async function validateToken(request: NextRequest) {
       where: { id: decoded.userId },
       select: {
         id: true,
-        email: true,
         name: true,
         role: true,
         isActive: true
