@@ -1,11 +1,15 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
-import {AccessTokenTool, TikTokShopNodeApiClient} from '@/nodejs_sdk'
+import { AccessTokenTool, TikTokShopNodeApiClient } from '@/nodejs_sdk'
+import { getUserWithShopAccess } from '@/lib/auth';
 
 const prisma = new PrismaClient();
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
     try {
+        // Get user from headers or token
+        const { user, accessibleShopIds, isAdmin } = await getUserWithShopAccess(req, prisma);
+
         const { code, app_key } = await req.json();
 
         if (!code || !app_key) {
@@ -13,9 +17,9 @@ export async function POST(req: Request) {
         }
 
         const credential = await prisma.channelApp.findUnique({
-            where: { 
+            where: {
                 appKey: app_key,
-                channel: 'TIKTOK' 
+                channel: 'TIKTOK'
             },
         });
 
@@ -64,7 +68,7 @@ export async function POST(req: Request) {
                 region: shop.region,
             };
 
-            await prisma.shopAuthorization.upsert({
+            const insertedShop = await prisma.shopAuthorization.upsert({
                 where: { shopId: shop.id },
                 update: {
                     accessToken: access_token,
@@ -91,6 +95,26 @@ export async function POST(req: Request) {
                     appId: credential.id, // Link to ChannelApp
                 },
             });
+
+            // If user is not admin, create shop permission
+            if (!isAdmin) {
+                await prisma.userShopRole.upsert({
+                    where: {
+                        userId_shopId: {
+                            userId: user.id,
+                            shopId: insertedShop.id
+                        }
+                    },
+                    update: {
+                        role: 'OWNER'
+                    },
+                    create: {
+                        userId: user.id,
+                        shopId: shop.id,
+                        role: 'OWNER'
+                    }
+                });
+            }
         }
 
         return NextResponse.json(shops, { status: 200 });
