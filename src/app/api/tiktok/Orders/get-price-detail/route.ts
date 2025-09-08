@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
         // Get shop and app info using unified schema
         const credentials = await prisma.shopAuthorization.findUnique({
             where: {
-                shopId: shop_id,
+                id: shop_id,
             },
             include: {
                 app: true,

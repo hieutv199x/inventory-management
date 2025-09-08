@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
         // Lấy thông tin shop và app
         const credentials = await prisma.shopAuthorization.findUnique({
             where: {
-                shopId: shop_id,
+                id: shop_id,
             },
             include: {
                 app: true,
