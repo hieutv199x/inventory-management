@@ -516,6 +516,7 @@ model Order {
   updatedAt                       DateTime @updatedAt
 
   notifications Notification[]
+  tikTokTransactions TikTokTransaction[]
   
   @@map("orders")
 }
@@ -775,4 +776,60 @@ enum NotificationType {
   LOW_INVENTORY      // Stock running low
   SYSTEM_ALERT       // System notifications
   WEBHOOK_ERROR      // Webhook processing errors
+}
+
+model TikTokTransaction {
+  id                    String   @id @default(auto()) @map("_id") @db.ObjectId
+  transaction_id        String   @unique
+  shop_id               String
+  statement_id          String
+  transaction_time      DateTime
+  type                  String
+  
+  // Financial amounts
+  settlement_amount     Float    // Main transaction amount
+  adjustment_amount     String?  // Adjustment amount as string (can be negative)
+  fee_tax_amount        String?  // Total fees and taxes
+  revenue_amount        String?  // Revenue amount
+  shipping_cost_amount  String?  // Shipping costs
+  reserve_amount        String?  // Reserve amount (can be negative)
+  
+  currency              String
+  
+  // Order information
+  order_id              String?
+  order_create_time     DateTime?
+  
+  // Additional transaction details
+  adjustment_id         String?
+  adjustment_order_id   String?
+  associated_order_id   String?
+  reserve_id            String?
+  reserve_status        String?  // COLLECTED, RELEASED
+  estimated_release_time String? // Unix timestamp as string
+  
+  // Legacy fields for backward compatibility
+  sku_id                String?
+  product_name          String?
+  description           String
+  
+  // Detailed breakdowns (JSON strings)
+  fee_tax_breakdown     String?  // JSON string of fee/tax breakdown
+  revenue_breakdown     String?  // JSON string of revenue breakdown  
+  shipping_cost_breakdown String? // JSON string of shipping cost breakdown
+  supplementary_component String? // JSON string of supplementary components
+  
+  created_at            DateTime @default(now())
+  updated_at            DateTime @updatedAt
+
+  // Optional relation to Order (since order_id might not always exist)
+  order                Order?   @relation(fields: [order_id], references: [orderId])
+
+  @@index([shop_id, statement_id])
+  @@index([transaction_time])
+  @@index([order_id])
+  @@index([order_create_time])
+  @@index([type])
+  @@index([reserve_status])
+  @@map("tiktok_transactions")
 }

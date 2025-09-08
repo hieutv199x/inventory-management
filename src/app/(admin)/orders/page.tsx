@@ -24,6 +24,7 @@ interface Order {
     lineItems: LineItem[];
     payment?: Payment;
     recipientAddress?: RecipientAddress;
+    channelData?: string; // Added channelData field
     shop: {
         shopName?: string;
         shopId: string;
@@ -75,7 +76,7 @@ interface PaginationInfo {
 }
 
 export default function OrdersPage() {
-    const { showLoading, hideLoading, setLoadingMessage } = useLoading();
+    const { showLoading, hideLoading } = useLoading();
 
     const [orders, setOrders] = useState<Order[]>([]);
     const [shops, setShops] = useState<Shop[]>([]);
@@ -642,6 +643,9 @@ export default function OrdersPage() {
                                                     </div>
                                                     <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full w-fit ${getStatusColor(order.status)}`}>
                                                         {order.status}
+                                                    </span>
+                                                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full w-fit`}>
+                                                        {parseChannelData(order?.channelData ?? "").trackingNumber} - {parseChannelData(order?.channelData ?? "").shippingProvider}
                                                     </span>
                                                 </div>
                                             </td>

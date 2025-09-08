@@ -9,6 +9,7 @@ import DatePicker from "@/components/form/date-picker";
 import { formatCurrency, formatDate } from "@/utils/common/functionFormat";
 import { Pagination } from "@/components/ui/pagination/Pagination";
 import ShopSelector from "../ui/ShopSelector";
+import { useLoading } from "@/context/loadingContext";
 
 interface Statement {
   statementId: string;
@@ -50,6 +51,7 @@ interface Withdrawal {
 }
 
 export const StatementBank = () => {
+  const { showLoading, hideLoading, setLoadingMessage } = useLoading();
   const [activeTab, setActiveTab] = useState<"shops" | "history" | "withdrawal">("shops");
   const [selectedShop, setSelectedShop] = useState<string | null>("all");
   const [statements, setStatements] = useState<Statement[]>([]);
@@ -435,6 +437,7 @@ export const StatementBank = () => {
 
           <Button
             onClick={async () => {
+              showLoading("Đang đồng bộ...");
               if (activeTab === "shops") {
                 await handleStatementSync();
               } else if (activeTab === "history") {
@@ -442,6 +445,7 @@ export const StatementBank = () => {
               } else {
                 await handleWithdrawalSync();
               }
+              hideLoading();
             }}
             disabled={!startDate || !endDate || loading}
             className="h-11"
@@ -836,12 +840,12 @@ export const StatementBank = () => {
                             </TableCell>
                             <TableCell className="py-3">
                               <span className={`px-2 py-1 rounded-full text-xs font-medium ${w.status === 'COMPLETED' || w.status === 'SUCCESS'
-                                  ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-                                  : w.status === 'PENDING' || w.status === 'PROCESSING'
-                                    ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
-                                    : w.status === 'FAILED' || w.status === 'REJECTED'
-                                      ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
-                                      : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
+                                ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                                : w.status === 'PENDING' || w.status === 'PROCESSING'
+                                  ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
+                                  : w.status === 'FAILED' || w.status === 'REJECTED'
+                                    ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+                                    : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
                                 }`}>
                                 {w.status}
                               </span>

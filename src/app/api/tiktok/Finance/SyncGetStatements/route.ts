@@ -1,5 +1,5 @@
-import {NextRequest, NextResponse} from "next/server";
-import {TikTokShopNodeApiClient} from "@/nodejs_sdk";
+import { NextRequest, NextResponse } from "next/server";
+import { Finance202501GetTransactionsbyStatementResponseDataTransactions, TikTokShopNodeApiClient } from "@/nodejs_sdk";
 import { PrismaClient, Channel } from "@prisma/client";
 
 const prisma = new PrismaClient();
@@ -9,7 +9,8 @@ export async function GET(request: NextRequest) {
         const { searchParams } = new URL(request.url);
         const statementTimeGe = parseInt(searchParams.get("statementTimeGe") || "0", 10);
         const statementTimeLt = parseInt(searchParams.get("statementTimeLt") || "0", 10);
-        const shopId = searchParams.get("shopId"); // Add shopId parameter
+        const shopId = searchParams.get("shopId");
+        const syncTransactions = searchParams.get("syncTransactions") !== "false"; // Default to true
 
         if (!statementTimeGe || !statementTimeLt) {
             return NextResponse.json(
@@ -19,11 +20,11 @@ export async function GET(request: NextRequest) {
         }
 
         // Build where clause for shop filtering
-        const whereClause: any = { 
+        const whereClause: any = {
             status: "ACTIVE",
             app: { channel: 'TIKTOK' } // Only get TikTok shops
         };
-        
+
         // Add shopId filter if provided
         if (shopId) {
             whereClause.id = shopId;
@@ -38,9 +39,10 @@ export async function GET(request: NextRequest) {
         });
 
         // Log which shops will be synced
-        console.log(`Syncing statements for ${shops.length} shop(s)${shopId ? ` (shopId: ${shopId})` : ''} from ${statementTimeGe} to ${statementTimeLt}`);
+        console.log(`Syncing statements${syncTransactions ? ' and transactions' : ''} for ${shops.length} shop(s)${shopId ? ` (shopId: ${shopId})` : ''} from ${statementTimeGe} to ${statementTimeLt}`);
 
         let totalStatementsSynced = 0;
+        let totalTransactionsSynced = 0;
         const shopResults = [];
 
         for (const shop of shops) {
@@ -96,11 +98,22 @@ export async function GET(request: NextRequest) {
                 const syncedCount = await syncStatementsToDatabase(allStatements, shop.id); // Use ObjectId instead of shopId
                 totalStatementsSynced += syncedCount;
 
+                let transactionsSynced = 0;
+                if (syncTransactions && allStatements.length > 0) {
+                    // Fetch and sync transactions for all statements
+                    const allTransactions = await fetchTransactionsForStatements(client, credentials, allStatements);
+                    console.log(`Fetched ${allTransactions.length} transactions for shop ${shop.shopId}`);
+
+                    transactionsSynced = await syncTransactionsToDatabase(allTransactions, shop.shopId);
+                    totalTransactionsSynced += transactionsSynced;
+                }
+
                 shopResults.push({
                     shopId: shop.shopId,
                     shopName: shop.shopName,
                     statementsProcessed: allStatements.length,
-                    statementsSynced: syncedCount
+                    statementsSynced: syncedCount,
+                    transactionsSynced: syncTransactions ? transactionsSynced : 'skipped'
                 });
 
             } catch (error) {
@@ -113,9 +126,10 @@ export async function GET(request: NextRequest) {
             }
         }
 
-        return NextResponse.json({ 
+        return NextResponse.json({
             success: true,
             totalStatementsSynced,
+            totalTransactionsSynced: syncTransactions ? totalTransactionsSynced : 'skipped',
             syncedShops: shops.length,
             shopId: shopId || 'all',
             shopResults
@@ -143,7 +157,7 @@ async function fetchAllStatements(client: any, credentials: any, statementTimeGe
             credentials.accessToken,
             "application/json",
             statementTimeLt,
-            "PAID",
+            undefined,
             pageSize,
             nextPageToken,
             "ASC",
@@ -159,13 +173,13 @@ async function fetchAllStatements(client: any, credentials: any, statementTimeGe
             while (nextPageToken) {
                 try {
                     console.log(`Fetching next page of statements with token: ${nextPageToken}`);
-                    
+
                     const nextPageResult = await client.api.FinanceV202309Api.StatementsGet(
                         "statement_time",
                         credentials.accessToken,
                         "application/json",
                         statementTimeLt,
-                        "PAID",
+                        undefined,
                         pageSize,
                         nextPageToken,
                         "ASC",
@@ -179,10 +193,10 @@ async function fetchAllStatements(client: any, credentials: any, statementTimeGe
                     }
 
                     nextPageToken = nextPageResult.body?.data?.nextPageToken;
-                    
+
                     // Add delay to avoid rate limiting
                     await new Promise(resolve => setTimeout(resolve, 100));
-                    
+
                 } catch (paginationError) {
                     console.error('Error fetching next page of statements:', paginationError);
                     break;
@@ -225,7 +239,7 @@ async function processStatementBatch(statements: any[], shopObjectId: string) {
                 where: { statementId: { in: statementIds } },
                 select: { statementId: true }
             });
-            
+
             const existingStatementIds = new Set(existingStatements.map(s => s.statementId));
 
             // Separate new statements from updates
@@ -273,7 +287,7 @@ async function processStatementBatch(statements: any[], shopObjectId: string) {
 
             // Batch update existing statements
             if (updateStatements.length > 0) {
-                const updatePromises = updateStatements.map(statement => 
+                const updatePromises = updateStatements.map(statement =>
                     tx.statement.update({
                         where: { statementId: statement.statementId },
                         data: statement,
@@ -290,6 +304,168 @@ async function processStatementBatch(statements: any[], shopObjectId: string) {
 
     } catch (error) {
         console.error(`Error processing statement batch for shop ${shopObjectId}:`, error);
+    }
+
+    return syncedCount;
+}
+
+async function fetchTransactionsForStatements(client: any, credentials: any, statements: any[]) {
+    const allTransactions: Finance202501GetTransactionsbyStatementResponseDataTransactions[] = [];
+
+    for (const statement of statements) {
+        if (!statement.id) continue;
+
+        try {
+            console.log(`Fetching transactions for statement ${statement.id}`);
+
+            // Fetch all pages of transactions for this statement
+            let nextPageToken = "";
+            const pageSize = 50;
+
+            do {
+                const result = await client.api.FinanceV202501Api.StatementsStatementIdStatementTransactionsGet(
+                    statement.id,
+                    "order_create_time",
+                    credentials.accessToken,
+                    "application/json",
+                    nextPageToken,
+                    "DESC",
+                    pageSize,
+                    credentials.shopCipher
+                );
+
+                if (result?.body.data?.transactions && Array.isArray(result.body.data.transactions)) {
+                    // Add statement_id to each transaction for reference
+                    const transactionsWithStatement = result.body.data.transactions.map((transaction: any) => ({
+                        ...transaction,
+                        statement_id: statement.id
+                    }));
+                    allTransactions.push(...transactionsWithStatement);
+                    console.log(`Fetched ${result.body.data.transactions.length} transactions for statement ${statement.id}`);
+                }
+
+                nextPageToken = result.body?.data?.more ? result.body?.data?.next_page_token : "";
+
+                // Add delay to avoid rate limiting
+                await new Promise(resolve => setTimeout(resolve, 100));
+
+            } while (nextPageToken);
+
+        } catch (error) {
+            console.error(`Error fetching transactions for statement ${statement.id}:`, error);
+        }
+    }
+
+    return allTransactions;
+}
+
+async function syncTransactionsToDatabase(transactions: Finance202501GetTransactionsbyStatementResponseDataTransactions[], shopId: string) {
+    const BATCH_SIZE = 100;
+    let totalSynced = 0;
+
+    console.log(`Starting sync of ${transactions.length} transactions for shop ${shopId} in batches of ${BATCH_SIZE}`);
+
+    // Process transactions in batches
+    for (let i = 0; i < transactions.length; i += BATCH_SIZE) {
+        const batch = transactions.slice(i, i + BATCH_SIZE);
+        const syncedCount = await processTransactionBatch(batch, shopId);
+        totalSynced += syncedCount;
+        console.log(`Processed ${Math.min(i + BATCH_SIZE, transactions.length)} of ${transactions.length} transactions for shop ${shopId}. Synced: ${syncedCount}`);
+    }
+
+    console.log(`Transaction sync completed for shop ${shopId}. Total synced: ${totalSynced}`);
+    return totalSynced;
+}
+
+async function processTransactionBatch(transactions: Finance202501GetTransactionsbyStatementResponseDataTransactions[], shopId: string) {
+    let syncedCount = 0;
+
+    try {
+        await prisma.$transaction(async (tx) => {
+            // Get existing transaction IDs
+            const transactionIds = transactions.map(t => t.id).filter((id): id is string => typeof id === 'string');
+            const existingTransactions = await tx.tikTokTransaction.findMany({
+                where: { transaction_id: { in: transactionIds } },
+                select: { transaction_id: true }
+            });
+
+            const existingTransactionIds = new Set(existingTransactions.map(t => t.transaction_id));
+
+            // Separate new transactions from updates
+            const newTransactions = [];
+            const updateTransactions = [];
+
+            for (const transaction of transactions) {
+                if (!transaction.id) continue;
+
+                const transactionData = {
+                    transaction_id: transaction.id,
+                    shop_id: shopId,
+                    statement_id: (transaction as any).statement_id, // Added from fetchTransactionsForStatements
+                    transaction_time: new Date((transaction.orderCreateTime ?? 0) * 1000),
+                    type: transaction.type || '',
+                    amount: parseFloat(transaction.settlementAmount || '0'),
+                    settlement_amount: parseFloat(transaction.settlementAmount || '0'), // Add this line
+                    currency: 'USD', // Default currency as it's not in the response
+                    order_id: transaction.orderId || null,
+                    sku_id: null, // Not available in this response
+                    product_name: null, // Not available in this response
+                    description: `${transaction.type || 'Unknown'} transaction`,
+                    fee_details: JSON.stringify({
+                        settlementAmount: transaction.settlementAmount,
+                        adjustmentAmount: transaction.adjustmentAmount,
+                        adjustmentId: transaction.adjustmentId,
+                        adjustmentOrderId: transaction.adjustmentOrderId,
+                        associatedOrderId: transaction.associatedOrderId,
+                        feeTaxAmount: transaction.feeTaxAmount,
+                        revenueAmount: transaction.revenueAmount,
+                        shippingCostAmount: transaction.shippingCostAmount,
+                        reserveAmount: transaction.reserveAmount,
+                        reserveId: transaction.reserveId,
+                        reserveStatus: transaction.reserveStatus,
+                        estimatedReleaseTime: transaction.estimatedReleaseTime,
+                        feeTaxBreakdown: transaction.feeTaxBreakdown,
+                        revenueBreakdown: transaction.revenueBreakdown,
+                        shippingCostBreakdown: transaction.shippingCostBreakdown,
+                        order_create_time: transaction.orderCreateTime ? new Date(transaction.orderCreateTime * 1000) : null,
+                        supplementaryComponent: transaction.supplementaryComponent
+                    }),
+                };
+
+                if (existingTransactionIds.has(transaction.id)) {
+                    updateTransactions.push(transactionData);
+                } else {
+                    newTransactions.push(transactionData);
+                }
+            }
+
+            // Batch create new transactions
+            if (newTransactions.length > 0) {
+                await tx.tikTokTransaction.createMany({
+                    data: newTransactions,
+                });
+                syncedCount += newTransactions.length;
+            }
+
+            // Batch update existing transactions
+            if (updateTransactions.length > 0) {
+                const updatePromises = updateTransactions.map(transaction =>
+                    tx.tikTokTransaction.update({
+                        where: { transaction_id: transaction.transaction_id },
+                        data: transaction,
+                    })
+                );
+                await Promise.all(updatePromises);
+                syncedCount += updateTransactions.length;
+            }
+
+        }, {
+            maxWait: 30000,
+            timeout: 60000,
+        });
+
+    } catch (error) {
+        console.error(`Error processing transaction batch for shop ${shopId}:`, error);
     }
 
     return syncedCount;
