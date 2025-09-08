@@ -7,13 +7,13 @@ async function main() {
   console.log("Seeding database with demo users...");
 
   // Create admin user
-  const adminPassword = await bcrypt.hash("admin123", 12);
+  const adminPassword = await bcrypt.hash("admin@1234", 12);
   const admin = await prisma.user.upsert({
-    where: { email: "admin@demo.com" },
+    where: { username: "admin" },
     update: {},
     create: {
       name: "Admin User",
-      email: "admin@demo.com",
+      username: "admin",
       password: adminPassword,
       role: UserRole.ADMIN,
       isActive: true,
@@ -21,71 +21,19 @@ async function main() {
   });
 
   // Create manager user
-  const managerPassword = await bcrypt.hash("manager123", 12);
+  const managerPassword = await bcrypt.hash("manager@1234", 12);
   const manager = await prisma.user.upsert({
-    where: { email: "manager@demo.com" },
+    where: { username: "manager" },
     update: {},
     create: {
       name: "Manager User",
-      email: "manager@demo.com",
+      username: "manager",
       password: managerPassword,
       role: UserRole.MANAGER,
       isActive: true,
       createdBy: admin.id,
     },
   });
-
-  // Create accountant user
-  const accountantPassword = await bcrypt.hash("accountant123", 12);
-  const accountant = await prisma.user.upsert({
-    where: { email: "accountant@demo.com" },
-    update: {},
-    create: {
-      name: "Accountant User",
-      email: "accountant@demo.com",
-      password: accountantPassword,
-      role: UserRole.ACCOUNTANT,
-      isActive: true,
-      createdBy: admin.id,
-    },
-  });
-
-  // Create seller user
-  const sellerPassword = await bcrypt.hash("seller123", 12);
-  const seller = await prisma.user.upsert({
-    where: { email: "seller@demo.com" },
-    update: {},
-    create: {
-      name: "Seller User",
-      email: "seller@demo.com",
-      password: sellerPassword,
-      role: UserRole.SELLER,
-      isActive: true,
-      createdBy: manager.id,
-    },
-  });
-
-  // Create resource user
-  const resourcePassword = await bcrypt.hash("resource123", 12);
-  const resource = await prisma.user.upsert({
-    where: { email: "resource@demo.com" },
-    update: {},
-    create: {
-      name: "Resource User",
-      email: "resource@demo.com",
-      password: resourcePassword,
-      role: UserRole.RESOURCE,
-      isActive: true,
-      createdBy: manager.id,
-    },
-  });
-
-  console.log("Demo users created:");
-  console.log("- Admin:", admin.email);
-  console.log("- Manager:", manager.email);
-  console.log("- Accountant:", accountant.email);
-  console.log("- Seller:", seller.email);
-  console.log("- Resource:", resource.email);
 }
 
 main()

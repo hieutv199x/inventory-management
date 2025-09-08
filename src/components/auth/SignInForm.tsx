@@ -13,7 +13,7 @@ import Loading from "@/components/Loading";
 export default function SignInForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [isChecked, setIsChecked] = useState(false);
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false); 
@@ -25,16 +25,16 @@ export default function SignInForm() {
     setError("");
     setIsLoading(true); 
     try {
-      await login(email, password);
+      await login(username, password);
       router.push("/");
     } catch (error) {
       if (error instanceof Error) {
-        setError("Invalid email or password.");
+        setError("Invalid username or password.");
       } else {
         setError("An unknown error occurred.");
       }
     } finally {
-      setIsLoading(false); // Stop loading
+      setIsLoading(false);
     }
   };
 
@@ -51,7 +51,7 @@ export default function SignInForm() {
               Sign In
             </h1>
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              Enter your email and password to sign in!
+              Enter your username and password to sign in!
             </p>
           </div>
           <div>
@@ -59,9 +59,14 @@ export default function SignInForm() {
               <div className="space-y-6">
                 <div>
                   <Label>
-                    Email <span className="text-error-500">*</span>{" "}
+                    Username <span className="text-error-500">*</span>{" "}
                   </Label>
-                  <Input placeholder="info@gmail.com" type="email" onChange={e => setEmail(e.target.value)} value={email}/>
+                  <Input 
+                    placeholder="Enter your username" 
+                    type="text" 
+                    onChange={e => setUsername(e.target.value)} 
+                    value={username}
+                  />
                 </div>
                 <div>
                   <Label>

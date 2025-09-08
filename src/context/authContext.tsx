@@ -151,11 +151,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(interval);
   }, [user]);
 
-  const login = async (email: string, password: string) => {
+  const login = async (username: string, password: string) => {
     try {
       setIsLoading(true);
-      const data = await httpClient.post('/auth/login', { email, password });
-      
+      const data = await httpClient.post('/auth/login', { username, password });
+
       // Store auth data
       storeAuthData(data.token, data.user);
       

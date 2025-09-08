@@ -7,21 +7,21 @@ const prisma = new PrismaClient();
 
 export async function POST(request: NextRequest) {
   try {
-    const { email, password } = await request.json();
+    const { username, password } = await request.json();
 
-    if (!email || !password) {
+    if (!username || !password) {
       return NextResponse.json(
-        { error: "Email and password are required" },
+        { error: "Username and password are required" },
         { status: 400 }
       );
     }
 
-    // Find user by email
+    // Find user by username only
     const user = await prisma.user.findUnique({
-      where: { email },
+      where: { username },
       select: {
         id: true,
-        email: true,
+        username: true,
         name: true,
         password: true,
         role: true,

@@ -47,7 +47,7 @@ model UserShopRole {
 model User {
   id        String    @id @default(auto()) @map("_id") @db.ObjectId
   name      String
-  email     String    @unique
+  username  String    @unique
   password  String
   role      UserRole  @default(SELLER)
   isActive  Boolean   @default(true)
@@ -98,6 +98,7 @@ model ChannelApp {
   appId     String
   appKey    String   @unique // Unique key for the app
   appSecret String   // App secret
+  appUrl    String?  // Optional URL for the app
   
   // Channel-specific configuration (JSON string)
   config    String?  // Store channel-specific settings as JSON
