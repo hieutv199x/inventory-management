@@ -54,9 +54,9 @@ export const getUserWithShopAccess = async (request: NextRequest, prisma: Prisma
 export const getActiveShopIds = async (prisma: PrismaClient): Promise<string[]> => {
     const activeShops = await prisma.shopAuthorization.findMany({
         where: { status: 'ACTIVE' },
-        select: { shopId: true },
+        select: { id: true },
     });
-    return activeShops.map(shop => shop.shopId);
+    return activeShops.map(shop => shop.id);
 };
 
 export const validateShopAccess = (

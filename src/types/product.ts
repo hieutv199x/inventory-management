@@ -6,6 +6,8 @@ export interface Product {
     status: string;
     createTime: number;
     shopId: string;
+    price: string;
+    currency: string;
     shopName?: string;
     shop?: {
         shopName: string;

@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
         // First get the shop ObjectIDs that correspond to accessible TikTok shop IDs
         let allowedShopObjectIds: string[] = [];
         
-        if (!isAdmin) {
+        if (!isAdmin && !shopId) {
             // For non-admin users, get ObjectIDs of accessible shops
             const accessibleShops = await prisma.shopAuthorization.findMany({
                 where: {
@@ -53,7 +53,7 @@ export async function GET(req: NextRequest) {
         if (shopId) {
             // Find the ObjectID for the specific shopId
             const targetShop = await prisma.shopAuthorization.findUnique({
-                where: { shopId: shopId },
+                where: { id: shopId },
                 select: { id: true }
             });
             

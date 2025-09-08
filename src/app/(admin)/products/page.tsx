@@ -15,6 +15,7 @@ import SyncProductModal from "@/components/Products/SyncProductModal";
 import { Product } from "@/types/product";
 import { formatCurrency, formatDate } from "@/utils/common/functionFormat";
 import { toast } from "react-hot-toast";
+import ShopSelector from "@/components/ui/ShopSelector";
 
 // Utility to strip HTML tags from a string
 function stripHtml(html: string = ""): string {
@@ -398,7 +399,10 @@ export default function ProductPage() {
 
                 <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
                     <div className="col-span-1">
-                        <SelectShop onChange={(val) => handleFilterChange('shopId', val)} placeholder="All Shop" enablePlaceholder={false} />
+                        <label className="block text-sm font-medium text-gray-700 mb-2 dark:text-gray-400">Shop</label>
+                        <ShopSelector
+                            onChange={(shopId: string | null, shop: any | null) => handleFilterChange('shopId', shopId ?? '')}
+                        />
                     </div>
                     <div className="col-span-1">
                         <Label>Status</Label>
@@ -589,7 +593,7 @@ export default function ProductPage() {
                                                 <div className="text-sm font-medium text-gray-900 dark:text-white">
                                                     {product.skus?.[0]?.price?.salePrice
                                                         ? formatCurrency(product.skus[0].price.salePrice, product.skus[0].price.currency)
-                                                        : 'N/A'
+                                                        : formatCurrency(product.price, product.currency)
                                                     }
                                                 </div>
                                                 {product.skus?.[0]?.price?.originalPrice &&

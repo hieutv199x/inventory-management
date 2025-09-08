@@ -85,7 +85,7 @@ export async function GET(req: NextRequest) {
             }
 
             // Filter by accessible shop IDs (TikTok shop IDs)
-            whereClause.shopId = {
+            whereClause.id = {
                 in: accessibleShopIds
             };
         }
