@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
         
         // Add shopId filter if provided
         if (shopId) {
-            whereClause.shopId = shopId;
+            whereClause.id = shopId;
         }
 
         // Lấy thông tin shop và app với filter shopId

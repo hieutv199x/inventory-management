@@ -195,24 +195,52 @@ async function processPaymentBatch(payments: any[], shopObjectId: string) {
     let syncedCount = 0;
 
     try {
+        console.log(`Processing batch of ${payments.length} payments for shop ${shopObjectId}`);
+        
+        // Log payment structure for debugging
+        if (payments.length > 0) {
+            console.log('Sample payment structure:', JSON.stringify(payments[0], null, 2));
+        }
+
         await prisma.$transaction(async (tx) => {
             // Get existing payment IDs to avoid duplicates
             const paymentIds = payments.map(p => p.id).filter(Boolean);
+            console.log(`Payment IDs from batch: [${paymentIds.join(', ')}]`);
+            
             const existingPayments = await tx.payment.findMany({
                 where: { paymentId: { in: paymentIds } },
                 select: { paymentId: true }
             });
             
             const existingPaymentIds = new Set(existingPayments.map(p => p.paymentId));
+            console.log(`Existing payment IDs in database: [${Array.from(existingPaymentIds).join(', ')}]`);
 
             // Filter out existing payments
-            const newPayments = payments.filter(payment => 
-                payment.id && !existingPaymentIds.has(payment.id)
-            );
+            const newPayments = payments.filter(payment => {
+                if (!payment.id) {
+                    console.log(`Payment missing ID:`, payment);
+                    return false;
+                }
+                if (existingPaymentIds.has(payment.id)) {
+                    console.log(`Payment ${payment.id} already exists in database`);
+                    return false;
+                }
+                return true;
+            });
+
+            console.log(`New payments to insert: ${newPayments.length}`);
 
             if (newPayments.length > 0) {
                 // Prepare batch data
-                const paymentData = newPayments.map(payment => {
+                const paymentData = newPayments.map((payment, index) => {
+                    // Validate required fields
+                    if (!payment.status) {
+                        console.warn(`Payment ${payment.id} missing status field`);
+                    }
+                    if (!payment.amount?.currency) {
+                        console.warn(`Payment ${payment.id} missing amount currency`);
+                    }
+
                     // Prepare channelData for TikTok-specific fields
                     const channelData = {
                         reserveAmountValue: payment.reserveAmount?.value,
@@ -222,7 +250,7 @@ async function processPaymentBatch(payments: any[], shopObjectId: string) {
                         exchangeRate: payment.exchangeRate,
                     };
 
-                    return {
+                    const paymentRecord = {
                         paymentId: payment.id!,
                         channel: Channel.TIKTOK, // Add channel field
                         createTime: payment.createTime ?? 0,
@@ -236,14 +264,25 @@ async function processPaymentBatch(payments: any[], shopObjectId: string) {
                         bankAccount: payment.bankAccount ?? null,
                         shopId: shopObjectId, // Use ObjectId reference
                     };
+
+                    if (index === 0) {
+                        console.log('Sample payment record to insert:', JSON.stringify(paymentRecord, null, 2));
+                    }
+
+                    return paymentRecord;
                 });
 
+                console.log(`About to insert ${paymentData.length} payment records`);
+
                 // Batch create payments
-                await tx.payment.createMany({
+                const result = await tx.payment.createMany({
                     data: paymentData,
                 });
 
-                syncedCount = paymentData.length;
+                console.log(`Successfully inserted ${result.count} payment records`);
+                syncedCount = result.count;
+            } else {
+                console.log('No new payments to insert (all were filtered out)');
             }
         }, {
             maxWait: 30000,
@@ -252,6 +291,10 @@ async function processPaymentBatch(payments: any[], shopObjectId: string) {
 
     } catch (error) {
         console.error(`Error processing payment batch for shop ${shopObjectId}:`, error);
+        if (error instanceof Error) {
+            console.error('Error details:', error.message);
+            console.error('Error stack:', error.stack);
+        }
     }
 
     return syncedCount;
