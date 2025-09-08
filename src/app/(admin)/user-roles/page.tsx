@@ -10,7 +10,7 @@ import Input from '@/components/form/input/InputField';
 interface User {
   id: string;
   name: string;
-  email: string;
+  username: string;
   role: 'ADMIN' | 'MANAGER' | 'ACCOUNTANT' | 'SELLER' | 'RESOURCE';
   isActive: boolean; // Add isActive property
   userShopRoles: {
@@ -34,7 +34,7 @@ export default function UserRolesPage() {
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [formData, setFormData] = useState({
     name: '',
-    email: '',
+    username: '',
     role: 'SELLER' as User['role'],
     password: ''
   });
@@ -78,7 +78,7 @@ export default function UserRolesPage() {
         limit: pagination.limit.toString(),
         ...(search && { search })
       });
-      
+
       const data = await userApi.getAll(`?${params}`);
       setUsers(data.users || []);
       setPagination({
@@ -129,7 +129,7 @@ export default function UserRolesPage() {
       limit: newLimit.toString(),
       ...(searchTerm && { search: searchTerm })
     });
-    
+
     // Call the API with the new limit
     setSearchLoading(true);
     userApi.getAll(`?${params}`).then(data => {
@@ -158,7 +158,7 @@ export default function UserRolesPage() {
       await userApi.create(formData);
       setSuccess('User created successfully');
       setShowAddModal(false);
-      setFormData({ name: '', email: '', role: 'SELLER', password: '' });
+      setFormData({ name: '', username: '', role: 'SELLER', password: '' });
       await fetchUsers(pagination.page, searchTerm);
     } catch (error: any) {
       setError(error.message);
@@ -178,7 +178,7 @@ export default function UserRolesPage() {
     try {
       await userApi.update(selectedUser.id, {
         name: formData.name,
-        email: formData.email,
+        username: formData.username,
         role: formData.role
       });
       setSuccess('User updated successfully');
@@ -208,10 +208,10 @@ export default function UserRolesPage() {
   // Toggle user active status
   const handleToggleUserStatus = async (userId: string, currentStatus: boolean) => {
     const action = currentStatus ? 'deactivate' : 'activate';
-    const confirmMessage = currentStatus 
+    const confirmMessage = currentStatus
       ? 'Bạn có chắc chắn muốn vô hiệu hóa tài khoản này? Người dùng sẽ không thể đăng nhập.'
       : 'Bạn có chắc chắn muốn kích hoạt tài khoản này?';
-      
+
     if (!confirm(confirmMessage)) return;
 
     try {
@@ -267,7 +267,7 @@ export default function UserRolesPage() {
     setSelectedUser(user);
     setFormData({
       name: user.name,
-      email: user.email,
+      username: user.username,
       role: user.role,
       password: ''
     });
@@ -279,7 +279,7 @@ export default function UserRolesPage() {
     setShowEditModal(false);
     setShowResetPasswordModal(false);
     setSelectedUser(null);
-    setFormData({ name: '', email: '', role: 'SELLER', password: '' });
+    setFormData({ name: '', username: '', role: 'SELLER', password: '' });
     setResetPasswordData({ newPassword: '', confirmPassword: '' });
     setError('');
   };
@@ -331,27 +331,25 @@ export default function UserRolesPage() {
           <div className="flex bg-gray-200 dark:bg-gray-700 rounded-lg p-1">
             <button
               onClick={() => setViewMode('grid')}
-              className={`p-2 rounded-md transition-colors ${
-                viewMode === 'grid'
-                  ? 'bg-white dark:bg-gray-600 text-brand-600 shadow-sm'
-                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
-              }`}
+              className={`p-2 rounded-md transition-colors ${viewMode === 'grid'
+                ? 'bg-white dark:bg-gray-600 text-brand-600 shadow-sm'
+                : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                }`}
             >
               <FaTh className="h-4 w-4" />
             </button>
             <button
               onClick={() => setViewMode('table')}
-              className={`p-2 rounded-md transition-colors ${
-                viewMode === 'table'
-                  ? 'bg-white dark:bg-gray-600 text-brand-600 shadow-sm'
-                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
-              }`}
+              className={`p-2 rounded-md transition-colors ${viewMode === 'table'
+                ? 'bg-white dark:bg-gray-600 text-brand-600 shadow-sm'
+                : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                }`}
             >
               <FaTable className="h-4 w-4" />
             </button>
           </div>
-          
-          <button 
+
+          <button
             onClick={() => setShowAddModal(true)}
             className="px-4 py-2 bg-brand-500 text-white rounded-lg hover:bg-brand-600 transition-colors flex items-center space-x-2"
           >
@@ -367,7 +365,7 @@ export default function UserRolesPage() {
           <FaSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
           <input
             type="text"
-            placeholder="Tìm kiếm người dùng theo tên, email, quyền hoặc cửa hàng..."
+            placeholder="Tìm kiếm người dùng theo tên, username, quyền hoặc cửa hàng..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="pl-10 pr-4 py-2 w-full border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
@@ -423,7 +421,7 @@ export default function UserRolesPage() {
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
         {Object.entries(systemRoleColors).map(([role, colorClass]) => {
           const count = users.filter(u => u.role === role).length;
-          
+
           return (
             <div key={role} className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow">
               <div className="flex items-center justify-between">
@@ -457,13 +455,13 @@ export default function UserRolesPage() {
                 {searchTerm ? 'Không tìm thấy người dùng' : 'Không tìm thấy người dùng'}
               </h3>
               <p className="text-gray-600 dark:text-gray-400 mb-4">
-                {searchTerm 
+                {searchTerm
                   ? `Không có người dùng nào khớp với "${searchTerm}". Hãy thử điều chỉnh tìm kiếm.`
                   : 'Bắt đầu bằng cách thêm người dùng đầu tiên vào hệ thống.'
                 }
               </p>
               {!searchTerm && (
-                <button 
+                <button
                   onClick={() => setShowAddModal(true)}
                   className="px-4 py-2 bg-brand-500 text-white rounded-lg hover:bg-brand-600 transition-colors"
                 >
@@ -496,7 +494,7 @@ export default function UserRolesPage() {
                       )}
                     </div>
                     <p className="text-sm text-gray-600 dark:text-gray-400">
-                      {user.email}
+                      {user.username}
                     </p>
                   </div>
                 </div>
@@ -540,21 +538,20 @@ export default function UserRolesPage() {
 
                 {/* Actions */}
                 <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 flex flex-wrap gap-2">
-                  <button 
+                  <button
                     onClick={() => openEditModal(user)}
                     className="flex-1 px-3 py-1.5 text-xs font-medium text-brand-600 hover:text-brand-700 dark:text-brand-400 dark:hover:text-brand-300 border border-brand-300 rounded hover:bg-brand-50 dark:hover:bg-brand-900 transition-colors flex items-center justify-center space-x-1"
                   >
                     <FaEdit className="h-3 w-3" />
                     <span>Sửa</span>
                   </button>
-                  
-                  <button 
+
+                  <button
                     onClick={() => handleToggleUserStatus(user.id, user.isActive)}
-                    className={`flex-1 px-3 py-1.5 text-xs font-medium border rounded transition-colors flex items-center justify-center space-x-1 ${
-                      user.isActive 
-                        ? 'text-orange-600 hover:text-orange-700 dark:text-orange-400 dark:hover:text-orange-300 border-orange-300 hover:bg-orange-50 dark:hover:bg-orange-900'
-                        : 'text-green-600 hover:text-green-700 dark:text-green-400 dark:hover:text-green-300 border-green-300 hover:bg-green-50 dark:hover:bg-green-900'
-                    }`}
+                    className={`flex-1 px-3 py-1.5 text-xs font-medium border rounded transition-colors flex items-center justify-center space-x-1 ${user.isActive
+                      ? 'text-orange-600 hover:text-orange-700 dark:text-orange-400 dark:hover:text-orange-300 border-orange-300 hover:bg-orange-50 dark:hover:bg-orange-900'
+                      : 'text-green-600 hover:text-green-700 dark:text-green-400 dark:hover:text-green-300 border-green-300 hover:bg-green-50 dark:hover:bg-green-900'
+                      }`}
                   >
                     {user.isActive ? (
                       <>
@@ -568,16 +565,16 @@ export default function UserRolesPage() {
                       </>
                     )}
                   </button>
-                  
-                  <button 
+
+                  <button
                     onClick={() => handleResetPassword(user.id)}
                     className="flex-1 px-3 py-1.5 text-xs font-medium text-purple-600 hover:text-purple-700 dark:text-purple-400 dark:hover:text-purple-300 border border-purple-300 rounded hover:bg-purple-50 dark:hover:bg-purple-900 transition-colors flex items-center justify-center space-x-1"
                   >
                     <FaKey className="h-3 w-3" />
                     <span>Reset PW</span>
                   </button>
-                  
-                  <button 
+
+                  <button
                     onClick={() => handleDeleteUser(user.id)}
                     className="flex-1 px-3 py-1.5 text-xs font-medium text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 border border-red-300 rounded hover:bg-red-50 dark:hover:bg-red-900 transition-colors flex items-center justify-center space-x-1"
                   >
@@ -597,7 +594,7 @@ export default function UserRolesPage() {
               {searchTerm ? `Kết quả tìm kiếm (${pagination.total})` : `Tất cả người dùng (${pagination.total})`}
             </h3>
           </div>
-          
+
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
               <thead className="bg-gray-50 dark:bg-gray-900">
@@ -623,7 +620,7 @@ export default function UserRolesPage() {
                 {users.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
-                      {searchTerm 
+                      {searchTerm
                         ? `Không có người dùng nào khớp với "${searchTerm}". Hãy thử điều chỉnh tìm kiếm.`
                         : 'Không tìm thấy người dùng. Thêm người dùng để bắt đầu.'
                       }
@@ -647,7 +644,7 @@ export default function UserRolesPage() {
                               {user.name}
                             </div>
                             <div className="text-sm text-gray-500 dark:text-gray-400">
-                              {user.email}
+                              {user.username}
                             </div>
                           </div>
                         </div>
@@ -658,11 +655,10 @@ export default function UserRolesPage() {
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
-                          user.isActive 
-                            ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-                            : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
-                        }`}>
+                        <span className={`px-2 py-1 text-xs font-semibold rounded-full ${user.isActive
+                          ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                          : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+                          }`}>
                           {user.isActive ? 'Hoạt động' : 'Vô hiệu hóa'}
                         </span>
                       </td>
@@ -695,21 +691,20 @@ export default function UserRolesPage() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                         <div className="flex items-center space-x-3 flex-wrap gap-2">
-                          <button 
+                          <button
                             onClick={() => openEditModal(user)}
                             className="text-brand-600 hover:text-brand-900 dark:text-brand-400 dark:hover:text-brand-300 inline-flex items-center space-x-1"
                           >
                             <FaEdit className="h-3 w-3" />
                             <span>Sửa</span>
                           </button>
-                          
-                          <button 
+
+                          <button
                             onClick={() => handleToggleUserStatus(user.id, user.isActive)}
-                            className={`inline-flex items-center space-x-1 ${
-                              user.isActive 
-                                ? 'text-orange-600 hover:text-orange-900 dark:text-orange-400 dark:hover:text-orange-300'
-                                : 'text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300'
-                            }`}
+                            className={`inline-flex items-center space-x-1 ${user.isActive
+                              ? 'text-orange-600 hover:text-orange-900 dark:text-orange-400 dark:hover:text-orange-300'
+                              : 'text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300'
+                              }`}
                           >
                             {user.isActive ? (
                               <>
@@ -723,16 +718,16 @@ export default function UserRolesPage() {
                               </>
                             )}
                           </button>
-                          
-                          <button 
+
+                          <button
                             onClick={() => handleResetPassword(user.id)}
                             className="text-purple-600 hover:text-purple-900 dark:text-purple-400 dark:hover:text-purple-300 inline-flex items-center space-x-1"
                           >
                             <FaKey className="h-3 w-3" />
                             <span>Reset</span>
                           </button>
-                          
-                          <button 
+
+                          <button
                             onClick={() => handleDeleteUser(user.id)}
                             className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300 inline-flex items-center space-x-1"
                           >
@@ -761,7 +756,7 @@ export default function UserRolesPage() {
             >
               Trước
             </button>
-            
+
             <div className="flex items-center space-x-1">
               {Array.from({ length: Math.min(5, pagination.totalPages) }, (_, i) => {
                 let pageNum;
@@ -774,23 +769,22 @@ export default function UserRolesPage() {
                 } else {
                   pageNum = pagination.page - 2 + i;
                 }
-                
+
                 return (
                   <button
                     key={pageNum}
                     onClick={() => handlePageChange(pageNum)}
-                    className={`px-3 py-2 border rounded-md text-sm ${
-                      pagination.page === pageNum
-                        ? 'bg-brand-500 text-white border-brand-500'
-                        : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
-                    }`}
+                    className={`px-3 py-2 border rounded-md text-sm ${pagination.page === pageNum
+                      ? 'bg-brand-500 text-white border-brand-500'
+                      : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
+                      }`}
                   >
                     {pageNum}
                   </button>
                 );
               })}
             </div>
-            
+
             <button
               onClick={() => handlePageChange(pagination.page + 1)}
               disabled={pagination.page === pagination.totalPages}
@@ -799,7 +793,7 @@ export default function UserRolesPage() {
               Tiếp theo
             </button>
           </div>
-          
+
           <div className="text-sm text-gray-700 dark:text-gray-300">
             Trang {pagination.page} / {pagination.totalPages}
           </div>
@@ -808,13 +802,11 @@ export default function UserRolesPage() {
 
       {/* Add User Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <Modal isOpen={showAddModal} onClose={closeModals} className="max-w-md p-6">
+
           <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Thêm người dùng mới</h2>
-              <button onClick={closeModals} className="text-gray-400 hover:text-gray-600">
-                <FaTimes className="h-5 w-5" />
-              </button>
             </div>
 
             <form onSubmit={handleCreateUser} className="space-y-4">
@@ -833,12 +825,12 @@ export default function UserRolesPage() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Email
+                  Tên người dùng
                 </label>
                 <input
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  type="text"
+                  value={formData.username}
+                  onChange={(e) => setFormData({ ...formData, username: e.target.value })}
                   className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-1 focus:ring-brand-500 dark:focus:ring-brand-400 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                   required
                 />
@@ -893,18 +885,15 @@ export default function UserRolesPage() {
               </div>
             </form>
           </div>
-        </div>
+        </Modal>
       )}
 
       {/* Edit User Modal */}
       {showEditModal && selectedUser && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <Modal isOpen={showEditModal} onClose={closeModals} className="max-w-md p-6">
           <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Sửa người dùng</h2>
-              <button onClick={closeModals} className="text-gray-400 hover:text-gray-600">
-                <FaTimes className="h-5 w-5" />
-              </button>
             </div>
 
             <form onSubmit={handleUpdateUser} className="space-y-4">
@@ -923,12 +912,12 @@ export default function UserRolesPage() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Email
+                  Tên người dùng
                 </label>
                 <input
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  type="text"
+                  value={formData.username}
+                  onChange={(e) => setFormData({ ...formData, username: e.target.value })}
                   className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-1 focus:ring-brand-500 dark:focus:ring-brand-400 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                   required
                 />
@@ -982,7 +971,7 @@ export default function UserRolesPage() {
               </div>
             </form>
           </div>
-        </div>
+        </Modal>
       )}
 
       {/* Reset Password Modal */}
@@ -1018,12 +1007,12 @@ export default function UserRolesPage() {
               />
             </div>
 
-            {resetPasswordData.newPassword && resetPasswordData.confirmPassword && 
-             resetPasswordData.newPassword !== resetPasswordData.confirmPassword && (
-              <div className="text-red-600 text-sm">
-                Mật khẩu xác nhận không khớp
-              </div>
-            )}
+            {resetPasswordData.newPassword && resetPasswordData.confirmPassword &&
+              resetPasswordData.newPassword !== resetPasswordData.confirmPassword && (
+                <div className="text-red-600 text-sm">
+                  Mật khẩu xác nhận không khớp
+                </div>
+              )}
 
             <div className="flex space-x-3 pt-4">
               <Button

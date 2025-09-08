@@ -8,14 +8,14 @@ export const userApi = {
   
   create: (userData: {
     name: string;
-    email: string;
+    username: string;
     role: string;
     password: string;
   }) => httpClient.post('/users', userData),
   
   update: (id: string, userData: {
     name: string;
-    email: string;
+    username: string;
     role: string;
     password?: string;
   }) => httpClient.put(`/users/${id}`, userData),

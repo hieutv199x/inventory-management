@@ -110,7 +110,7 @@ export async function POST(req: NextRequest) {
                     },
                     create: {
                         userId: user.id,
-                        shopId: shop.id,
+                        shopId: insertedShop.id,
                         role: 'OWNER'
                     }
                 });
