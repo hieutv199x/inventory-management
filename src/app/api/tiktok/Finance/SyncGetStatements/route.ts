@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Finance202501GetTransactionsbyStatementResponseDataTransactions, TikTokShopNodeApiClient } from "@/nodejs_sdk";
+import { Finance202501GetTransactionsbyStatementResponseDataTransactions, TikTokShopNodeApiClient, Finance202501GetTransactionsbyStatementResponse } from "@/nodejs_sdk";
 import { PrismaClient, Channel } from "@prisma/client";
 
 const prisma = new PrismaClient();
@@ -310,7 +310,7 @@ async function processStatementBatch(statements: any[], shopObjectId: string) {
 }
 
 async function fetchTransactionsForStatements(client: any, credentials: any, statements: any[]) {
-    const allTransactions: Finance202501GetTransactionsbyStatementResponseDataTransactions[] = [];
+    const allTransactions: (Finance202501GetTransactionsbyStatementResponseDataTransactions & { statementId: string, currency: string })[] = [];
 
     for (const statement of statements) {
         if (!statement.id) continue;
@@ -323,7 +323,7 @@ async function fetchTransactionsForStatements(client: any, credentials: any, sta
             const pageSize = 50;
 
             do {
-                const result = await client.api.FinanceV202501Api.StatementsStatementIdStatementTransactionsGet(
+                const result: { response: any; body: Finance202501GetTransactionsbyStatementResponse } = await client.api.FinanceV202501Api.StatementsStatementIdStatementTransactionsGet(
                     statement.id,
                     "order_create_time",
                     credentials.accessToken,
@@ -334,17 +334,19 @@ async function fetchTransactionsForStatements(client: any, credentials: any, sta
                     credentials.shopCipher
                 );
 
-                if (result?.body.data?.transactions && Array.isArray(result.body.data.transactions)) {
-                    // Add statement_id to each transaction for reference
-                    const transactionsWithStatement = result.body.data.transactions.map((transaction: any) => ({
+                if (result?.body?.data?.transactions && Array.isArray(result.body.data.transactions)) {
+                    // Add statementId to each transaction for reference
+                    const transactionsWithStatement = result.body.data.transactions.map((transaction: Finance202501GetTransactionsbyStatementResponseDataTransactions) => ({
                         ...transaction,
-                        statement_id: statement.id
-                    }));
+                        statementId: statement.id,
+                        currency: statement.currency || 'GBP' // Default to GBP if not provided
+                    } as Finance202501GetTransactionsbyStatementResponseDataTransactions & { statementId: string, currency: string }));
                     allTransactions.push(...transactionsWithStatement);
                     console.log(`Fetched ${result.body.data.transactions.length} transactions for statement ${statement.id}`);
                 }
 
-                nextPageToken = result.body?.data?.more ? result.body?.data?.next_page_token : "";
+                // SDK maps next_page_token to nextPageToken
+                nextPageToken = result.body?.data?.nextPageToken || "";
 
                 // Add delay to avoid rate limiting
                 await new Promise(resolve => setTimeout(resolve, 100));
@@ -359,7 +361,7 @@ async function fetchTransactionsForStatements(client: any, credentials: any, sta
     return allTransactions;
 }
 
-async function syncTransactionsToDatabase(transactions: Finance202501GetTransactionsbyStatementResponseDataTransactions[], shopId: string) {
+async function syncTransactionsToDatabase(transactions: (Finance202501GetTransactionsbyStatementResponseDataTransactions & { statementId: string, currency: string })[], shopId: string) {
     const BATCH_SIZE = 100;
     let totalSynced = 0;
 
@@ -377,7 +379,7 @@ async function syncTransactionsToDatabase(transactions: Finance202501GetTransact
     return totalSynced;
 }
 
-async function processTransactionBatch(transactions: Finance202501GetTransactionsbyStatementResponseDataTransactions[], shopId: string) {
+async function processTransactionBatch(transactions: (Finance202501GetTransactionsbyStatementResponseDataTransactions & { statementId: string, currency: string })[], shopId: string) {
     let syncedCount = 0;
 
     try {
@@ -385,11 +387,11 @@ async function processTransactionBatch(transactions: Finance202501GetTransaction
             // Get existing transaction IDs
             const transactionIds = transactions.map(t => t.id).filter((id): id is string => typeof id === 'string');
             const existingTransactions = await tx.tikTokTransaction.findMany({
-                where: { transaction_id: { in: transactionIds } },
-                select: { transaction_id: true }
+                where: { transactionId: { in: transactionIds } },
+                select: { id: true, transactionId: true }
             });
 
-            const existingTransactionIds = new Set(existingTransactions.map(t => t.transaction_id));
+            const existingTransactionMap = new Map(existingTransactions.map(t => [t.transactionId, t.id]));
 
             // Separate new transactions from updates
             const newTransactions = [];
@@ -399,41 +401,41 @@ async function processTransactionBatch(transactions: Finance202501GetTransaction
                 if (!transaction.id) continue;
 
                 const transactionData = {
-                    transaction_id: transaction.id,
-                    shop_id: shopId,
-                    statement_id: (transaction as any).statement_id, // Added from fetchTransactionsForStatements
-                    transaction_time: new Date((transaction.orderCreateTime ?? 0) * 1000),
+                    transactionId: transaction.id,
+                    shopId: shopId,
+                    statementId: transaction.statementId, // From the extended type
                     type: transaction.type || '',
-                    amount: parseFloat(transaction.settlementAmount || '0'),
-                    settlement_amount: transaction.settlementAmount ? Number(transaction.settlementAmount) : 0, // Convert to number
-                    currency: 'USD', // Default currency as it's not in the response
-                    order_id: transaction.orderId || null,
-                    sku_id: null, // Not available in this response
-                    product_name: null, // Not available in this response
-                    description: `${transaction.type || 'Unknown'} transaction`,
-                    fee_details: JSON.stringify({
-                        settlementAmount: transaction.settlementAmount,
-                        adjustmentAmount: transaction.adjustmentAmount,
-                        adjustmentId: transaction.adjustmentId,
-                        adjustmentOrderId: transaction.adjustmentOrderId,
-                        associatedOrderId: transaction.associatedOrderId,
-                        feeTaxAmount: transaction.feeTaxAmount,
-                        revenueAmount: transaction.revenueAmount,
-                        shippingCostAmount: transaction.shippingCostAmount,
-                        reserveAmount: transaction.reserveAmount,
-                        reserveId: transaction.reserveId,
-                        reserveStatus: transaction.reserveStatus,
-                        estimatedReleaseTime: transaction.estimatedReleaseTime,
-                        feeTaxBreakdown: transaction.feeTaxBreakdown,
-                        revenueBreakdown: transaction.revenueBreakdown,
-                        shippingCostBreakdown: transaction.shippingCostBreakdown,
-                        order_create_time: transaction.orderCreateTime ? new Date(transaction.orderCreateTime * 1000) : null,
-                        supplementaryComponent: transaction.supplementaryComponent
-                    }),
+                    currency: transaction.currency || 'GBP', // Get from response or default
+                    // Individual amounts from API response
+                    settlementAmount: transaction.settlementAmount ? parseFloat(transaction.settlementAmount) : null,
+                    adjustmentAmount: transaction.adjustmentAmount ? parseFloat(transaction.adjustmentAmount) : null,
+                    revenueAmount: transaction.revenueAmount ? parseFloat(transaction.revenueAmount) : null,
+                    shippingCostAmount: transaction.shippingCostAmount ? parseFloat(transaction.shippingCostAmount) : null,
+                    feeTaxAmount: transaction.feeTaxAmount ? parseFloat(transaction.feeTaxAmount) : null,
+                    reserveAmount: transaction.reserveAmount ? parseFloat(transaction.reserveAmount) : null,
+
+                    // Order information - map from API response
+                    orderId: transaction.orderId || null,
+                    orderCreateTime: transaction.orderCreateTime ? new Date(transaction.orderCreateTime * 1000) : null,
+                    adjustmentId: transaction.adjustmentId || null,
+                    adjustmentOrderId: transaction.adjustmentOrderId || null,
+                    associatedOrderId: transaction.associatedOrderId || null,
+
+                    // Reserve info
+                    reserveId: transaction.reserveId || null,
+                    reserveStatus: transaction.reserveStatus || null,
+                    estimatedReleaseTime: transaction.estimatedReleaseTime ? new Date(parseInt(transaction.estimatedReleaseTime) * 1000) : null,
+
+                    // Breakdown fields (convert to JSON properly)
+                    revenueBreakdown: transaction.revenueBreakdown ? JSON.parse(JSON.stringify(transaction.revenueBreakdown)) : null,
+                    shippingCostBreakdown: transaction.shippingCostBreakdown ? JSON.parse(JSON.stringify(transaction.shippingCostBreakdown)) : null,
+                    feeTaxBreakdown: transaction.feeTaxBreakdown ? JSON.parse(JSON.stringify(transaction.feeTaxBreakdown)) : null,
+                    supplementaryComponent: transaction.supplementaryComponent ? JSON.parse(JSON.stringify(transaction.supplementaryComponent)) : null,
                 };
 
-                if (existingTransactionIds.has(transaction.id)) {
-                    updateTransactions.push(transactionData);
+                const existingId = existingTransactionMap.get(transaction.id);
+                if (existingId) {
+                    updateTransactions.push({ ...transactionData, id: existingId });
                 } else {
                     newTransactions.push(transactionData);
                 }
@@ -449,12 +451,13 @@ async function processTransactionBatch(transactions: Finance202501GetTransaction
 
             // Batch update existing transactions
             if (updateTransactions.length > 0) {
-                const updatePromises = updateTransactions.map(transaction =>
-                    tx.tikTokTransaction.update({
-                        where: { transaction_id: transaction.transaction_id },
-                        data: transaction,
-                    })
-                );
+                const updatePromises = updateTransactions.map(transaction => {
+                    const { id, ...updateData } = transaction;
+                    return tx.tikTokTransaction.update({
+                        where: { id },
+                        data: updateData,
+                    });
+                });
                 await Promise.all(updatePromises);
                 syncedCount += updateTransactions.length;
             }

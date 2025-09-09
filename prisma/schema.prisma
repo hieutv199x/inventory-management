@@ -785,58 +785,50 @@ enum NotificationType {
 }
 
 model TikTokTransaction {
-  id                    String   @id @default(auto()) @map("_id") @db.ObjectId
-  transaction_id        String   @unique
-  shop_id               String
-  statement_id          String
-  transaction_time      DateTime
-  type                  String
-  
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  transactionId   String?
+  shopId          String
+  statementId     String?
+
+  type            String           // ORDER, REFUND, ADJUSTMENT...
+  currency        String
+
   // Financial amounts
-  settlement_amount     Float    // Main transaction amount
-  adjustment_amount     String?  // Adjustment amount as string (can be negative)
-  fee_tax_amount        String?  // Total fees and taxes
-  revenue_amount        String?  // Revenue amount
-  shipping_cost_amount  String?  // Shipping costs
-  reserve_amount        String?  // Reserve amount (can be negative)
-  
-  currency              String
-  
+  settlementAmount     Float?      // e.g. 130
+  adjustmentAmount     Float?      // e.g. 170
+  revenueAmount        Float?      // e.g. 200
+  shippingCostAmount   Float?      // e.g. -70
+  feeTaxAmount         Float?      // e.g. -30
+  reserveAmount        Float?      // e.g. 100
+
   // Order information
-  order_id              String?
-  order_create_time     DateTime?
+  orderId              String?
+  order                Order?      @relation(fields: [orderId], references: [orderId])
   
-  // Additional transaction details
-  adjustment_id         String?
-  adjustment_order_id   String?
-  associated_order_id   String?
-  reserve_id            String?
-  reserve_status        String?  // COLLECTED, RELEASED
-  estimated_release_time String? // Unix timestamp as string
-  
-  // Legacy fields for backward compatibility
-  sku_id                String?
-  product_name          String?
-  description           String
-  
-  // Detailed breakdowns (JSON strings)
-  fee_tax_breakdown     String?  // JSON string of fee/tax breakdown
-  revenue_breakdown     String?  // JSON string of revenue breakdown  
-  shipping_cost_breakdown String? // JSON string of shipping cost breakdown
-  supplementary_component String? // JSON string of supplementary components
-  
-  created_at            DateTime @default(now())
-  updated_at            DateTime @updatedAt
+  orderCreateTime      DateTime?   // from timestamp
+  adjustmentId         String?
+  adjustmentOrderId    String?
+  associatedOrderId    String?
 
-  // Optional relation to Order (since order_id might not always exist)
-  order                Order?   @relation(fields: [order_id], references: [orderId])
+  // Reserve info
+  reserveId            String?
+  reserveStatus        String?     // Collected, Released
+  estimatedReleaseTime DateTime?
 
-  @@index([shop_id, statement_id])
-  @@index([transaction_time])
-  @@index([order_id])
-  @@index([order_create_time])
+  // Breakdown fields (kept as JSON for flexibility)
+  revenueBreakdown        Json?
+  shippingCostBreakdown   Json?
+  feeTaxBreakdown         Json?
+  supplementaryComponent  Json?
+
+  // Meta
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([shopId, statementId])
+  @@index([orderId])
   @@index([type])
-  @@index([reserve_status])
+  @@index([reserveStatus])
   @@map("tiktok_transactions")
 }
 

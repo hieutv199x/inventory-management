@@ -50,13 +50,40 @@ interface Withdrawal {
   shopName: string;
 }
 
+interface TikTokTransaction {
+  id: string;
+  transactionId?: string;
+  shopId: string;
+  shopName: string;
+  statementId?: string;
+  type: string;
+  currency: string;
+  settlementAmount?: number;
+  adjustmentAmount?: number;
+  revenueAmount?: number;
+  shippingCostAmount?: number;
+  feeTaxAmount?: number;
+  reserveAmount?: number;
+  orderId?: string;
+  orderCreateTime?: string;
+  adjustmentId?: string;
+  adjustmentOrderId?: string;
+  associatedOrderId?: string;
+  reserveId?: string;
+  reserveStatus?: string;
+  estimatedReleaseTime?: string;
+  createdAt: string;
+}
+
 export const StatementBank = () => {
   const { showLoading, hideLoading, setLoadingMessage } = useLoading();
-  const [activeTab, setActiveTab] = useState<"shops" | "history" | "withdrawal">("shops");
+  const [activeTab, setActiveTab] = useState<"statements" | "payment" | "withdrawal">("statements");
+  const [statementSubTab, setStatementSubTab] = useState<"statement" | "unsettled">("statement");
   const [selectedShop, setSelectedShop] = useState<string | null>("all");
   const [statements, setStatements] = useState<Statement[]>([]);
   const [paidHistories, setPaidHistories] = useState<PaidHistory[]>([]);
   const [withdrawals, setWithdrawals] = useState<Withdrawal[]>([]);
+  const [tikTokTransactions, setTikTokTransactions] = useState<TikTokTransaction[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -79,6 +106,13 @@ export const StatementBank = () => {
   });
 
   const [withdrawalsPagination, setWithdrawalsPagination] = useState({
+    currentPage: 1,
+    totalPages: 0,
+    totalItems: 0,
+    itemsPerPage: 10
+  });
+
+  const [unsettledPagination, setUnsettledPagination] = useState({
     currentPage: 1,
     totalPages: 0,
     totalItems: 0,
@@ -295,6 +329,103 @@ export const StatementBank = () => {
     setLoading(false);
   };
 
+  const fetchTikTokTransactions = async (page: number = 1, pageSize: number = 25) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const params = new URLSearchParams({
+        shop_id: selectedShop || 'all',
+        page: page.toString(),
+        limit: pageSize.toString()
+      });
+
+      if (startDate && endDate) {
+        const startTimestamp = Math.floor(new Date(startDate).getTime() / 1000);
+        const endTimestamp = Math.floor(new Date(endDate).getTime() / 1000);
+        params.append('start_date', startTimestamp.toString());
+        params.append('end_date', endTimestamp.toString());
+      }
+
+      const res = await httpClient.get(`/tiktok-transactions?${params}`);
+
+      if (res.success) {
+        const rawTransactions = res.data || [];
+        const mappedTransactions: TikTokTransaction[] = rawTransactions.map((item: any) => ({
+          id: item.id,
+          transactionId: item.transactionId,
+          shopId: item.shopId,
+          shopName: item.shopName || '',
+          statementId: item.statementId,
+          type: item.type || 'UNKNOWN',
+          currency: item.currency || 'USD',
+          settlementAmount: item.settlementAmount,
+          adjustmentAmount: item.adjustmentAmount,
+          revenueAmount: item.revenueAmount,
+          shippingCostAmount: item.shippingCostAmount,
+          feeTaxAmount: item.feeTaxAmount,
+          reserveAmount: item.reserveAmount,
+          orderId: item.orderId,
+          orderCreateTime: item.orderCreateTime,
+          adjustmentId: item.adjustmentId,
+          adjustmentOrderId: item.adjustmentOrderId,
+          associatedOrderId: item.associatedOrderId,
+          reserveId: item.reserveId,
+          reserveStatus: item.reserveStatus,
+          estimatedReleaseTime: item.estimatedReleaseTime,
+          createdAt: item.createdAt || new Date().toISOString(),
+        }));
+
+        setTikTokTransactions(mappedTransactions);
+        setUnsettledPagination(res.pagination || {
+          currentPage: page,
+          totalPages: Math.ceil(rawTransactions.length / pageSize),
+          totalItems: rawTransactions.length,
+          itemsPerPage: pageSize
+        });
+      } else {
+        // Handle legacy response format
+        const rawTransactions = res || [];
+        const mappedTransactions: TikTokTransaction[] = rawTransactions.map((item: any) => ({
+          id: item.id,
+          orderId: item.orderId || '',
+          shopId: item.shopId,
+          shopName: item.shopName || '',
+          amount: item.amount || '0',
+          currency: item.currency || 'USD',
+          transactionType: item.transactionType || '',
+          status: item.status || 'UNKNOWN',
+          createTime: item.createTime || 0,
+          orderTime: item.orderTime || 0,
+          transactionId: item.transactionId || '',
+          adjustmentId: item.adjustmentId,
+          statementId: item.statementId || '',
+          transactionTime: item.transactionTime || 0,
+          settlementAmount: item.settlementAmount,
+          adjustmentAmount: item.adjustmentAmount,
+          feeTaxAmount: item.feeTaxAmount,
+          revenueAmount: item.revenueAmount,
+          shippingCostAmount: item.shippingCostAmount,
+          reserveAmount: item.reserveAmount,
+          description: item.description || '',
+        }));
+
+        setTikTokTransactions(mappedTransactions);
+        setUnsettledPagination({
+          currentPage: 1,
+          totalPages: 1,
+          totalItems: mappedTransactions.length,
+          itemsPerPage: pageSize
+        });
+      }
+    } catch (error) {
+      const err = error as Error;
+      console.error("Failed to fetch TikTok transactions:", error);
+      setError(err.message);
+      setTikTokTransactions([]);
+    }
+    setLoading(false);
+  };
+
   const handlePaymentSync = async () => {
     if (startDate && endDate) {
       const statementTimeGe = Math.floor(new Date(startDate).getTime() / 1000);
@@ -346,9 +477,13 @@ export const StatementBank = () => {
   };
 
   const handleSearch = () => {
-    if (activeTab === "shops") {
-      fetchStatements(1, statementsPagination.itemsPerPage);
-    } else if (activeTab === "history") {
+    if (activeTab === "statements") {
+      if (statementSubTab === "statement") {
+        fetchStatements(1, statementsPagination.itemsPerPage);
+      } else {
+        fetchTikTokTransactions(1, unsettledPagination.itemsPerPage);
+      }
+    } else if (activeTab === "payment") {
       fetchPaidHistory(1, historyPagination.itemsPerPage);
     } else {
       fetchWithdrawals(1, withdrawalsPagination.itemsPerPage);
@@ -380,12 +515,29 @@ export const StatementBank = () => {
     fetchWithdrawals(1, pageSize);
   };
 
+  const handleUnsettledPageChange = (page: number) => {
+    fetchTikTokTransactions(page, unsettledPagination.itemsPerPage);
+  };
+
+  const handleUnsettledPageSizeChange = (pageSize: number) => {
+    fetchTikTokTransactions(1, pageSize);
+  };
+
   useEffect(() => {
     // Initial load without date filters
-    if (activeTab === "shops") fetchStatements(1, statementsPagination.itemsPerPage);
-    else if (activeTab === "history") fetchPaidHistory(1, historyPagination.itemsPerPage);
-    else fetchWithdrawals(1, withdrawalsPagination.itemsPerPage);
-  }, [activeTab, selectedShop]);
+    if (activeTab === "statements") {
+      if (statementSubTab === "statement") {
+        fetchStatements(1, statementsPagination.itemsPerPage);
+      } else {
+        fetchTikTokTransactions(1, unsettledPagination.itemsPerPage);
+      }
+    } else if (activeTab === "payment") {
+      fetchPaidHistory(1, historyPagination.itemsPerPage);
+    } else {
+      fetchWithdrawals(1, withdrawalsPagination.itemsPerPage);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, statementSubTab, selectedShop]);
 
   return (
     <div className="p-6 space-y-6">
@@ -438,9 +590,9 @@ export const StatementBank = () => {
           <Button
             onClick={async () => {
               showLoading("Đang đồng bộ...");
-              if (activeTab === "shops") {
+              if (activeTab === "statements") {
                 await handleStatementSync();
-              } else if (activeTab === "history") {
+              } else if (activeTab === "payment") {
                 await handlePaymentSync();
               } else {
                 await handleWithdrawalSync();
@@ -479,20 +631,20 @@ export const StatementBank = () => {
         <div className="border-b border-gray-200 dark:border-gray-700">
           <nav className="flex space-x-8 px-6">
             <button
-              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === "shops"
+              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === "statements"
                 ? "border-blue-500 text-blue-600 dark:text-blue-400"
                 : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300"
                 }`}
-              onClick={() => setActiveTab("shops")}
+              onClick={() => setActiveTab("statements")}
             >
               Lịch sử thanh toán
             </button>
             <button
-              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === "history"
+              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === "payment"
                 ? "border-blue-500 text-blue-600 dark:text-blue-400"
                 : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300"
                 }`}
-              onClick={() => setActiveTab("history")}
+              onClick={() => setActiveTab("payment")}
             >
               Lịch sử tiền về
             </button>
@@ -510,23 +662,51 @@ export const StatementBank = () => {
 
         {/* Tab Content */}
         <div className="p-6">
-          {activeTab === "shops" && (
+          {activeTab === "statements" && (
             <div>
+              {/* Sub-tabs for Statement */}
+              <div className="mb-6 border-b border-gray-200 dark:border-gray-700">
+                <nav className="flex space-x-8">
+                  <button
+                    className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors ${statementSubTab === "statement"
+                      ? "border-blue-500 text-blue-600 dark:text-blue-400"
+                      : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300"
+                      }`}
+                    onClick={() => setStatementSubTab("statement")}
+                  >
+                    View by statements
+                  </button>
+                  <button
+                    className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors ${statementSubTab === "unsettled"
+                      ? "border-blue-500 text-blue-600 dark:text-blue-400"
+                      : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300"
+                      }`}
+                    onClick={() => setStatementSubTab("unsettled")}
+                  >
+                    View by orders
+                  </button>
+                </nav>
+              </div>
+
               {loading ? (
                 <div className="flex items-center justify-center py-12">
                   <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mr-3"></div>
-                  <span className="text-gray-600 dark:text-gray-400">Đang tải lịch sử thanh toán...</span>
+                  <span className="text-gray-600 dark:text-gray-400">
+                    {statementSubTab === "statement" ? "Đang tải lịch sử thanh toán..." : "Đang tải dữ liệu giao dịch chưa thanh toán..."}
+                  </span>
                 </div>
               ) : (
                 <>
-                  <div className="mb-4 flex items-center justify-between">
-                    <h3 className="text-lg font-medium text-gray-900 dark:text-white">
-                      Lịch sử thanh toán
-                    </h3>
-                    <div className="text-sm text-gray-500 dark:text-gray-400">
-                      Tổng: {statementsPagination.totalItems} báo cáo
-                    </div>
-                  </div>
+                  {statementSubTab === "statement" && (
+                    <>
+                      <div className="mb-4 flex items-center justify-between">
+                        <h3 className="text-lg font-medium text-gray-900 dark:text-white">
+                          View by statements
+                        </h3>
+                        <div className="text-sm text-gray-500 dark:text-gray-400">
+                          Tổng: {statementsPagination.totalItems} báo cáo
+                        </div>
+                      </div>
 
                   <Table>
                     <TableHeader className="border-gray-100 dark:border-gray-700 border-y">
@@ -609,28 +789,148 @@ export const StatementBank = () => {
                     </TableBody>
                   </Table>
 
-                  {/* Pagination for Statements Tab */}
-                  {statementsPagination.totalPages > 1 && (
-                    <div className="mt-6 border-t border-gray-200 dark:border-gray-700 pt-4">
-                      <Pagination
-                        currentPage={statementsPagination.currentPage}
-                        totalPages={statementsPagination.totalPages}
-                        totalItems={statementsPagination.totalItems}
-                        itemsPerPage={statementsPagination.itemsPerPage}
-                        onPageChange={handleStatementsPageChange}
-                        onPageSizeChange={handleStatementsPageSizeChange}
-                        pageSizeOptions={[10, 25, 50, 100]}
-                        showPageSizeSelector={true}
-                        showItemsInfo={true}
-                      />
-                    </div>
+                      {/* Pagination for Statements Tab */}
+                      {statementsPagination.totalPages > 1 && (
+                        <div className="mt-6 border-t border-gray-200 dark:border-gray-700 pt-4">
+                          <Pagination
+                            currentPage={statementsPagination.currentPage}
+                            totalPages={statementsPagination.totalPages}
+                            totalItems={statementsPagination.totalItems}
+                            itemsPerPage={statementsPagination.itemsPerPage}
+                            onPageChange={handleStatementsPageChange}
+                            onPageSizeChange={handleStatementsPageSizeChange}
+                            pageSizeOptions={[10, 25, 50, 100]}
+                            showPageSizeSelector={true}
+                            showItemsInfo={true}
+                          />
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {statementSubTab === "unsettled" && (
+                    <>
+                      <div className="mb-4 flex items-center justify-between">
+                        <h3 className="text-lg font-medium text-gray-900 dark:text-white">
+                          View by orders
+                        </h3>
+                        <div className="text-sm text-gray-500 dark:text-gray-400">
+                          Tổng: {unsettledPagination.totalItems} giao dịch
+                        </div>
+                      </div>
+
+                      <Table>
+                        <TableHeader className="border-gray-100 dark:border-gray-700 border-y">
+                          <TableRow>
+                            <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
+                              Transaction ID
+                            </TableCell>
+                            <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
+                              Shop Name
+                            </TableCell>
+                            <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
+                              Số tiền
+                            </TableCell>
+                            <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
+                              Tiền tệ
+                            </TableCell>
+                            <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
+                              Loại giao dịch
+                            </TableCell>
+                            <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
+                              Trạng thái
+                            </TableCell>
+                            <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
+                              Thời gian tạo
+                            </TableCell>
+                            <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
+                              Thời gian đặt hàng
+                            </TableCell>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody className="divide-y divide-gray-100 dark:divide-gray-700">
+                          {error ? (
+                            <TableRow>
+                              <TableCell colSpan={8} className="py-12 text-center">
+                                <div className="text-red-500 dark:text-red-400">
+                                  <p className="font-medium">Có lỗi xảy ra</p>
+                                  <p className="text-sm mt-1">{error}</p>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          ) : tikTokTransactions.length === 0 ? (
+                            <TableRow>
+                              <TableCell colSpan={8} className="py-12 text-center">
+                                <div className="text-gray-500 dark:text-gray-400">
+                                  <p className="font-medium">Không có dữ liệu giao dịch TikTok</p>
+                                  <p className="text-sm mt-1">Chọn shop và khoảng thời gian để xem dữ liệu</p>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          ) : (
+                            tikTokTransactions.map((t) => (
+                              <TableRow key={t.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                                <TableCell className="py-3 text-gray-900 dark:text-gray-100 font-mono text-sm">
+                                  {t.transactionId}
+                                </TableCell>
+                                <TableCell className="py-3 text-gray-700 dark:text-gray-300 font-medium">
+                                  {t.shopName}
+                                </TableCell>
+                                <TableCell className="py-3 text-gray-700 dark:text-gray-300 font-medium">
+                                  {formatCurrency(t.settlementAmount?.toString() || t.revenueAmount?.toString() || '0', t.currency)}
+                                </TableCell>
+                                <TableCell className="py-3 text-gray-700 dark:text-gray-300">
+                                  {t.currency}
+                                </TableCell>
+                                <TableCell className="py-3 text-gray-700 dark:text-gray-300">
+                                  {t.type}
+                                </TableCell>
+                                <TableCell className="py-3">
+                                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${t.reserveStatus === 'Released'
+                                    ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                                    : t.reserveStatus === 'Collected'
+                                      ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
+                                      : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
+                                    }`}>
+                                    {t.reserveStatus || t.type}
+                                  </span>
+                                </TableCell>
+                                <TableCell className="py-3 text-gray-700 dark:text-gray-300">
+                                  {t.orderCreateTime ? formatDate(new Date(t.orderCreateTime).getTime() / 1000) : '-'}
+                                </TableCell>
+                                <TableCell className="py-3 text-gray-700 dark:text-gray-300">
+                                  {formatDate(new Date(t.createdAt).getTime() / 1000)}
+                                </TableCell>
+                              </TableRow>
+                            ))
+                          )}
+                        </TableBody>
+                      </Table>
+
+                      {/* Pagination for Unsettled Transactions */}
+                      {unsettledPagination.totalPages > 1 && (
+                        <div className="mt-6 border-t border-gray-200 dark:border-gray-700 pt-4">
+                          <Pagination
+                            currentPage={unsettledPagination.currentPage}
+                            totalPages={unsettledPagination.totalPages}
+                            totalItems={unsettledPagination.totalItems}
+                            itemsPerPage={unsettledPagination.itemsPerPage}
+                            onPageChange={handleUnsettledPageChange}
+                            onPageSizeChange={handleUnsettledPageSizeChange}
+                            pageSizeOptions={[10, 25, 50, 100]}
+                            showPageSizeSelector={true}
+                            showItemsInfo={true}
+                          />
+                        </div>
+                      )}
+                    </>
                   )}
                 </>
               )}
             </div>
           )}
 
-          {activeTab === "history" && (
+          {activeTab === "payment" && (
             <div>
               {loading ? (
                 <div className="flex items-center justify-center py-12">

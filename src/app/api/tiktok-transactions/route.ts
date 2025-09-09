@@ -1,0 +1,178 @@
+import { NextRequest, NextResponse } from "next/server";
+import { PrismaClient } from "@prisma/client";
+import { getUserWithShopAccess } from "@/lib/auth";
+
+const prisma = new PrismaClient();
+
+export async function GET(req: NextRequest) {
+  try {
+    // Debug: Check if there's any data in the table first
+    const totalRecords = await prisma.tikTokTransaction.count();
+    console.log("Debug - Total TikTok transactions in DB:", totalRecords);
+
+    // Also check shops
+    const totalShops = await prisma.shopAuthorization.count();
+    console.log("Debug - Total shops in DB:", totalShops);
+
+    if (totalRecords === 0) {
+      return NextResponse.json({
+        success: true,
+        data: [],
+        pagination: {
+          currentPage: 1,
+          totalPages: 0,
+          totalItems: 0,
+          itemsPerPage: 25,
+          hasNext: false,
+          hasPrev: false
+        },
+        debug: "No data found in tiktok_transactions table"
+      });
+    }
+
+    const { user, accessibleShopIds, isAdmin } = await getUserWithShopAccess(req, prisma);
+    const { searchParams } = new URL(req.url);
+
+    // Pagination parameters
+    const page = parseInt(searchParams.get('page') || '1');
+    const limit = parseInt(searchParams.get('limit') || '25');
+    const offset = (page - 1) * limit;
+
+    // Filter parameters
+    const shopId = searchParams.get('shop_id');
+    const startDate = searchParams.get('start_date');
+    const endDate = searchParams.get('end_date');
+    const transactionType = searchParams.get('type');
+    const orderId = searchParams.get('order_id');
+
+    // Build where clause
+    const where: any = {};
+
+    // Shop access control - TikTokTransaction uses shopId field
+    if (!isAdmin) {
+      // Get shopIds from accessible shop IDs (which are the internal IDs)
+      const accessibleShops = await prisma.shopAuthorization.findMany({
+        where: { id: { in: accessibleShopIds } },
+        select: { shopId: true }
+      });
+      const accessibleShopIdValues = accessibleShops.map(shop => shop.shopId);
+      where.shopId = { in: accessibleShopIdValues };
+    } else if (shopId && shopId !== 'all') {
+      where.shopId = shopId;
+    }
+
+    // Date range filter (using orderCreateTime)
+    if (startDate || endDate) {
+      where.orderCreateTime = {};
+      if (startDate) {
+        where.orderCreateTime.gte = new Date(parseInt(startDate) * 1000);
+      }
+      if (endDate) {
+        where.orderCreateTime.lte = new Date(parseInt(endDate) * 1000);
+      }
+    }
+
+    // Transaction type filter
+    if (transactionType) {
+      where.type = transactionType;
+    }
+
+    // Order ID filter
+    if (orderId) {
+      where.orderId = {
+        contains: orderId,
+        mode: 'insensitive'
+      };
+    }
+
+    console.log("Debug - where clause:", JSON.stringify(where, null, 2));
+
+    // Get total count for pagination
+    const totalItems = await prisma.tikTokTransaction.count({ where });
+    const totalPages = Math.ceil(totalItems / limit);
+
+    // Get TikTok transactions with pagination
+    const tikTokTransactions = await prisma.tikTokTransaction.findMany({
+      where,
+      orderBy: {
+        createdAt: 'desc'
+      },
+      skip: offset,
+      take: limit
+    });
+
+    console.log("Debug - found transactions count:", tikTokTransactions.length);
+    if (tikTokTransactions.length > 0) {
+      console.log("Debug - first transaction sample:", {
+        id: tikTokTransactions[0].id,
+        shopId: tikTokTransactions[0].shopId,
+        orderId: tikTokTransactions[0].orderId,
+        transactionId: tikTokTransactions[0].transactionId
+      });
+    }
+
+    // Get shop information separately
+    const shopIds = [...new Set(tikTokTransactions.map(t => t.shopId))];
+    console.log("Debug - shopIds from transactions:", shopIds);
+    
+    const shops = await prisma.shopAuthorization.findMany({
+      where: { shopId: { in: shopIds } },
+      select: { shopId: true, shopName: true }
+    });
+    console.log("Debug - shops found:", shops);
+
+    // Create a map for quick lookup
+    const shopMap = new Map(shops.map(shop => [shop.shopId, shop]));
+    console.log("Debug - shopMap:", Array.from(shopMap.entries()));
+
+    // Map data to match frontend interface
+    const mappedData = tikTokTransactions.map(transaction => {
+      const shop = shopMap.get(transaction.shopId);
+      return {
+        id: transaction.id,
+        orderId: transaction.orderId || '',
+        shopId: transaction.shopId,
+        shopName: shop?.shopName || '',
+        amount: transaction.settlementAmount?.toString() || transaction.revenueAmount?.toString() || '0',
+        currency: transaction.currency || 'USD',
+        transactionType: transaction.type || '',
+        status: transaction.reserveStatus || transaction.status || 'SETTLED',
+        createTime: transaction.orderCreateTime ? Math.floor(transaction.orderCreateTime.getTime() / 1000) : 0,
+        orderTime: transaction.orderCreateTime ? Math.floor(transaction.orderCreateTime.getTime() / 1000) : 0,
+        // Additional fields that might be useful
+        transactionId: transaction.transactionId,
+        adjustmentId: transaction.adjustmentId,
+        statementId: transaction.statementId,
+        transactionTime: transaction.createdAt ? Math.floor(transaction.createdAt.getTime() / 1000) : 0,
+        settlementAmount: transaction.settlementAmount,
+        adjustmentAmount: transaction.adjustmentAmount,
+        feeTaxAmount: transaction.feeTaxAmount,
+        revenueAmount: transaction.revenueAmount,
+        shippingCostAmount: transaction.shippingCostAmount,
+        reserveAmount: transaction.reserveAmount,
+      };
+    });
+
+    return NextResponse.json({
+      success: true,
+      data: mappedData,
+      pagination: {
+        currentPage: page,
+        totalPages,
+        totalItems,
+        itemsPerPage: limit,
+        hasNext: page < totalPages,
+        hasPrev: page > 1
+      }
+    });
+
+  } catch (err: any) {
+    console.error("Error fetching unsettled transactions:", err);
+    return NextResponse.json({ 
+      success: false,
+      error: err.message || "Internal error" 
+    }, { status: 500 });
+  } finally {
+    await prisma.$disconnect();
+  }
+}
