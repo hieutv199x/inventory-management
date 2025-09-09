@@ -170,6 +170,10 @@ export default function OrdersPage() {
         }
     }, [filters, currentPage, pageSize, showLoading, hideLoading]);
 
+    useEffect(() => {
+        fetchOrders();
+    }, []);
+
     // Consolidate all fetchOrders triggers into a single useEffect
     useEffect(() => {
         if (needSearch) {
