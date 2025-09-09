@@ -83,8 +83,8 @@ export default function OrdersPage() {
     const { showLoading, hideLoading } = useLoading();
 
     const [orders, setOrders] = useState<Order[]>([]);
-    const [shops, setShops] = useState<Shop[]>([]);
     const [syncing, setSyncing] = useState(false);
+    const [needSearch, setNeedSearch] = useState(false);
 
     // Updated filter and search states
     const [filters, setFilters] = useState({
@@ -127,6 +127,7 @@ export default function OrdersPage() {
         e.preventDefault();
         setFilters(prev => ({ ...prev, keyword: searchKeyword }));
         setCurrentPage(1);
+        setNeedSearch(true);
     };
 
     const fetchOrders = useCallback(async () => {
@@ -153,11 +154,10 @@ export default function OrdersPage() {
 
             const response = await httpClient.get(`/orders?${params.toString()}`);
 
-            console.log({response});
             setOrders(response.data || []);
             setPagination(response.pagination || {
                 currentPage: 1,
-                pageSize: 20,
+                pageSize: 10,
                 totalItems: 0,
                 totalPages: 0,
                 hasNextPage: false,
@@ -172,12 +172,16 @@ export default function OrdersPage() {
 
     // Consolidate all fetchOrders triggers into a single useEffect
     useEffect(() => {
-        fetchOrders();
-    }, [filters, currentPage, pageSize]); // This will trigger when any of these change
+        if (needSearch) {
+            fetchOrders();
+            setNeedSearch(false);
+        }
+    }, [currentPage, needSearch]); // This will trigger when any of these change
 
     const handlePageChange = (newPage: number) => {
         if (newPage >= 1 && newPage <= pagination.totalPages) {
             setCurrentPage(newPage);
+            setNeedSearch(true);
         }
     };
 
@@ -359,14 +363,6 @@ export default function OrdersPage() {
             alert('Failed to update custom status');
         } finally {
             setUpdatingStatus(null);
-        }
-    };
-
-    const getCustomStatusColor = (customStatus?: string) => {
-        switch (customStatus) {
-            case 'START': return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-400';
-            case 'DELIVERED': return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-400';
-            default: return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-400';
         }
     };
 
@@ -576,7 +572,7 @@ export default function OrdersPage() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                             <h5 className="text-xs font-medium text-gray-600 dark:text-gray-300 mb-2">Order Status Flow:</h5>
-                            <div className="flex flex-wrap gap-2 text-xs">
+                            <div className="flex gap-2 text-xs">
                                 <span className="inline-flex items-center px-2 py-1 rounded-full bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-400">
                                     UNPAID
                                 </span>

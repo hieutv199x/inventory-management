@@ -170,7 +170,7 @@ export async function POST(req: NextRequest) {
 }
 
 async function syncOrdersToDatabase(orders: any[], shopId: string) {
-    const BATCH_SIZE = 100;
+    const BATCH_SIZE = 50;
     console.log(`Starting sync of ${orders.length} orders in batches of ${BATCH_SIZE}`);
 
     // Process orders in batches
