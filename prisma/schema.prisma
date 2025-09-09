@@ -118,7 +118,10 @@ model ChannelApp {
 // Rename and expand ShopAuthorization to support all channels
 model ShopAuthorization {
   id         String  @id @default(auto()) @map("_id") @db.ObjectId
-  
+
+  // Relation to TiktokUnsettledTransaction
+  tiktokUnsettledTransactions TiktokUnsettledTransaction[] 
+
   managedName String? // For TikTok: managed shop ID (if applicable)
 
   // Universal shop identification
@@ -518,6 +521,9 @@ model Order {
   notifications Notification[]
   tikTokTransactions TikTokTransaction[]
   
+  // Add relation to unsettled transactions
+  unsettledTransactions TiktokUnsettledTransaction[]
+  
   @@map("orders")
 }
 
@@ -832,4 +838,48 @@ model TikTokTransaction {
   @@index([type])
   @@index([reserve_status])
   @@map("tiktok_transactions")
+}
+
+model TiktokUnsettledTransaction {
+  id                        String    @id @default(auto()) @map("_id") @db.ObjectId
+  shopId                    String    @map("shop_id")
+  
+  // API Response Fields
+  transactionId             String    @unique @map("transaction_id") // maps to 'id' from API
+  adjustmentId              String?   @map("adjustment_id")
+  adjustmentOrderId         String?   @map("adjustment_order_id")
+  currency                  String?
+  estAdjustmentAmount       String?   @map("est_adjustment_amount")
+  estFeeTaxAmount           String?   @map("est_fee_tax_amount")
+  estRevenueAmount          String?   @map("est_revenue_amount")
+  estSettlementAmount       String?   @map("est_settlement_amount")
+  estShippingCostAmount     String?   @map("est_shipping_cost_amount")
+  estimatedSettlement       String?   @map("estimated_settlement")
+  feeTaxBreakdown           Json?     @map("fee_tax_breakdown")
+  orderCreateTime           DateTime? @map("order_create_time")
+  orderDeliveryTime         DateTime? @map("order_delivery_time")
+  orderId                   String?   @map("order_id")
+  revenueBreakdown          Json?     @map("revenue_breakdown")
+  shippingCostBreakdown     Json?     @map("shipping_cost_breakdown")
+  status                    String?
+  type                      String?   // Transaction type (ORDER, CHARGE_BACK, etc.)
+  unsettledReason           String?   @map("unsettled_reason")
+  
+  // Metadata
+  createdAt                 DateTime  @default(now()) @map("created_at")
+  updatedAt                 DateTime  @updatedAt @map("updated_at")
+  
+  // Relations
+  shop                       ShopAuthorization? @relation(fields: [shopId], references: [shopId])
+  
+  // Add relation to Order
+  order                      Order? @relation(fields: [orderId], references: [orderId])
+  
+  @@map("tiktok_unsettled_transactions")
+  @@index([shopId])
+  @@index([type])
+  @@index([status])
+  @@index([orderCreateTime])
+  @@index([orderId])
+  @@index([adjustmentId])
 }

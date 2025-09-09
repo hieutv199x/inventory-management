@@ -47,7 +47,7 @@ export class Product202309EditProductRequestBodySkus {
     'id'?: string;
     'identifierCode'?: Product202309EditProductRequestBodySkusIdentifierCode;
     /**
-    * SKU inventory information.  **Note**: If you omit this object array in the API request, the existing information will remain unchanged.
+    * SKU inventory information.  **Note**:  - If you omit this object array in the API request, the existing information will remain unchanged. - If you are saving a post-live draft with `save_mode=AS_DRAFT`, this field is not supported and will not be saved. When using Get Product to retrieve the draft, the values will reflect those in the base version.
     */
     'inventory'?: Array<Product202309EditProductRequestBodySkusInventory>;
     'listPrice'?: Product202309EditProductRequestBodySkusListPrice;

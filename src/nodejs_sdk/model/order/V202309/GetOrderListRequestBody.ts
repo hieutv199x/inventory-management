@@ -18,7 +18,7 @@ export class Order202309GetOrderListRequestBody {
     */
     'buyerUserId'?: string;
     /**
-    * Filter orders to show only those that are created on or after the specified date and time. Unix timestamp.  Note: `create_time_ge` and `create_time_le` together constitute the creation time filter condition. - If `create_time_ge` is filled but `create_time_le` is empty, `create_time_le` will default to the current time. - If `create_time_le` is filled but `create_time_ge` is empty, `create_time_ge` will default to the earliest shop time.
+    * Filter orders to show only those that are created on or after the specified date and time. Unix timestamp.  Note: `create_time_ge` and `create_time_lt` together constitute the creation time filter condition. - If `create_time_ge` is filled but `create_time_lt` is empty, `create_time_lt` will default to the current time. - If `create_time_lt` is filled but `create_time_ge` is empty, `create_time_ge` will default to the earliest shop time.
     */
     'createTimeGe'?: number;
     /**
@@ -38,7 +38,7 @@ export class Order202309GetOrderListRequestBody {
     */
     'shippingType'?: string;
     /**
-    * Filter orders to show only those that are updated on or after the specified date and time. Unix timestamp.  Note: `update_time_ge` and `update_time_le` together define the update time filter condition. - If `update_time_ge` is filled but `update_time_le` is empty, `update_time_le` will default to the current time. - If `update_time_le` is filled but `update_time_ge` is empty, `update_time_ge` will default to the earliest shop time.
+    * Filter orders to show only those that are updated on or after the specified date and time. Unix timestamp.  Note: `update_time_ge` and `update_time_lt` together define the update time filter condition. - If `update_time_ge` is filled but `update_time_lt` is empty, `update_time_lt` will default to the current time. - If `update_time_lt` is filled but `update_time_ge` is empty, `update_time_ge` will default to the earliest shop time.
     */
     'updateTimeGe'?: number;
     /**

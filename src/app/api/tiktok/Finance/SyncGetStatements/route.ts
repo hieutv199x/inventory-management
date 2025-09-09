@@ -405,7 +405,7 @@ async function processTransactionBatch(transactions: Finance202501GetTransaction
                     transaction_time: new Date((transaction.orderCreateTime ?? 0) * 1000),
                     type: transaction.type || '',
                     amount: parseFloat(transaction.settlementAmount || '0'),
-                    settlement_amount: parseFloat(transaction.settlementAmount || '0'), // Add this line
+                    settlement_amount: transaction.settlementAmount ? Number(transaction.settlementAmount) : 0, // Convert to number
                     currency: 'USD', // Default currency as it's not in the response
                     order_id: transaction.orderId || null,
                     sku_id: null, // Not available in this response

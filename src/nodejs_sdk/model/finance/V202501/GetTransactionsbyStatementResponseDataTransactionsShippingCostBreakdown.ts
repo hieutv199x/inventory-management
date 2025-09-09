@@ -27,6 +27,10 @@ export class Finance202501GetTransactionsbyStatementResponseDataTransactionsShip
     */
     'exchangeShippingFeeAmount'?: string;
     /**
+    * For shipping fee from failed deliveries, you pay up to a standard rate, and TikTok Shop covers the remaining amount.
+    */
+    'failedDeliverySubsidyAmount'?: string;
+    /**
     * A reimbursement from TikTok Shop for Fulfilled by TikTok (FBT) orders that don\'t qualify for free shipping. Applicable only for the US.
     */
     'fbtFulfillmentFeeReimbursementAmount'?: string;
@@ -38,6 +42,10 @@ export class Finance202501GetTransactionsbyStatementResponseDataTransactionsShip
     * The shipping fee paid by the seller for the delivery of returns.
     */
     'returnShippingFeeAmount'?: string;
+    /**
+    * Reimbursement for the shipping fees paid by customers to return packages
+    */
+    'returnShippingFeePaidBuyerAmount'?: string;
     /**
     * The fee borne by the customer to cover the cost of return labels. This fee is collected on the seller\'s behalf and settled according to the agreed payment terms.
     */
@@ -79,6 +87,11 @@ export class Finance202501GetTransactionsbyStatementResponseDataTransactionsShip
             "type": "string"
         },
         {
+            "name": "failedDeliverySubsidyAmount",
+            "baseName": "failed_delivery_subsidy_amount",
+            "type": "string"
+        },
+        {
             "name": "fbtFulfillmentFeeReimbursementAmount",
             "baseName": "fbt_fulfillment_fee_reimbursement_amount",
             "type": "string"
@@ -91,6 +104,11 @@ export class Finance202501GetTransactionsbyStatementResponseDataTransactionsShip
         {
             "name": "returnShippingFeeAmount",
             "baseName": "return_shipping_fee_amount",
+            "type": "string"
+        },
+        {
+            "name": "returnShippingFeePaidBuyerAmount",
+            "baseName": "return_shipping_fee_paid_buyer_amount",
             "type": "string"
         },
         {

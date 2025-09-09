@@ -14,7 +14,7 @@ import { RequestFile } from '../../models';
 
 export class Product202502SearchProductsRequestBody {
     /**
-    * Filter products by their audit status for TikTok Shop. Possible values:  - AUDITING: The product is currently being audited. - FAILED: The product failed the audit, or the audit was cancelled. - APPROVED: The product passed the audit and has been listed on the platform.
+    * Filter products by their audit status for TikTok Shop. Possible values:  - AUDITING: Returns products where the base version or a post-live edit is currently being audited. - FAILED: Returns products where the base version or a post-live edit has failed audit, or had the audit cancelled. - APPROVED: Returns products that passed the audit and has been listed on the platform.
     */
     'auditStatus'?: Array<string>;
     /**
@@ -38,6 +38,10 @@ export class Product202502SearchProductsRequestBody {
     */
     'listingQualityTiers'?: Array<string>;
     /**
+    * Filter products to show only those that have a draft. - true: Returns products in their draft version only. Excludes those without a draft. - false: Returns all products regardless of whether they have a draft. Default: false  **Note**: Applicable only if the product status filter is `ALL`, `DRAFT`, `ACTIVATE`, `SELLER_DEACTIVATED`, or `PLATFORM_DEACTIVATED`.
+    */
+    'returnDraftVersion'?: boolean;
+    /**
     * Filter products by these seller SKU codes.
     */
     'sellerSkus'?: Array<string>;
@@ -46,7 +50,11 @@ export class Product202502SearchProductsRequestBody {
     */
     'skuIds'?: Array<string>;
     /**
-    * Filter products by their status. Default: ALL Possible values:  - ALL - DRAFT - PENDING - FAILED - ACTIVATE - SELLER_DEACTIVATED - PLATFORM_DEACTIVATED - FREEZE - DELETED 
+    * Filter products by their Subscribe and Save (SNS) status. Possible values: - CONFIGURED - ELIGIBLE
+    */
+    'snsFilter'?: string;
+    /**
+    * Filter products based on the product\'s base version. In other words, this filter does not apply to post-live drafts or edits. For example, `status=DRAFT` returns only unpublished products in the DRAFT state, not live products with an active draft.  Possible values:  - ALL - DRAFT - PENDING - FAILED - ACTIVATE - SELLER_DEACTIVATED - PLATFORM_DEACTIVATED - FREEZE - DELETED Default: ALL
     */
     'status'?: string;
     /**
@@ -92,6 +100,11 @@ export class Product202502SearchProductsRequestBody {
             "type": "Array<string>"
         },
         {
+            "name": "returnDraftVersion",
+            "baseName": "return_draft_version",
+            "type": "boolean"
+        },
+        {
             "name": "sellerSkus",
             "baseName": "seller_skus",
             "type": "Array<string>"
@@ -100,6 +113,11 @@ export class Product202502SearchProductsRequestBody {
             "name": "skuIds",
             "baseName": "sku_ids",
             "type": "Array<string>"
+        },
+        {
+            "name": "snsFilter",
+            "baseName": "sns_filter",
+            "type": "string"
         },
         {
             "name": "status",

@@ -16,6 +16,7 @@ import { Product202309PartialEditProductRequestBodyMainImages } from './PartialE
 import { Product202309PartialEditProductRequestBodyPackageDimensions } from './PartialEditProductRequestBodyPackageDimensions';
 import { Product202309PartialEditProductRequestBodyPackageWeight } from './PartialEditProductRequestBodyPackageWeight';
 import { Product202309PartialEditProductRequestBodyProductAttributes } from './PartialEditProductRequestBodyProductAttributes';
+import { Product202309PartialEditProductRequestBodyReplicatedProducts } from './PartialEditProductRequestBodyReplicatedProducts';
 import { Product202309PartialEditProductRequestBodySizeChart } from './PartialEditProductRequestBodySizeChart';
 import { Product202309PartialEditProductRequestBodySkus } from './PartialEditProductRequestBodySkus';
 import { Product202309PartialEditProductRequestBodyVideo } from './PartialEditProductRequestBodyVideo';
@@ -60,9 +61,17 @@ export class Product202309PartialEditProductRequestBody {
     */
     'productAttributes'?: Array<Product202309PartialEditProductRequestBodyProductAttributes>;
     /**
+    * The list of local market replicas to which updates should be synced. As this is a partial edit endpoint, only updated fields will be synced. **Compulsory sync** - **Sales attribute changes** (in sales attribute id/name) must be synced to other markets. Therefore, you must provide the `seller_sku` above and complete the details in this object. The API call will fail if you don\'t provide these details. **Optional sync** - **New SKUs* (new sales attribute value id/name) are optional to sync to other markets. To sync, please provide the `seller_sku` above and complete the details in this object. - **General changes** are optional to sync to other markets. To sync, you only need to provide `replicated_products.region`.
+    */
+    'replicatedProducts'?: Array<Product202309PartialEditProductRequestBodyReplicatedProducts>;
+    /**
     * A comma-delimited list of responsible person IDs. Retrieve the IDs from the [Search Responsible Persons API](67066a55f17b7d02f95d2fb1).  **Note**: Applicable only for the EU market in certain categories. Use the [Get Category Rules API](6509c0febace3e02b74594a9) to check the requirements.
     */
     'responsiblePersonIds'?: Array<string>;
+    /**
+    * Indicates how the product should be saved. Possible values: - AS_DRAFT: Save the product as a draft for future editing. - LISTING: Immediately list the product in the shop. Default: LISTING  **Note**:  - Saving as draft is not supported in the following cases:   - The product status is `DELETED`.   - The product status is `PENDING` or `FREEZE` on any listing platform. - If you are saving a post-live draft with `save_mode=AS_DRAFT`, `inventory` and `delivery_option_ids` fields are **not supported** and will not be saved.
+    */
+    'saveMode'?: string;
     'sizeChart'?: Product202309PartialEditProductRequestBodySizeChart;
     /**
     * A list of Stock Keeping Units (SKUs) used to identify distinct variants of the product.  **Note**: - Max SKUs for BR, EU, JP, MX, UK, US: 300 - Max SKUs for other regions: 100  **Recommendations**: Place the most important variant at the beginning of the array.
@@ -133,9 +142,19 @@ export class Product202309PartialEditProductRequestBody {
             "type": "Array<Product202309PartialEditProductRequestBodyProductAttributes>"
         },
         {
+            "name": "replicatedProducts",
+            "baseName": "replicated_products",
+            "type": "Array<Product202309PartialEditProductRequestBodyReplicatedProducts>"
+        },
+        {
             "name": "responsiblePersonIds",
             "baseName": "responsible_person_ids",
             "type": "Array<string>"
+        },
+        {
+            "name": "saveMode",
+            "baseName": "save_mode",
+            "type": "string"
         },
         {
             "name": "sizeChart",

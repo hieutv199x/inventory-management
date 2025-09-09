@@ -21,6 +21,10 @@ export class Product202309CreateProductRequestBodySkusPrice {
     * The currency. Possible values based on the region: - BRL: Brazil - EUR: France, Germany, Ireland, Italy, Spain - GBP: United Kingdom - IDR: Indonesia - JPY: Japan - MXN: Mexico - MYR: Malaysia - PHP: Philippines - SGD: Singapore - THB: Thailand - USD: United States - VND: Vietnam
     */
     'currency'?: string;
+    /**
+    * **Global sellers** The SKU\'s **local display price** shown on the product page before any discounts.  Refer to [Product Pricing](https://partner.tiktokshop.com/docv2/page/67e1288d76cfee049d9af858) for the allowed price ranges in each market.  **Note**:  - Applicable only for global sellers. -  Required for JP and US shops using China warehouses, optional for others. - This is the definitive final price shown on the product page, all other prices will be ignored.
+    */
+    'salePrice'?: string;
 
     static discriminator: string | undefined = undefined;
 
@@ -33,6 +37,11 @@ export class Product202309CreateProductRequestBodySkusPrice {
         {
             "name": "currency",
             "baseName": "currency",
+            "type": "string"
+        },
+        {
+            "name": "salePrice",
+            "baseName": "sale_price",
             "type": "string"
         }    ];
 

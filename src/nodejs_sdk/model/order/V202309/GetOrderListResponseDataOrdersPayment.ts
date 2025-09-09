@@ -22,11 +22,11 @@ export class Order202309GetOrderListResponseDataOrdersPayment {
     */
     'currency'?: string;
     /**
-    * A fee charged to the buyer to cover the additional processing/handling costs associated with the chosen payment method.  **Note**: Only available in the Indonesia market.
+    * A fee charged to the buyer to cover the additional processing, handling, and/or installment costs associated with the chosen payment method.
     */
     'handlingFee'?: string;
     /**
-    * The cost incurred by the buyers for coverage against defects or damage to the product after purchase.  **Note**: Only available in the Indonesia market.
+    * The cost incurred by the buyers for coverage against defects or damage to the product after purchase.  **Note**: Only available in the US and Indonesia markets.
     */
     'itemInsuranceFee'?: string;
     /**

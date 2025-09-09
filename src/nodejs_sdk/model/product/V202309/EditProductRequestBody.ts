@@ -16,6 +16,7 @@ import { Product202309EditProductRequestBodyMainImages } from './EditProductRequ
 import { Product202309EditProductRequestBodyPackageDimensions } from './EditProductRequestBodyPackageDimensions';
 import { Product202309EditProductRequestBodyPackageWeight } from './EditProductRequestBodyPackageWeight';
 import { Product202309EditProductRequestBodyProductAttributes } from './EditProductRequestBodyProductAttributes';
+import { Product202309EditProductRequestBodyReplicatedProducts } from './EditProductRequestBodyReplicatedProducts';
 import { Product202309EditProductRequestBodySizeChart } from './EditProductRequestBodySizeChart';
 import { Product202309EditProductRequestBodySkus } from './EditProductRequestBodySkus';
 import { Product202309EditProductRequestBodyVideo } from './EditProductRequestBodyVideo';
@@ -38,7 +39,7 @@ export class Product202309EditProductRequestBody {
     */
     'certifications'?: Array<Product202309EditProductRequestBodyCertifications>;
     /**
-    * The custom delivery option IDs to apply to this product if you want to override the default warehouse delivery options. To retrieve the available option IDs, call [Get Warehouse Delivery Options](650aa46ebace3e02b75d9afa) with `scope=PRODUCT`.  **Note**: Leave this field blank to inherit the default delivery options configured for the warehouse.
+    * This field is returned for seller accounts in the following regions only: - ID - MX - MY - PH - SG - TH - VN  For all other regions, this field is NOT used and will NOT be processed if passed for create, edit, or partial edit operations.   The custom delivery option IDs to apply to this product if you want to override the default warehouse delivery options. To retrieve the available option IDs, call [Get Warehouse Delivery Options](https://partner.tiktokshop.com/docv2/page/650aa46ebace3e02b75d9afa) with `scope=PRODUCT`.  **Note**:  - Leave this field blank to inherit the default delivery options configured for the warehouse. - If you are saving a post-live draft with `save_mode=AS_DRAFT`, this field is not supported and will not be saved. When using Get Product to retrieve the draft, the values will reflect those in the base version.
     */
     'deliveryOptionIds'?: Array<string>;
     /**
@@ -80,9 +81,17 @@ export class Product202309EditProductRequestBody {
     */
     'productAttributes'?: Array<Product202309EditProductRequestBodyProductAttributes>;
     /**
+    * The list of local market replicas to which updates should be synced. As this is a full edit endpoint, all fields will be synced. Note that **category changes** and **sales attribute changes** (in sales attribute id/name) must be synced to other markets. Therefore, you must provide the `seller_sku` above and complete the details in this object. The API call will fail if you don\'t provide these details.
+    */
+    'replicatedProducts'?: Array<Product202309EditProductRequestBodyReplicatedProducts>;
+    /**
     * A comma-delimited list of responsible person IDs. Retrieve the IDs from the [Search Responsible Persons API](67066a55f17b7d02f95d2fb1).  **Note**: Applicable only for the EU market in certain categories. Use the [Get Category Rules API](6509c0febace3e02b74594a9) to check the requirements.
     */
     'responsiblePersonIds'?: Array<string>;
+    /**
+    * Indicates how the product should be saved. Possible values: - AS_DRAFT: Save the product as a draft for future editing. - LISTING: Immediately list the product in the shop. Default: LISTING  **Note**:  - Saving as draft is not supported in the following cases:   - The product status is `DELETED`.   - The product status is `PENDING` or `FREEZE` on any listing platform. - If you are saving a post-live draft with `save_mode=AS_DRAFT`, `inventory` and `delivery_option_ids` fields are not supported and will not be saved.
+    */
+    'saveMode'?: string;
     /**
     * The shipping insurance purchase requirement imposed on buyers for the product.  Possible values: - REQUIRED: Shipping insurance is mandatory and buyers can\'t opt out. - OPTIONAL: Buyers can choose to purchase shipping insurance through the platform. - NOT_SUPPORTED: Shipping insurance is not supported for the product. Default: OPTIONAL  Applicable only if the listing platforms include TOKOPEDIA.
     */
@@ -182,9 +191,19 @@ export class Product202309EditProductRequestBody {
             "type": "Array<Product202309EditProductRequestBodyProductAttributes>"
         },
         {
+            "name": "replicatedProducts",
+            "baseName": "replicated_products",
+            "type": "Array<Product202309EditProductRequestBodyReplicatedProducts>"
+        },
+        {
             "name": "responsiblePersonIds",
             "baseName": "responsible_person_ids",
             "type": "Array<string>"
+        },
+        {
+            "name": "saveMode",
+            "baseName": "save_mode",
+            "type": "string"
         },
         {
             "name": "shippingInsuranceRequirement",

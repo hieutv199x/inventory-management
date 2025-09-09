@@ -342,9 +342,10 @@ export class LogisticsV202309Api {
      * @param warehouseId The warehouse ID.
      * @param xTtsAccessToken 
      * @param contentType Allowed type: application/json
+     * @param scope Specify the scope of delivery options to retrieve. - &#x60;WAREHOUSE&#x60;: Returns all delivery options currently active for the warehouse. By default, orders will be shipped based on these options. - &#x60;PRODUCT&#x60;: Returns the delivery options that can be assigned directly to a product. Use this if you want to enable custom delivery options for a product, overriding the default warehouse options. Only &#x60;delivery_options.id&#x60; and &#x60;delivery_options.name&#x60; will be included in the response when this is specified. Default: &#x60;WAREHOUSE&#x60;
      * @param shopCipher 
      */
-    public async WarehousesWarehouseIdDeliveryOptionsGet (warehouseId: string, xTtsAccessToken: string, contentType: string, shopCipher?: string, options: {headers: {[name: string]: string}} = {headers: {}}) : Promise<{ response: http.IncomingMessage; body: Logistics202309GetWarehouseDeliveryOptionsResponse;  }> {
+    public async WarehousesWarehouseIdDeliveryOptionsGet (warehouseId: string, xTtsAccessToken: string, contentType: string, scope?: string, shopCipher?: string, options: {headers: {[name: string]: string}} = {headers: {}}) : Promise<{ response: http.IncomingMessage; body: Logistics202309GetWarehouseDeliveryOptionsResponse;  }> {
         const localVarPath = this.basePath + '/logistics/202309/warehouses/{warehouse_id}/delivery_options'
             .replace('{' + 'warehouse_id' + '}', encodeURIComponent(String(warehouseId)));
         let localVarQueryParameters: any = {};
@@ -371,6 +372,10 @@ export class LogisticsV202309Api {
         // verify required parameter 'contentType' is not null or undefined
         if (contentType === null || contentType === undefined) {
             throw new Error('Required parameter contentType was null or undefined when calling WarehousesWarehouseIdDeliveryOptionsGet.');
+        }
+
+        if (scope !== undefined) {
+            localVarQueryParameters['scope'] = ObjectSerializer.serialize(scope, "string");
         }
 
         if (shopCipher !== undefined) {

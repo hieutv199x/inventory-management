@@ -24,6 +24,10 @@ interface Order {
     lineItems: LineItem[];
     payment?: Payment;
     recipientAddress?: RecipientAddress;
+    unsettledTransactions?: { // Added unsettledTransactions field
+        id: string;
+        estSettlementAmount: string;
+    }[];
     channelData?: string; // Added channelData field
     shop: {
         shopName?: string;
@@ -113,10 +117,6 @@ export default function OrdersPage() {
     const [copiedCustomer, setCopiedCustomer] = useState<string | null>(null);
     const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
 
-    useEffect(() => {
-        fetchOrders();
-    }, []);
-
     const handleFilterChange = (field: keyof typeof filters, value: string) => {
         setFilters(prev => ({ ...prev, [field]: value }));
         setCurrentPage(1);
@@ -125,7 +125,6 @@ export default function OrdersPage() {
     // Add search function
     const handleSearch = async (e: React.FormEvent) => {
         e.preventDefault();
-        showLoading('Searching orders...');
         setFilters(prev => ({ ...prev, keyword: searchKeyword }));
         setCurrentPage(1);
     };
@@ -171,12 +170,10 @@ export default function OrdersPage() {
         }
     }, [filters, currentPage, pageSize, showLoading, hideLoading]);
 
-    // Reset to first page when filters change
+    // Consolidate all fetchOrders triggers into a single useEffect
     useEffect(() => {
-        if (currentPage === 1) {
-            fetchOrders();
-        }
-    }, [filters, currentPage]);
+        fetchOrders();
+    }, [filters, currentPage, pageSize]); // This will trigger when any of these change
 
     const handlePageChange = (newPage: number) => {
         if (newPage >= 1 && newPage <= pagination.totalPages) {
@@ -218,9 +215,36 @@ export default function OrdersPage() {
             });
 
             alert('Orders synced successfully');
-            fetchOrders();
+            // This will trigger fetchOrders through the useEffect
+            setFilters(prev => ({ ...prev })); // Force re-render to trigger useEffect
         } catch (error) {
             console.error('Error syncing orders:', error);
+            alert('Sync failed');
+        } finally {
+            hideLoading();
+        }
+    };
+
+    const syncUnsettledTransactions = async () => {
+        if (!filters?.shopId) {
+            alert('Please select a shop to sync unsettled transactions');
+            return;
+        }
+
+        showLoading('Syncing unsettled transactions...');
+        try {
+            const response = await httpClient.post('/tiktok/Finance/sync-unsettled-transactions', {
+                shop_id: filters.shopId,
+                search_time_ge: filters.dateFrom ? Math.floor(new Date(filters.dateFrom).getTime() / 1000) : undefined,
+                search_time_lt: filters.dateTo ? Math.floor(new Date(filters.dateTo).getTime() / 1000) : undefined,
+                page_size: 50,
+            });
+
+            alert('Unsettled transactions synced successfully');
+            // This will trigger fetchOrders through the useEffect
+            setFilters(prev => ({ ...prev })); // Force re-render to trigger useEffect
+        } catch (error) {
+            console.error('Error syncing unsettled transactions:', error);
             alert('Sync failed');
         } finally {
             hideLoading();
@@ -365,6 +389,14 @@ export default function OrdersPage() {
                         >
                             {syncing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <RefreshCw className="h-4 w-4 mr-2" />}
                             Sync Orders
+                        </button>
+                        <button
+                            onClick={syncUnsettledTransactions}
+                            disabled={syncing}
+                            className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 disabled:opacity-50 flex items-center justify-center hover:shadow-lg transition duration-200"
+                        >
+                            {syncing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+                            Sync Unsettled Transaction
                         </button>
                     </div>
                 </div>
@@ -743,9 +775,9 @@ export default function OrdersPage() {
                                                             Subtotal: {formatCurrency(order.payment.subTotal, order.payment.currency)}
                                                         </div>
                                                     )}
-                                                    {order.trackingNumber && (
-                                                        <div className="text-xs font-mono text-blue-600 truncate max-w-48">
-                                                            Track: {order.trackingNumber}
+                                                    {order.unsettledTransactions && order.unsettledTransactions.length > 0 && (
+                                                        <div className="text-xs text-red-500 font-mono">
+                                                            Est: {formatCurrency(order.unsettledTransactions[0]?.estSettlementAmount, order.payment?.currency || 'USD')}
                                                         </div>
                                                     )}
                                                 </div>

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
-import { getUserWithShopAccess, validateShopAccess, getActiveShopIds } from "@/lib/auth";
+import { getUserWithShopAccess, getActiveShopIds } from "@/lib/auth";
 
 const prisma = new PrismaClient();
 
@@ -84,6 +84,7 @@ export async function GET(
                         updatedAt: true,
                     }
                 },
+                unsettledTransactions: true,
                 payment: {
                     select: {
                         id: true,

@@ -20,6 +20,7 @@ import { Product202309GetProductResponseDataSkusListPrice } from './GetProductRe
 import { Product202309GetProductResponseDataSkusPreSale } from './GetProductResponseDataSkusPreSale';
 import { Product202309GetProductResponseDataSkusPrice } from './GetProductResponseDataSkusPrice';
 import { Product202309GetProductResponseDataSkusSalesAttributes } from './GetProductResponseDataSkusSalesAttributes';
+import { Product202309GetProductResponseDataSkusStatusInfo } from './GetProductResponseDataSkusStatusInfo';
 
 export class Product202309GetProductResponseDataSkus {
     /**
@@ -49,7 +50,7 @@ export class Product202309GetProductResponseDataSkus {
     'id'?: string;
     'identifierCode'?: Product202309GetProductResponseDataSkusIdentifierCode;
     /**
-    * SKU inventory details.
+    * SKU inventory details. **Note**: This field is not supported in post-live drafts. Therefore, the values here will always reflect those in the base version, even if you set `return_draft_version=true`.
     */
     'inventory'?: Array<Product202309GetProductResponseDataSkusInventory>;
     'listPrice'?: Product202309GetProductResponseDataSkusListPrice;
@@ -67,6 +68,7 @@ export class Product202309GetProductResponseDataSkus {
     * The total quantity/volume of the product represented by the SKU. For example, if the SKU represents 500ml of water, this value would be 500 if the unit type is defined as ml. Applicable only for the EU market.  **Note**:  - This is mainly used to calculate the unit price of the SKU, and is required only if you wish to display the unit price to facilitate easier price comparisons across different products and packaging sizes. - Unit price = Selling price/(SKU unit count/base unit count). Therefore if you want to obtain the unit price, you would also need to define the \"base unit count\" and the \"unit type\" product attributes. Retrieve the relevant information for these product attributes by using the [Get Attributes API](https://partner.tiktokshop.com/docv2/page/6509c5784a0bb702c0561cc8).
     */
     'skuUnitCount'?: string;
+    'statusInfo'?: Product202309GetProductResponseDataSkusStatusInfo;
 
     static discriminator: string | undefined = undefined;
 
@@ -145,6 +147,11 @@ export class Product202309GetProductResponseDataSkus {
             "name": "skuUnitCount",
             "baseName": "sku_unit_count",
             "type": "string"
+        },
+        {
+            "name": "statusInfo",
+            "baseName": "status_info",
+            "type": "Product202309GetProductResponseDataSkusStatusInfo"
         }    ];
 
     static getAttributeTypeMap() {

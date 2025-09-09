@@ -78,6 +78,12 @@ export async function GET(req: NextRequest) {
             shopName: true,
             shopId: true
           }
+        },
+        unsettledTransactions: {
+          select: {
+            id: true,
+            estSettlementAmount: true
+          }
         }
       },
       orderBy: {

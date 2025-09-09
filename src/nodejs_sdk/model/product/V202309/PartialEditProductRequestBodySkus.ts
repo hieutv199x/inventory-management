@@ -38,7 +38,7 @@ export class Product202309PartialEditProductRequestBodySkus {
     'id'?: string;
     'identifierCode'?: Product202309PartialEditProductRequestBodySkusIdentifierCode;
     /**
-    * SKU inventory information.
+    * SKU inventory information. **Note**: If you are saving a post-live draft with `save_mode=AS_DRAFT`, this field is not supported and will not be saved. When using Get Product to retrieve the draft, the values will reflect those in the base version.
     */
     'inventory'?: Array<Product202309PartialEditProductRequestBodySkusInventory>;
     'listPrice'?: Product202309PartialEditProductRequestBodySkusListPrice;

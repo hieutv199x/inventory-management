@@ -38,7 +38,7 @@ export class Product202309CreateProductRequestBody {
     */
     'certifications'?: Array<Product202309CreateProductRequestBodyCertifications>;
     /**
-    * The custom delivery option IDs to apply to this product if you want to override the default warehouse delivery options. To retrieve the available option IDs, call [Get Warehouse Delivery Options](650aa46ebace3e02b75d9afa) with `scope=PRODUCT`.  **Note**: Leave this field blank to inherit the default delivery options configured for the warehouse.
+    * This field is returned for seller accounts in the following regions only: - ID - MX - MY - PH - SG - TH - VN  For all other regions, this field is NOT used and will NOT be processed if passed for create, edit, or partial edit operations.   The custom delivery option IDs to apply to this product if you want to override the default warehouse delivery options. To retrieve the available option IDs, call [Get Warehouse Delivery Options](650aa46ebace3e02b75d9afa) with `scope=PRODUCT`.  **Note**: Leave this field blank to inherit the default delivery options configured for the warehouse.
     */
     'deliveryOptionIds'?: Array<string>;
     /**

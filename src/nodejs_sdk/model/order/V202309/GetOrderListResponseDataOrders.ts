@@ -115,6 +115,10 @@ export class Order202309GetOrderListResponseDataOrders {
     */
     'fastDispatchSlaTime'?: number;
     /**
+    * Fulfillment priority value that can be used to prioritize shipping (only available in SEA)  100 = Instant 200 = Sameday 8 Hours  300 = Sameday  400 = Next Day Delivery 500 = Express 600 = Standard 700 = Economy 800 = Cargo
+    */
+    'fulfillmentPriorityLevel'?: number;
+    /**
     * Fulfillment type. Only orders with fulfillment type can be shipped by sellers. Available values: - `FULFILLMENT_BY_SELLER`: a method where sellers fulfill orders directly from their own inventory, without using TikTok\'s fulfillment centers. In this model, the seller is responsible for storing, packaging, and shipping the products to customers. - `FULFILLMENT_BY_TIKTOK`: a service offered by TikTok where sellers can send their products to TikTok\'s fulfillment centers. TikTok then takes care of storing, picking, packing, and shipping the products to customers. - `FULFILLMENT_BY_DILAYANI_TOKOPEDIA`: a method where Tokopedia GoTo Logistics provides warehousing and logistics services to sellers and charges a fee for the service.
     */
     'fulfillmentType'?: string;
@@ -156,7 +160,7 @@ export class Order202309GetOrderListResponseDataOrders {
     */
     'lineItems'?: Array<Order202309GetOrderListResponseDataOrdersLineItems>;
     /**
-    * Does an order invoice need to be uploaded? Available values: - `UNKNOWN` - `NEED_INVOICE` - `NO_NEED` - `INVOICE_UPLOADED` **Note**: Only available in the Brazil market.
+    * Whether an invoice needs to be uploaded and uploaded status (only for Brazil market). - UNKNOWN:  Currently unable to confirm whether an invoice is needed - NEED_INVOICE: This order requires an invoice and the invoice has not been uploaded yet - NO_NEED：This order does not require an invoice - INVOICE_UPLOADED: The invoice for this order has been uploaded and verified. If the order is split, it will be marked as \"uploaded\" once any sub-order\'s invoice is uploaded. - INVOICE_PROCESSING: The invoice for this order is currently being uploaded/cancelled. Please wait for the final result and do not repeat the operation
     */
     'needUploadInvoice'?: string;
     /**
@@ -181,6 +185,10 @@ export class Order202309GetOrderListResponseDataOrders {
     */
     'pickUpCutOffTime'?: number;
     'recipientAddress'?: Order202309GetOrderListResponseDataOrdersRecipientAddress;
+    /**
+    * Recommended time to ship based on the each LSP service type (only available in SEA) 
+    */
+    'recommendedShippingTime'?: number;
     /**
     * The date on which order handling starts and the status of the order changes to [`AWAITING_SHIPMENT`](https://partner.tiktokshop.com/docv2/page/650b1b4bbace3e02b76d1011).  Applicable only if the `order_type` is `PRE_ORDER`.
     */
@@ -374,6 +382,11 @@ export class Order202309GetOrderListResponseDataOrders {
             "type": "number"
         },
         {
+            "name": "fulfillmentPriorityLevel",
+            "baseName": "fulfillment_priority_level",
+            "type": "number"
+        },
+        {
             "name": "fulfillmentType",
             "baseName": "fulfillment_type",
             "type": "string"
@@ -467,6 +480,11 @@ export class Order202309GetOrderListResponseDataOrders {
             "name": "recipientAddress",
             "baseName": "recipient_address",
             "type": "Order202309GetOrderListResponseDataOrdersRecipientAddress"
+        },
+        {
+            "name": "recommendedShippingTime",
+            "baseName": "recommended_shipping_time",
+            "type": "number"
         },
         {
             "name": "releaseDate",

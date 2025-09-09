@@ -47,6 +47,10 @@ export class Order202309GetOrderDetailResponseDataOrders {
     */
     'cancellationInitiator'?: string;
     /**
+    * The national channel entity registration ID of payment institution/creditor. In Brazil, it is the CNPJ of payment instituion.
+    */
+    'channelEntityNationalRegistryId'?: string;
+    /**
     * If the order hasn\'t updated its status to `IN_TRANSIT` before this time, the order will be automatically canceled by TikTok Shop
     */
     'collectionDueTime'?: number;
@@ -115,6 +119,10 @@ export class Order202309GetOrderDetailResponseDataOrders {
     */
     'fastDispatchSlaTime'?: number;
     /**
+    * Fulfillment priority value that can be used to prioritize shipping (only available in SEA)  100 = Instant 200 = Sameday 8 Hours  300 = Sameday  400 = Next Day Delivery 500 = Express 600 = Standard 700 = Economy 800 = Cargo
+    */
+    'fulfillmentPriorityLevel'?: number;
+    /**
     * Fulfillment type.  Only orders with fulfillment type can be shipped by sellers. Possible values: - `FULFILLMENT_BY_SELLER`: a method where sellers fulfill orders directly from their own inventory, without using TikTok\'s fulfillment centers. In this model, the seller is responsible for storing, packaging, and shipping the product to customers. - `FULFILLMENT_BY_TIKTOK`: a service offered by TikTok that enables sellers to send their products to TikTok\'s fulfillment centers. TikTok then takes care of storing, picking, packing, and shipping the products to customers. - `FULFILLMENT_BY_DILAYANI_TOKOPEDIA`: a method where Tokopedia GoTo Logistics provides warehousing and logistics services to sellers and charges a fee for the service.
     */
     'fulfillmentType'?: string;
@@ -156,7 +164,7 @@ export class Order202309GetOrderDetailResponseDataOrders {
     */
     'lineItems'?: Array<Order202309GetOrderDetailResponseDataOrdersLineItems>;
     /**
-    * Whether an invoice needs to be uploaded (only for Brazil market). - `UNKNOWN` - `NEED_INVOICE` - `NO_NEED` - `INVOICE_UPLOADED`
+    * Whether an invoice needs to be uploaded and uploaded status (only for Brazil market). - UNKNOWN:  Currently unable to confirm whether an invoice is needed - NEED_INVOICE: This order requires an invoice and the invoice has not been uploaded yet - NO_NEED：This order does not require an invoice - INVOICE_UPLOADED: The invoice for this order has been uploaded and verified. If the order is split, it will be marked as \"uploaded\" once any sub-order\'s invoice is uploaded. - INVOICE_PROCESSING: The invoice for this order is currently being uploaded/cancelled. Please wait for the final result and do not repeat the operation
     */
     'needUploadInvoice'?: string;
     /**
@@ -173,6 +181,18 @@ export class Order202309GetOrderDetailResponseDataOrders {
     'paidTime'?: number;
     'payment'?: Order202309GetOrderDetailResponseDataOrdersPayment;
     /**
+    * Authorization code of current transaction (only for the Brazilian market). For card transactions (credit/debit card), this field will be transaction authorization code. For PIX transactions, this field will be E2E ID.
+    */
+    'paymentAuthCode'?: string;
+    /**
+    * Code to distinguish different payment method. Only assigned when the payment method is using bank card. Possible values are: Debit, Credit, Prepaid 
+    */
+    'paymentCardType'?: string;
+    /**
+    * Payment method code identifying current transaction. It will contains payment method and card brand if it is card transaction.
+    */
+    'paymentMethodCode'?: string;
+    /**
     * Payment method name, only for display
     */
     'paymentMethodName'?: string;
@@ -181,6 +201,10 @@ export class Order202309GetOrderDetailResponseDataOrders {
     */
     'pickUpCutOffTime'?: number;
     'recipientAddress'?: Order202309GetOrderDetailResponseDataOrdersRecipientAddress;
+    /**
+    * Recommended time to ship based on the each LSP service type (only available in SEA) 
+    */
+    'recommendedShippingTime'?: number;
     /**
     * The date on which order handling starts and the status of the order changes to [`AWAITING_SHIPMENT`](https://partner.tiktokshop.com/docv2/page/650b1b4bbace3e02b76d1011).  Applicable only if the `order_type` is `PRE_ORDER`.
     */
@@ -289,6 +313,11 @@ export class Order202309GetOrderDetailResponseDataOrders {
             "type": "string"
         },
         {
+            "name": "channelEntityNationalRegistryId",
+            "baseName": "channel_entity_national_registry_id",
+            "type": "string"
+        },
+        {
             "name": "collectionDueTime",
             "baseName": "collection_due_time",
             "type": "number"
@@ -374,6 +403,11 @@ export class Order202309GetOrderDetailResponseDataOrders {
             "type": "number"
         },
         {
+            "name": "fulfillmentPriorityLevel",
+            "baseName": "fulfillment_priority_level",
+            "type": "number"
+        },
+        {
             "name": "fulfillmentType",
             "baseName": "fulfillment_type",
             "type": "string"
@@ -454,6 +488,21 @@ export class Order202309GetOrderDetailResponseDataOrders {
             "type": "Order202309GetOrderDetailResponseDataOrdersPayment"
         },
         {
+            "name": "paymentAuthCode",
+            "baseName": "payment_auth_code",
+            "type": "string"
+        },
+        {
+            "name": "paymentCardType",
+            "baseName": "payment_card_type",
+            "type": "string"
+        },
+        {
+            "name": "paymentMethodCode",
+            "baseName": "payment_method_code",
+            "type": "string"
+        },
+        {
             "name": "paymentMethodName",
             "baseName": "payment_method_name",
             "type": "string"
@@ -467,6 +516,11 @@ export class Order202309GetOrderDetailResponseDataOrders {
             "name": "recipientAddress",
             "baseName": "recipient_address",
             "type": "Order202309GetOrderDetailResponseDataOrdersRecipientAddress"
+        },
+        {
+            "name": "recommendedShippingTime",
+            "baseName": "recommended_shipping_time",
+            "type": "number"
         },
         {
             "name": "releaseDate",

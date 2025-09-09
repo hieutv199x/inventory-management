@@ -26,6 +26,14 @@ export class Finance202501GetTransactionsbyOrderResponseDataSkuTransactionsFeeTa
     */
     'affiliateCommissionAmountBeforePit'?: string;
     /**
+    * The amount reserved for creator commissions after an order is paid. Applies only to commissions tied to order volume and is based on the highest earning rate.
+    */
+    'affiliateCommissionDeposit'?: string;
+    /**
+    * The commission deposit refunded to you after order settlement. Applies only to commissions tied to order volume.
+    */
+    'affiliateCommissionRelease'?: string;
+    /**
     * The commission amount for purchases through affiliate partner links.
     */
     'affiliatePartnerCommissionAmount'?: string;
@@ -102,6 +110,10 @@ export class Finance202501GetTransactionsbyOrderResponseDataSkuTransactionsFeeTa
     */
     'sfpServiceFeeAmount'?: string;
     /**
+    * The advertising commission cost a merchant pays to TikTok Shop Affiliate Partner (TAP).
+    */
+    'tapShopAdsCommission'?: string;
+    /**
     * The transaction fee charged for processing successful orders.
     */
     'transactionFeeAmount'?: string;
@@ -109,6 +121,10 @@ export class Finance202501GetTransactionsbyOrderResponseDataSkuTransactionsFeeTa
     * The commission amount charged by TikTok Shop Partners (TSP).
     */
     'tspCommissionAmount'?: string;
+    /**
+    * Infrastructure fees are a fixed service fee that TikTok Shop charges for providing, maintaining, and developing infrastructure for delivery services. It applies to delivered orders on the main order level.
+    */
+    'vnFixInfrastructureFee'?: string;
     /**
     * The service fee charged for participation in the Voucher Xtra program.
     */
@@ -130,6 +146,16 @@ export class Finance202501GetTransactionsbyOrderResponseDataSkuTransactionsFeeTa
         {
             "name": "affiliateCommissionAmountBeforePit",
             "baseName": "affiliate_commission_amount_before_pit",
+            "type": "string"
+        },
+        {
+            "name": "affiliateCommissionDeposit",
+            "baseName": "affiliate_commission_deposit",
+            "type": "string"
+        },
+        {
+            "name": "affiliateCommissionRelease",
+            "baseName": "affiliate_commission_release",
             "type": "string"
         },
         {
@@ -228,6 +254,11 @@ export class Finance202501GetTransactionsbyOrderResponseDataSkuTransactionsFeeTa
             "type": "string"
         },
         {
+            "name": "tapShopAdsCommission",
+            "baseName": "tap_shop_ads_commission",
+            "type": "string"
+        },
+        {
             "name": "transactionFeeAmount",
             "baseName": "transaction_fee_amount",
             "type": "string"
@@ -235,6 +266,11 @@ export class Finance202501GetTransactionsbyOrderResponseDataSkuTransactionsFeeTa
         {
             "name": "tspCommissionAmount",
             "baseName": "tsp_commission_amount",
+            "type": "string"
+        },
+        {
+            "name": "vnFixInfrastructureFee",
+            "baseName": "vn_fix_infrastructure_fee",
             "type": "string"
         },
         {

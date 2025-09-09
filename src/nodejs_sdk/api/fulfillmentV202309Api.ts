@@ -491,9 +491,9 @@ export class FulfillmentV202309Api {
         });
     }
     /**
-     * **This API is currently exclusive to the following markets: US, UK, ES, IE.**  This API is for sellers who fulfill orders through their own selected/preferred logistics carrier, and allows sellers to upload valid package information (items in packages, shipping provider information, and tracking number) orders/order line items to TikTok Shop. Use [Get Shipping Providers API](https://partner.tiktokshop.com/docv2/page/650aa48d4a0bb702c06d85cd?external_id=650aa48d4a0bb702c06d85cd) to retrieve the `shipping_provider_id` for shipping providers.
+     * **This API is currently exclusive to the following markets: US, UK, ES, IE, IT, DE, FR, JP.** This API is for sellers who fulfill orders through their own selected/preferred logistics carrier, and allows sellers to upload valid package information (items in packages, shipping provider information, and tracking number) orders/order line items to TikTok Shop. Use [Get Shipping Providers API](https://partner.tiktokshop.com/docv2/page/650aa48d4a0bb702c06d85cd?external_id=650aa48d4a0bb702c06d85cd) to retrieve the `shipping_provider_id` for shipping providers.
      * @summary MarkPackageAsShipped
-     * @param orderId 
+     * @param orderId The unique identifier for a TikTok Shop order.
      * @param xTtsAccessToken 
      * @param contentType Allowed type: application/json
      * @param shopCipher 

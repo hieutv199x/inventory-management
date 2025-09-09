@@ -16,6 +16,7 @@ import { Product202502SearchProductsResponseDataProductsSkusInventory } from './
 import { Product202502SearchProductsResponseDataProductsSkusListPrice } from './SearchProductsResponseDataProductsSkusListPrice';
 import { Product202502SearchProductsResponseDataProductsSkusPreSale } from './SearchProductsResponseDataProductsSkusPreSale';
 import { Product202502SearchProductsResponseDataProductsSkusPrice } from './SearchProductsResponseDataProductsSkusPrice';
+import { Product202502SearchProductsResponseDataProductsSkusStatusInfo } from './SearchProductsResponseDataProductsSkusStatusInfo';
 
 export class Product202502SearchProductsResponseDataProductsSkus {
     /**
@@ -27,7 +28,7 @@ export class Product202502SearchProductsResponseDataProductsSkus {
     */
     'id'?: string;
     /**
-    * SKU inventory information.
+    * SKU inventory information. **Note**: This field is not supported in post-live drafts, therefore the values here will always reflect those in the base version, even if you set `return_draft_version=true`.
     */
     'inventory'?: Array<Product202502SearchProductsResponseDataProductsSkusInventory>;
     'listPrice'?: Product202502SearchProductsResponseDataProductsSkusListPrice;
@@ -37,6 +38,7 @@ export class Product202502SearchProductsResponseDataProductsSkus {
     * An internal code/name for managing SKUs, not visible to buyers. 
     */
     'sellerSku'?: string;
+    'statusInfo'?: Product202502SearchProductsResponseDataProductsSkusStatusInfo;
 
     static discriminator: string | undefined = undefined;
 
@@ -75,6 +77,11 @@ export class Product202502SearchProductsResponseDataProductsSkus {
             "name": "sellerSku",
             "baseName": "seller_sku",
             "type": "string"
+        },
+        {
+            "name": "statusInfo",
+            "baseName": "status_info",
+            "type": "Product202502SearchProductsResponseDataProductsSkusStatusInfo"
         }    ];
 
     static getAttributeTypeMap() {

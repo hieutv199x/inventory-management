@@ -42,6 +42,14 @@ export class Finance202501GetTransactionsbyOrderResponseDataSkuTransactionsShipp
     */
     'promoShippingIncentiveAmount'?: string;
     /**
+    * Shipping fee returned to customers due returns and refunds.Does not include subsidies.This is part of `customer_paid_shipping_fee_amount`. 
+    */
+    'refundedCustomerShippingFeeAmount'?: string;
+    /**
+    * For shipping fee from returns and refunds, you pay up to a standard rate, and TikTok Shop covers the remaining amount.This is part of `customer_paid_shipping_fee_amount`.
+    */
+    'returnRefundSubsidyAmount'?: string;
+    /**
     * The shipping fee discount provided by sellers.
     */
     'sellerShippingFeeDiscountAmount'?: string;
@@ -86,6 +94,16 @@ export class Finance202501GetTransactionsbyOrderResponseDataSkuTransactionsShipp
         {
             "name": "promoShippingIncentiveAmount",
             "baseName": "promo_shipping_incentive_amount",
+            "type": "string"
+        },
+        {
+            "name": "refundedCustomerShippingFeeAmount",
+            "baseName": "refunded_customer_shipping_fee_amount",
+            "type": "string"
+        },
+        {
+            "name": "returnRefundSubsidyAmount",
+            "baseName": "return_refund_subsidy_amount",
             "type": "string"
         },
         {

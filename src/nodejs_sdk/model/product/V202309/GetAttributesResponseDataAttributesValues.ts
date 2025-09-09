@@ -14,6 +14,10 @@ import { RequestFile } from '../../models';
 
 export class Product202309GetAttributesResponseDataAttributesValues {
     /**
+    * The icon url value of the built-in attribute value.
+    */
+    'iconUrl'?: string;
+    /**
     * The ID of the built-in attribute value.
     */
     'id'?: string;
@@ -25,6 +29,11 @@ export class Product202309GetAttributesResponseDataAttributesValues {
     static discriminator: string | undefined = undefined;
 
     static attributeTypeMap: Array<{name: string, baseName: string, type: string}> = [
+        {
+            "name": "iconUrl",
+            "baseName": "icon_url",
+            "type": "string"
+        },
         {
             "name": "id",
             "baseName": "id",
