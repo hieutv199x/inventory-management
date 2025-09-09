@@ -89,12 +89,6 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({ order, isOpen, onCl
                             Order ID: {order.orderId}
                         </p>
                     </div>
-                    <button
-                        onClick={onClose}
-                        className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-                    >
-                        <X className="h-6 w-6" />
-                    </button>
                 </div>
 
                 {/* Modal Body */}
@@ -210,51 +204,6 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({ order, isOpen, onCl
                             </div>
                         </div>
 
-                        {/* 2. Customer Information */}
-                        <div>
-                            <div className="flex items-center justify-between mb-4">
-                                <div className="flex items-center gap-2">
-                                    <User className="h-5 w-5 text-green-600" />
-                                    <h4 className="text-lg font-semibold text-gray-900 dark:text-white">Customer Information</h4>
-                                </div>
-                                <button
-                                    onClick={() => copyToClipboard(formatCustomerInfo(), 'customer')}
-                                    className="inline-flex items-center gap-1 px-2 py-1 text-xs text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 transition-colors"
-                                    title="Copy customer information"
-                                >
-                                    {copiedField === 'customer' ? (
-                                        <>
-                                            <Check className="h-3 w-3" />
-                                            Copied
-                                        </>
-                                    ) : (
-                                        <>
-                                            <Copy className="h-3 w-3" />
-                                            Copy
-                                        </>
-                                    )}
-                                </button>
-                            </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
-                                    <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Buyer Email</dt>
-                                    <dd className="mt-2 text-sm text-gray-900 dark:text-white break-all">{order.buyerEmail}</dd>
-                                </div>
-                                <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
-                                    <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">User ID</dt>
-                                    <dd className="mt-2 text-sm text-gray-900 dark:text-white">
-                                        {orderChannelData.userId || 'N/A'}
-                                    </dd>
-                                </div>
-                                {order.buyerMessage && (
-                                    <div className="md:col-span-2 bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
-                                        <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Buyer Message</dt>
-                                        <dd className="mt-2 text-sm text-gray-900 dark:text-white">{order.buyerMessage}</dd>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-
                         {/* 3. Delivery Address */}
                         <div>
                             <div className="flex items-center justify-between mb-4">
@@ -312,6 +261,52 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({ order, isOpen, onCl
                                             {addressChannelData.regionCode}
                                         </dd>
                                     </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* 6. Shipping Information */}
+                        <div>
+                            <div className="flex items-center gap-2 mb-4">
+                                <Truck className="h-5 w-5 text-indigo-600" />
+                                <h4 className="text-lg font-semibold text-gray-900 dark:text-white">Shipping Information</h4>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
+                                    <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Shipping Provider</dt>
+                                    <dd className="mt-2 text-sm text-gray-900 dark:text-white">
+                                        {orderChannelData.shippingProvider || 'N/A'}
+                                    </dd>
+                                </div>
+                                <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
+                                    <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Delivery Option</dt>
+                                    <dd className="mt-2 text-sm text-gray-900 dark:text-white">
+                                        {orderChannelData.deliveryOptionName || 'N/A'}
+                                    </dd>
+                                </div>
+                                <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
+                                    <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Tracking Number</dt>
+                                    <dd className="mt-2 text-sm font-mono text-gray-900 dark:text-white">
+                                        {orderChannelData.trackingNumber || 'N/A'}
+                                    </dd>
+                                </div>
+                                <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
+                                    <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Delivery Time</dt>
+                                    <dd className="mt-2 text-sm text-gray-900 dark:text-white">
+                                        {order.deliveryTime ? formatTimestamp(order.deliveryTime) : 'N/A'}
+                                    </dd>
+                                </div>
+                                <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
+                                    <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Fulfillment Type</dt>
+                                    <dd className="mt-2 text-sm text-gray-900 dark:text-white">
+                                        {orderChannelData.fulfillmentType || 'N/A'}
+                                    </dd>
+                                </div>
+                                <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
+                                    <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Collection Time</dt>
+                                    <dd className="mt-2 text-sm text-gray-900 dark:text-white">
+                                        {orderChannelData.collectionTime ? formatTimestamp(orderChannelData.collectionTime) : 'N/A'}
+                                    </dd>
                                 </div>
                             </div>
                         </div>
@@ -439,6 +434,51 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({ order, isOpen, onCl
                             </div>
                         </div>
 
+                        {/* 2. Customer Information */}
+                        <div>
+                            <div className="flex items-center justify-between mb-4">
+                                <div className="flex items-center gap-2">
+                                    <User className="h-5 w-5 text-green-600" />
+                                    <h4 className="text-lg font-semibold text-gray-900 dark:text-white">Customer Information</h4>
+                                </div>
+                                <button
+                                    onClick={() => copyToClipboard(formatCustomerInfo(), 'customer')}
+                                    className="inline-flex items-center gap-1 px-2 py-1 text-xs text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 transition-colors"
+                                    title="Copy customer information"
+                                >
+                                    {copiedField === 'customer' ? (
+                                        <>
+                                            <Check className="h-3 w-3" />
+                                            Copied
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Copy className="h-3 w-3" />
+                                            Copy
+                                        </>
+                                    )}
+                                </button>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
+                                    <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Buyer Email</dt>
+                                    <dd className="mt-2 text-sm text-gray-900 dark:text-white break-all">{order.buyerEmail}</dd>
+                                </div>
+                                <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
+                                    <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">User ID</dt>
+                                    <dd className="mt-2 text-sm text-gray-900 dark:text-white">
+                                        {orderChannelData.userId || 'N/A'}
+                                    </dd>
+                                </div>
+                                {order.buyerMessage && (
+                                    <div className="md:col-span-2 bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
+                                        <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Buyer Message</dt>
+                                        <dd className="mt-2 text-sm text-gray-900 dark:text-white">{order.buyerMessage}</dd>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
                         {/* Enhanced Payment Information with TikTok Price Details */}
                         <div>
                             <div className="flex items-center gap-2 mb-4">
@@ -507,52 +547,6 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({ order, isOpen, onCl
                                             </div>
                                         )}
                                     </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* 6. Shipping Information */}
-                        <div>
-                            <div className="flex items-center gap-2 mb-4">
-                                <Truck className="h-5 w-5 text-indigo-600" />
-                                <h4 className="text-lg font-semibold text-gray-900 dark:text-white">Shipping Information</h4>
-                            </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
-                                    <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Shipping Provider</dt>
-                                    <dd className="mt-2 text-sm text-gray-900 dark:text-white">
-                                        {orderChannelData.shippingProvider || 'N/A'}
-                                    </dd>
-                                </div>
-                                <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
-                                    <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Delivery Option</dt>
-                                    <dd className="mt-2 text-sm text-gray-900 dark:text-white">
-                                        {orderChannelData.deliveryOptionName || 'N/A'}
-                                    </dd>
-                                </div>
-                                <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
-                                    <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Tracking Number</dt>
-                                    <dd className="mt-2 text-sm font-mono text-gray-900 dark:text-white">
-                                        {orderChannelData.trackingNumber || 'N/A'}
-                                    </dd>
-                                </div>
-                                <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
-                                    <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Delivery Time</dt>
-                                    <dd className="mt-2 text-sm text-gray-900 dark:text-white">
-                                        {order.deliveryTime ? formatTimestamp(order.deliveryTime) : 'N/A'}
-                                    </dd>
-                                </div>
-                                <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
-                                    <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Fulfillment Type</dt>
-                                    <dd className="mt-2 text-sm text-gray-900 dark:text-white">
-                                        {orderChannelData.fulfillmentType || 'N/A'}
-                                    </dd>
-                                </div>
-                                <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
-                                    <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Collection Time</dt>
-                                    <dd className="mt-2 text-sm text-gray-900 dark:text-white">
-                                        {orderChannelData.collectionTime ? formatTimestamp(orderChannelData.collectionTime) : 'N/A'}
-                                    </dd>
                                 </div>
                             </div>
                         </div>

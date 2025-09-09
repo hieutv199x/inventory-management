@@ -636,7 +636,7 @@ export default function OrdersPage() {
                             ) : (
                                 orders.map((order, index) => {
                                     const itemImages = getLineItemImages(order);
-                                    const isNotDelivered = !order.customStatus || order.customStatus !== 'DELIVERED';
+                                    const isNotDelivered = (!order.customStatus || order.customStatus !== 'DELIVERED') && !['DELIVERED', 'COMPLETED', 'CANCELLED', 'IN_TRANSIT'].includes(order.status.toUpperCase());
                                     return (
                                         <tr
                                             key={order.id}
