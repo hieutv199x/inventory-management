@@ -171,8 +171,8 @@ export default function NotificationDropdown() {
     fetchNotifications();
 
     // Set up polling for new notifications every 30 seconds
-    const interval = setInterval(fetchNotifications, 30000);
-    return () => clearInterval(interval);
+    // const interval = setInterval(fetchNotifications, 30000);
+    // return () => clearInterval(interval);
   }, []);
 
   function loadMore(event: React.MouseEvent<HTMLButtonElement, MouseEvent>): void {
