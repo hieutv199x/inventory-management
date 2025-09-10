@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Loader2, Search, RefreshCw, Eye, Package, Calendar, User, X, MapPin, CreditCard, Truck, Copy, Check } from 'lucide-react';
+import { Loader2, Search, RefreshCw, Eye, Package, Calendar, User, X, MapPin, CreditCard, Truck, Copy, Check, Plus } from 'lucide-react';
 import { format } from 'date-fns';
 import Image from 'next/image';
 import { httpClient } from '@/lib/http-client';
@@ -9,6 +9,7 @@ import { useLoading } from '@/context/loadingContext';
 import OrderDetailModal from '@/components/Orders/OrderDetailModal';
 import ShopSelector from '@/components/ui/ShopSelector';
 import { formatCurrency } from "@/utils/common/functionFormat";
+import AddTrackingModal from '@/components/Orders/AddTrackingModal';
 
 interface Order {
     id: string;
@@ -32,6 +33,7 @@ interface Order {
     shop: {
         shopName?: string;
         shopId: string;
+        managedName?: string;
     };
     shopId: string;
     lineItemsCount?: number;
@@ -116,6 +118,8 @@ export default function OrdersPage() {
     const [showOrderModal, setShowOrderModal] = useState(false);
     const [copiedCustomer, setCopiedCustomer] = useState<string | null>(null);
     const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
+    const [showTrackingModal, setShowTrackingModal] = useState(false);
+    const [selectedOrderForTracking, setSelectedOrderForTracking] = useState<Order | null>(null);
 
     const handleFilterChange = (field: keyof typeof filters, value: string) => {
         setFilters(prev => ({ ...prev, [field]: value }));
@@ -368,6 +372,34 @@ export default function OrdersPage() {
         } finally {
             setUpdatingStatus(null);
         }
+    };
+
+    const handleAddTracking = (order: Order) => {
+        setSelectedOrderForTracking(order);
+        setShowTrackingModal(true);
+    };
+
+    const handleSaveTracking = async (trackingNumber: string, shippingProviderId: string) => {
+        if (!selectedOrderForTracking) return;
+
+        try {
+            const res = await httpClient.post(`/tiktok/Fulfillment/add-tracking`, {
+                orderId: selectedOrderForTracking.orderId,
+                trackingNumber,
+                shippingProviderId
+            });
+
+            alert(res);
+        } catch (error) {
+            console.error('Error adding tracking information:', error);
+            alert('Failed to add tracking information');
+            throw error; // Re-throw to handle in modal
+        }
+    };
+
+    const closeTrackingModal = () => {
+        setShowTrackingModal(false);
+        setSelectedOrderForTracking(null);
     };
 
     return (
@@ -641,8 +673,8 @@ export default function OrdersPage() {
                                         <tr
                                             key={order.id}
                                             className={`hover:bg-gray-50 dark:hover:bg-gray-700 ${isNotDelivered
-                                                    ? 'bg-yellow-50 dark:bg-yellow-900/20 border-l-4 border-yellow-400 dark:border-yellow-500'
-                                                    : ''
+                                                ? 'bg-yellow-50 dark:bg-yellow-900/20 border-l-4 border-yellow-400 dark:border-yellow-500'
+                                                : ''
                                                 }`}
                                         >
                                             {/* Update index calculation for server-side pagination */}
@@ -656,7 +688,7 @@ export default function OrdersPage() {
                                             <td className="px-6 py-4 whitespace-nowrap">
                                                 <div className="flex flex-col">
                                                     <div className="text-sm font-medium text-gray-900 dark:text-gray-400">
-                                                        {order.shop.shopName || 'N/A'}
+                                                        {order.shop.managedName || 'N/A'}
                                                     </div>
                                                     <div className="text-xs text-gray-500 dark:text-gray-400">
                                                         Shop ID: {order.shopId}
@@ -675,9 +707,6 @@ export default function OrdersPage() {
                                                     </div>
                                                     <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full w-fit ${getStatusColor(order.status)}`}>
                                                         {order.status}
-                                                    </span>
-                                                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full w-fit`}>
-                                                        {parseChannelData(order?.channelData ?? "").trackingNumber} - {parseChannelData(order?.channelData ?? "").shippingProvider}
                                                     </span>
                                                 </div>
                                             </td>
@@ -753,9 +782,9 @@ export default function OrdersPage() {
                                                     <div className="text-xs text-blue-600 dark:text-blue-400">
                                                         {order.lineItemsCount || order.lineItems?.length || 0} item(s)
                                                     </div>
-                                                    {order.trackingNumber && (
-                                                        <div className="text-xs font-mono text-purple-600 truncate max-w-48">
-                                                            Track: {order.trackingNumber}
+                                                    {parseChannelData(order?.channelData ?? "").trackingNumber && (
+                                                        <div className="text-xs font-mono text-purple-600 truncate max-w-50">
+                                                            Track: {parseChannelData(order?.channelData ?? "").trackingNumber} - {parseChannelData(order?.channelData ?? "").shippingProvider}
                                                         </div>
                                                     )}
                                                 </div>
@@ -795,7 +824,7 @@ export default function OrdersPage() {
                                                     </button>
 
                                                     {/* Custom Status Action Buttons */}
-                                                    {order.customStatus !== 'DELIVERED' && (
+                                                    {order.customStatus !== 'DELIVERED' && !['DELIVERED', 'COMPLETED', 'CANCELLED', 'IN_TRANSIT'].includes(order.status) && (
                                                         <div className="flex flex-col gap-1">
                                                             <button
                                                                 onClick={() => updateCustomStatus(order.orderId, 'DELIVERED')}
@@ -809,7 +838,21 @@ export default function OrdersPage() {
                                                         </div>
                                                     )}
 
-                                                    <button
+                                                    {!parseChannelData(order?.channelData ?? "").trackingNumber && (
+                                                        <div className="flex flex-col gap-1">
+                                                            <button
+                                                                onClick={() => handleAddTracking(order)}
+                                                                disabled={updatingStatus === order.orderId}
+                                                                className="inline-flex items-center px-2 py-1 text-xs font-medium text-green-600 hover:text-green-900 border border-green-300 rounded hover:bg-green-50 dark:border-green-800 dark:bg-green-900 dark:text-green-400 dark:hover:bg-green-700 disabled:opacity-50"
+                                                                title="Add tracking information"
+                                                            >
+                                                                <Plus className="h-3 w-3 mr-1" />
+                                                                Add tracking
+                                                            </button>
+                                                        </div>
+                                                    )}
+
+                                                    {/* <button
                                                         className="inline-flex items-center px-2 py-1 text-xs font-medium text-green-600 hover:text-green-900 border border-green-300 rounded hover:bg-green-50 dark:border-green-800 dark:bg-green-900 dark:text-green-400 dark:hover:bg-green-700"
                                                         onClick={() => {
                                                             // TODO: Implement customer support chat
@@ -820,7 +863,7 @@ export default function OrdersPage() {
                                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                                                         </svg>
                                                         Hỗ trợ
-                                                    </button>
+                                                    </button> */}
                                                 </div>
                                             </td>
                                         </tr>
@@ -887,6 +930,14 @@ export default function OrdersPage() {
                 order={selectedOrder}
                 isOpen={showOrderModal}
                 onClose={closeOrderModal}
+            />
+
+            {/* Add Tracking Modal */}
+            <AddTrackingModal
+                isOpen={showTrackingModal}
+                onClose={closeTrackingModal}
+                onSave={handleSaveTracking}
+                orderId={selectedOrderForTracking?.orderId || ''}
             />
         </div>
     );

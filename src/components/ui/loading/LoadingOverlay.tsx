@@ -14,7 +14,7 @@ const LoadingOverlay: React.FC<LoadingOverlayProps> = ({
   isVisible,
   message = "Loading...",
   backdrop = true,
-  zIndex = 9999,
+  zIndex = 99999,
   className
 }) => {
   if (!isVisible) return null;
