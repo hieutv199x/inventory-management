@@ -56,8 +56,8 @@ interface TikTokTransaction {
   shopId: string;
   shopName: string;
   statementId?: string;
-  type: string;
   currency: string;
+  transactionType: string;
   settlementAmount?: number;
   adjustmentAmount?: number;
   revenueAmount?: number;
@@ -65,7 +65,8 @@ interface TikTokTransaction {
   feeTaxAmount?: number;
   reserveAmount?: number;
   orderId?: string;
-  orderCreateTime?: string;
+  orderCreateTime?: number;
+  createTime?: number;
   adjustmentId?: string;
   adjustmentOrderId?: string;
   associatedOrderId?: string;
@@ -356,8 +357,8 @@ export const StatementBank = () => {
           shopId: item.shopId,
           shopName: item.shopName || '',
           statementId: item.statementId,
-          type: item.type || 'UNKNOWN',
           currency: item.currency || 'USD',
+          transactionType: item.transactionType || 'UNKNOWN', // API trả về transactionType
           settlementAmount: item.settlementAmount,
           adjustmentAmount: item.adjustmentAmount,
           revenueAmount: item.revenueAmount,
@@ -365,14 +366,15 @@ export const StatementBank = () => {
           feeTaxAmount: item.feeTaxAmount,
           reserveAmount: item.reserveAmount,
           orderId: item.orderId,
-          orderCreateTime: item.orderCreateTime,
+          orderCreateTime: item.orderCreateTime, // API trả về timestamp
+          createTime: item.createTime, // API trả về timestamp
           adjustmentId: item.adjustmentId,
           adjustmentOrderId: item.adjustmentOrderId,
           associatedOrderId: item.associatedOrderId,
           reserveId: item.reserveId,
-          reserveStatus: item.reserveStatus,
+          reserveStatus: item.status || item.reserveStatus, // API trả về status
           estimatedReleaseTime: item.estimatedReleaseTime,
-          createdAt: item.createdAt || new Date().toISOString(),
+          createdAt: item.transactionTime ? new Date(item.transactionTime * 1000).toISOString() : new Date().toISOString(), // Convert timestamp
         }));
 
         setTikTokTransactions(mappedTransactions);
@@ -390,12 +392,11 @@ export const StatementBank = () => {
           orderId: item.orderId || '',
           shopId: item.shopId,
           shopName: item.shopName || '',
-          amount: item.amount || '0',
           currency: item.currency || 'USD',
           transactionType: item.transactionType || '',
-          status: item.status || 'UNKNOWN',
+          reserveStatus: item.reserveStatus || 'UNKNOWN',
           createTime: item.createTime || 0,
-          orderTime: item.orderTime || 0,
+          orderTime: item.orderCreateTime || 0,
           transactionId: item.transactionId || '',
           adjustmentId: item.adjustmentId,
           statementId: item.statementId || '',
@@ -883,23 +884,23 @@ export const StatementBank = () => {
                                   {t.currency}
                                 </TableCell>
                                 <TableCell className="py-3 text-gray-700 dark:text-gray-300">
-                                  {t.type}
+                                  {t.transactionType}
                                 </TableCell>
                                 <TableCell className="py-3">
-                                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${t.reserveStatus === 'Released'
+                                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${t.reserveStatus === 'SETTLED'
                                     ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-                                    : t.reserveStatus === 'Collected'
+                                    : t.reserveStatus === 'PENDING'
                                       ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
                                       : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
                                     }`}>
-                                    {t.reserveStatus || t.type}
+                                    {t.reserveStatus || 'UNKNOWN'}
                                   </span>
                                 </TableCell>
                                 <TableCell className="py-3 text-gray-700 dark:text-gray-300">
-                                  {t.orderCreateTime ? formatDate(new Date(t.orderCreateTime).getTime() / 1000) : '-'}
+                                  {t.createTime ? formatDate(t.createTime) : '-'}
                                 </TableCell>
                                 <TableCell className="py-3 text-gray-700 dark:text-gray-300">
-                                  {formatDate(new Date(t.createdAt).getTime() / 1000)}
+                                  {t.orderCreateTime ? formatDate(t.orderCreateTime) : '-'}
                                 </TableCell>
                               </TableRow>
                             ))

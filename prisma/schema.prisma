@@ -792,6 +792,7 @@ model TikTokTransaction {
 
   type            String           // ORDER, REFUND, ADJUSTMENT...
   currency        String
+  createdTime      DateTime?   // from timestamp
 
   // Financial amounts
   settlementAmount     Float?      // e.g. 130

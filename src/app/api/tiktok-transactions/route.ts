@@ -48,17 +48,24 @@ export async function GET(req: NextRequest) {
     // Build where clause
     const where: any = {};
 
-    // Shop access control - TikTokTransaction uses shopId field
+    // Shop access control - Convert internal IDs to TikTok shopIds
     if (!isAdmin) {
-      // Get shopIds from accessible shop IDs (which are the internal IDs)
+      // accessibleShopIds contains internal database IDs, need to convert to TikTok shopIds
       const accessibleShops = await prisma.shopAuthorization.findMany({
         where: { id: { in: accessibleShopIds } },
         select: { shopId: true }
       });
-      const accessibleShopIdValues = accessibleShops.map(shop => shop.shopId);
-      where.shopId = { in: accessibleShopIdValues };
+      const tikTokShopIds = accessibleShops.map(shop => shop.shopId);
+      where.shopId = { in: tikTokShopIds };
     } else if (shopId && shopId !== 'all') {
-      where.shopId = shopId;
+      // Convert UI shopId (internal ID) to TikTok shopId
+      const selectedShop = await prisma.shopAuthorization.findUnique({
+        where: { id: shopId },
+        select: { shopId: true }
+      });
+      if (selectedShop) {
+        where.shopId = selectedShop.shopId;
+      }
     }
 
     // Date range filter (using orderCreateTime)
@@ -112,7 +119,7 @@ export async function GET(req: NextRequest) {
     }
 
     // Get shop information separately
-    const shopIds = [...new Set(tikTokTransactions.map(t => t.shopId))];
+    const shopIds = [...new Set(tikTokTransactions.map(t => t.shopId).filter(Boolean))];
     console.log("Debug - shopIds from transactions:", shopIds);
     
     const shops = await prisma.shopAuthorization.findMany({
@@ -127,18 +134,17 @@ export async function GET(req: NextRequest) {
 
     // Map data to match frontend interface
     const mappedData = tikTokTransactions.map(transaction => {
-      const shop = shopMap.get(transaction.shopId);
+      const shop = transaction.shopId ? shopMap.get(transaction.shopId) : null;
       return {
         id: transaction.id,
         orderId: transaction.orderId || '',
-        shopId: transaction.shopId,
-        shopName: shop?.shopName || '',
-        amount: transaction.settlementAmount?.toString() || transaction.revenueAmount?.toString() || '0',
+        shopId: transaction.shopId || '',
+        shopName: shop?.shopName || 'Unknown Shop',
         currency: transaction.currency || 'USD',
         transactionType: transaction.type || '',
-        status: transaction.reserveStatus || transaction.status || 'SETTLED',
-        createTime: transaction.orderCreateTime ? Math.floor(transaction.orderCreateTime.getTime() / 1000) : 0,
-        orderTime: transaction.orderCreateTime ? Math.floor(transaction.orderCreateTime.getTime() / 1000) : 0,
+        status: transaction.reserveStatus || 'SETTLED',
+        createTime: transaction.createdTime ? Math.floor(transaction.createdTime.getTime() / 1000) : 0,
+        orderCreateTime: transaction.orderCreateTime ? Math.floor(transaction.orderCreateTime.getTime() / 1000) : 0,
         // Additional fields that might be useful
         transactionId: transaction.transactionId,
         adjustmentId: transaction.adjustmentId,
