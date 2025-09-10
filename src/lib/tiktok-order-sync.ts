@@ -194,7 +194,7 @@ export class TikTokOrderSync {
         try {
             // Build request body for order search
             const requestBody = new Order202309GetOrderListRequestBody();
-            
+
             if (createTimeGe) requestBody.createTimeGe = createTimeGe;
             if (createTimeLt) requestBody.createTimeLt = createTimeLt;
             if (updateTimeGe) requestBody.updateTimeGe = updateTimeGe;
@@ -220,7 +220,7 @@ export class TikTokOrderSync {
                 while (nextPageToken) {
                     try {
                         console.log(`Fetching next page with token: ${nextPageToken}`);
-                        
+
                         const nextPageResult = await this.client.api.OrderV202309Api.OrdersSearchPost(
                             pageSize,
                             this.credentials.accessToken,
@@ -238,10 +238,10 @@ export class TikTokOrderSync {
                         }
 
                         nextPageToken = nextPageResult.body?.data?.nextPageToken ?? "";
-                        
+
                         // Add delay to avoid rate limiting
                         await new Promise(resolve => setTimeout(resolve, 100));
-                        
+
                     } catch (paginationError) {
                         console.error('Error fetching next page:', paginationError);
                         break;
@@ -264,9 +264,9 @@ export class TikTokOrderSync {
             // Process order IDs in batches
             for (let i = 0; i < orderIds.length; i += batchSize) {
                 const batch = orderIds.slice(i, i + batchSize);
-                
-                console.log(`Fetching batch ${Math.floor(i/batchSize) + 1}: ${batch.length} orders`);
-                
+
+                console.log(`Fetching batch ${Math.floor(i / batchSize) + 1}: ${batch.length} orders`);
+
                 const result = await this.client.api.OrderV202309Api.OrdersGet(
                     batch,
                     this.credentials.accessToken,
@@ -316,14 +316,14 @@ export class TikTokOrderSync {
         for (let i = 0; i < orders.length; i += BATCH_SIZE) {
             const batch = orders.slice(i, i + BATCH_SIZE);
             const batchResult = await this.processSingleBatch(batch, shopId, includePriceDetail, timeoutSeconds);
-            
+
             results.totalProcessed += batchResult.processed;
             results.created += batchResult.created;
             results.updated += batchResult.updated;
             results.withPriceDetails += batchResult.withPriceDetails;
             results.errors.push(...batchResult.errors);
-            
-            console.log(`Processed batch ${Math.floor(i/BATCH_SIZE) + 1}/${Math.ceil(orders.length/BATCH_SIZE)}`);
+
+            console.log(`Processed batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(orders.length / BATCH_SIZE)}`);
         }
 
         return results;
@@ -348,13 +348,13 @@ export class TikTokOrderSync {
                     where: { orderId: { in: orderIds } },
                     select: { id: true, orderId: true }
                 });
-                
+
                 const existingOrderMap = new Map(existingOrders.map(o => [o.orderId, o.id]));
 
                 for (const order of orders) {
                     try {
                         processed++;
-                        
+
                         // Fetch price details for each order
                         let priceDetails = null;
                         if (includePriceDetail) {
@@ -371,7 +371,7 @@ export class TikTokOrderSync {
                                     withPriceDetails++;
                                     console.log(`Successfully fetched price details for order ${order.id}`);
                                 }
-                                
+
                                 // Add small delay between price detail requests to avoid rate limiting
                                 await new Promise(resolve => setTimeout(resolve, 50));
                             } catch (priceError) {
@@ -402,7 +402,7 @@ export class TikTokOrderSync {
                             rtsSlaTime: order.rtsSlaTime,
                             rtsTime: order.rtsTime,
                             // Enhanced price details
-                            ...(priceDetails && { 
+                            ...(priceDetails && {
                                 priceDetails,
                                 priceDetailsFetchedAt: Date.now(),
                                 detailedBreakdown: this.extractPriceBreakdown(priceDetails)
@@ -445,7 +445,7 @@ export class TikTokOrderSync {
                             if (priceDetails) {
                                 await this.updateExistingPaymentWithPriceDetails(tx, existingOrderMap.get(order.id)!, priceDetails);
                             }
-                            
+
                             updated++;
                         } else {
                             // Create new order with all associations including price details
@@ -523,7 +523,7 @@ export class TikTokOrderSync {
 
         // Calculate final amount
         breakdown.finalAmount = breakdown.productPrice + breakdown.shippingFee + breakdown.taxes + breakdown.platformFees
-                              - breakdown.sellerDiscounts - breakdown.platformDiscounts - breakdown.vouchers;
+            - breakdown.sellerDiscounts - breakdown.platformDiscounts - breakdown.vouchers;
 
         return breakdown;
     }
@@ -580,7 +580,7 @@ export class TikTokOrderSync {
             sellerDiscount: paymentData.sellerDiscount,
             platformDiscount: paymentData.platformDiscount,
             // Enhanced price details
-            ...(priceDetails && { 
+            ...(priceDetails && {
                 detailedPricing: priceDetails,
                 priceBreakdown: priceDetails.price_details || [],
                 pricingBreakdown: this.extractPriceBreakdown(priceDetails),
@@ -628,7 +628,7 @@ export class TikTokOrderSync {
             ttsSlaTime: order.ttsSlaTime,
             rtsSlaTime: order.rtsSlaTime,
             rtsTime: order.rtsTime,
-            ...(priceDetails && { 
+            ...(priceDetails && {
                 priceDetails,
                 priceDetailsFetchedAt: Date.now(),
                 detailedBreakdown: this.extractPriceBreakdown(priceDetails)
@@ -658,13 +658,85 @@ export class TikTokOrderSync {
         if (order.payment) {
             await this.createOrderPayment(tx, createdOrder.id, order.payment, priceDetails);
         }
+
+        // Create order items
+        if (order.lineItems && Array.isArray(order.lineItems)) {
+            for (const item of order.lineItems) {
+                try {
+                    const itemChannelData = {
+                        skuType: item.skuType,
+                        skuImage: item.skuImage,
+                        sellerDiscount: item.sellerDiscount,
+                        platformDiscount: item.platformDiscount,
+                        displayStatus: item.displayStatus,
+                        isGift: item.isGift || false,
+                        packageId: item.packageId,
+                        packageStatus: item.packageStatus,
+                        shippingProviderId: item.shippingProviderId,
+                        shippingProviderName: item.shippingProviderName,
+                        trackingNumber: item.trackingNumber,
+                        rtsTime: item.rtsTime
+                    };
+
+                    await tx.orderItem.create({
+                        data: {
+                            orderId: createdOrder.id,
+                            lineItemId: item.id,
+                            productId: item.productId,
+                            productName: item.productName,
+                            skuId: item.skuId,
+                            skuName: item.skuName || "",
+                            sellerSku: item.sellerSku || "",
+                            currency: item.currency,
+                            originalPrice: item.originalPrice,
+                            salePrice: item.salePrice,
+                            channelData: JSON.stringify(itemChannelData)
+                        }
+                    });
+                } catch (itemError) {
+                    console.warn(`Failed to create order item for order ${order.id}:`, itemError);
+                }
+            }
+        }
+
+        // Create shipping address
+        if (order.recipientAddress) {
+            try {
+                const addressChannelData = {
+                    addressDetail: order.recipientAddress.addressDetail,
+                    addressLine1: order.recipientAddress.addressLine1,
+                    addressLine2: order.recipientAddress.addressLine2 || "",
+                    addressLine3: order.recipientAddress.addressLine3 || "",
+                    addressLine4: order.recipientAddress.addressLine4 || "",
+                    firstName: order.recipientAddress.firstName || "",
+                    firstNameLocalScript: order.recipientAddress.firstNameLocalScript || "",
+                    lastName: order.recipientAddress.lastName || "",
+                    lastNameLocalScript: order.recipientAddress.lastNameLocalScript || "",
+                    regionCode: order.recipientAddress.regionCode,
+                    districtInfo: order.recipientAddress.districtInfo || []
+                };
+
+                await tx.orderAddress.create({
+                    data: {
+                        orderId: createdOrder.id,
+                        fullAddress: order.recipientAddress.fullAddress,
+                        name: order.recipientAddress.name,
+                        phoneNumber: order.recipientAddress.phoneNumber,
+                        postalCode: order.recipientAddress.postalCode || "",
+                        channelData: JSON.stringify(addressChannelData)
+                    }
+                });
+            } catch (addrError) {
+                console.warn(`Failed to create shipping address for order ${order.id}:`, addrError);
+            }
+        }
     }
 }
 
 // Enhanced convenience function for syncing orders with price details
 export async function syncOrdersWithPriceDetails(
-    shop_id: string, 
-    order_ids: string[], 
+    shop_id: string,
+    order_ids: string[],
     options: Partial<OrderSyncOptions> = {}
 ): Promise<OrderSyncResult> {
     const sync = await TikTokOrderSync.create(shop_id);
@@ -680,8 +752,8 @@ export async function syncOrdersWithPriceDetails(
 }
 
 export async function syncRecentOrdersWithPriceDetails(
-    shop_id: string, 
-    hours_back: number = 24, 
+    shop_id: string,
+    hours_back: number = 24,
     options: Partial<OrderSyncOptions> = {}
 ): Promise<OrderSyncResult> {
     const now = Math.floor(Date.now() / 1000);
@@ -723,10 +795,10 @@ export async function refreshPriceDetailsForOrders(
     try {
         for (const orderId of order_ids) {
             results.processedCount++;
-            
+
             try {
                 console.log(`Refreshing price details for order ${orderId}`);
-                
+
                 // Fetch price details
                 const priceResult = await sync.client.api.OrderV202407Api.OrdersOrderIdPriceDetailGet(
                     orderId,
@@ -770,8 +842,8 @@ export async function refreshPriceDetailsForOrders(
                         // Also update payment record if exists using transaction
                         await prisma.$transaction(async (tx) => {
                             await sync.updateExistingPaymentWithPriceDetails(
-                                tx, 
-                                existingOrder.id, 
+                                tx,
+                                existingOrder.id,
                                 priceResult.body.data
                             );
                         });
