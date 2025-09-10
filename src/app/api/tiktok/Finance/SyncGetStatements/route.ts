@@ -310,7 +310,7 @@ async function processStatementBatch(statements: any[], shopObjectId: string) {
 }
 
 async function fetchTransactionsForStatements(client: any, credentials: any, statements: any[]) {
-    const allTransactions: (Finance202501GetTransactionsbyStatementResponseDataTransactions & { statementId: string, currency: string })[] = [];
+    const allTransactions: (Finance202501GetTransactionsbyStatementResponseDataTransactions & { statementId: string, currency: string, createdTime: number })[] = [];
 
     for (const statement of statements) {
         if (!statement.id) continue;
@@ -339,8 +339,9 @@ async function fetchTransactionsForStatements(client: any, credentials: any, sta
                     const transactionsWithStatement = result.body.data.transactions.map((transaction: Finance202501GetTransactionsbyStatementResponseDataTransactions) => ({
                         ...transaction,
                         statementId: statement.id,
-                        currency: statement.currency || 'GBP' // Default to GBP if not provided
-                    } as Finance202501GetTransactionsbyStatementResponseDataTransactions & { statementId: string, currency: string }));
+                        currency: statement.currency || 'GBP',
+                        createdTime: statement.statementTime
+                    } as Finance202501GetTransactionsbyStatementResponseDataTransactions & { statementId: string, currency: string, createdTime: number }));
                     allTransactions.push(...transactionsWithStatement);
                     console.log(`Fetched ${result.body.data.transactions.length} transactions for statement ${statement.id}`);
                 }
@@ -361,7 +362,7 @@ async function fetchTransactionsForStatements(client: any, credentials: any, sta
     return allTransactions;
 }
 
-async function syncTransactionsToDatabase(transactions: (Finance202501GetTransactionsbyStatementResponseDataTransactions & { statementId: string, currency: string })[], shopId: string) {
+async function syncTransactionsToDatabase(transactions: (Finance202501GetTransactionsbyStatementResponseDataTransactions & { statementId: string, currency: string, createdTime: number })[], shopId: string) {
     const BATCH_SIZE = 100;
     let totalSynced = 0;
 
@@ -379,7 +380,7 @@ async function syncTransactionsToDatabase(transactions: (Finance202501GetTransac
     return totalSynced;
 }
 
-async function processTransactionBatch(transactions: (Finance202501GetTransactionsbyStatementResponseDataTransactions & { statementId: string, currency: string })[], shopId: string) {
+async function processTransactionBatch(transactions: (Finance202501GetTransactionsbyStatementResponseDataTransactions & { statementId: string, currency: string, createdTime: number })[], shopId: string) {
     let syncedCount = 0;
 
     try {
@@ -413,7 +414,7 @@ async function processTransactionBatch(transactions: (Finance202501GetTransactio
                     shippingCostAmount: transaction.shippingCostAmount ? parseFloat(transaction.shippingCostAmount) : null,
                     feeTaxAmount: transaction.feeTaxAmount ? parseFloat(transaction.feeTaxAmount) : null,
                     reserveAmount: transaction.reserveAmount ? parseFloat(transaction.reserveAmount) : null,
-
+                    createdTime: transaction.createdTime ? new Date(transaction.createdTime * 1000) : null, 
                     // Order information - map from API response
                     orderId: transaction.orderId || null,
                     orderCreateTime: transaction.orderCreateTime ? new Date(transaction.orderCreateTime * 1000) : null,
