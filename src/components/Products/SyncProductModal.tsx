@@ -4,6 +4,7 @@ import { X, RefreshCw } from 'lucide-react';
 import { Modal } from "../ui/modal";
 import SelectShop from "../common/SelectShop";
 import Label from "../form/Label";
+import ShopSelector from "../ui/ShopSelector";
 
 interface SyncProductModalProps {
     isOpen: boolean;
@@ -81,11 +82,9 @@ const SyncProductModal: React.FC<SyncProductModalProps> = ({ isOpen, onClose, on
                             <div className="space-y-6">
                                 {/* Shop Selection */}
                                 <div>
-                                    <SelectShop
-                                        onChange={setSelectedShopId}
-                                        placeholder="Choose a shop to sync"
-                                        enablePlaceholder={true}
-                                        value={selectedShopId}
+                                    <ShopSelector
+                                        onChange={(shopId: string | null, shop: any | null) => setSelectedShopId(shopId ?? '')}
+                                        showSelected={false}
                                     />
                                     {!selectedShopId && (
                                         <p className="mt-1 text-xs text-red-500">Shop selection is required</p>
