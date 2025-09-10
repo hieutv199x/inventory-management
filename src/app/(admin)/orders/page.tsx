@@ -86,13 +86,13 @@ export default function OrdersPage() {
     const [syncing, setSyncing] = useState(false);
     const [needSearch, setNeedSearch] = useState(false);
 
-    // Updated filter and search states
+    // Updated filter and search states with default date range
     const [filters, setFilters] = useState({
         shopId: '',
         status: '',
         customStatus: '', // Added customStatus filter
-        dateFrom: '',
-        dateTo: '',
+        dateFrom: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().slice(0, 16), // 1 day ago
+        dateTo: new Date().toISOString().slice(0, 16), // now
         keyword: '',
     });
 
