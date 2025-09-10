@@ -9,10 +9,28 @@ export const verifyToken = (request: NextRequest) => {
     const token = authHeader?.replace('Bearer ', '');
 
     if (!token) {
-        throw new Error('Authentication required');
+        const error = new Error('Authentication required') as any;
+        error.status = 401;
+        throw error;
     }
 
-    return jwt.verify(token, JWT_SECRET) as any;
+    try {
+        return jwt.verify(token, JWT_SECRET) as any;
+    } catch (err) {
+        if (err instanceof jwt.TokenExpiredError) {
+            const error = new Error('Token expired') as any;
+            error.status = 403;
+            throw error;
+        } else if (err instanceof jwt.JsonWebTokenError) {
+            const error = new Error('Invalid token') as any;
+            error.status = 401;
+            throw error;
+        } else {
+            const error = new Error('Token verification failed') as any;
+            error.status = 401;
+            throw error;
+        }
+    }
 };
 
 export const getUserWithShopAccess = async (request: NextRequest, prisma: PrismaClient) => {

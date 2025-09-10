@@ -114,7 +114,7 @@ export async function GET(req: NextRequest) {
 
     } catch (err: any) {
         console.error("Error fetching notifications:", err);
-        if (err.message === 'Authentication required' || err.message === 'User not found') {
+        if (err.message === 'Authentication required' || err.message === 'User not found' || err.message === 'Invalid token' || err.message === 'Token expired') {
             return NextResponse.json({ error: err.message }, { status: 401 });
         }
         return NextResponse.json({ error: err.message || "Internal error" }, { status: 500 });
