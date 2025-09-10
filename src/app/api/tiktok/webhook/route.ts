@@ -739,7 +739,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid verification' }, { status: 403 });
 }
 
-async function syncOrderById(
+export async function syncOrderById(
     shop_id: string,
     order_id: string,
     options: { create_notifications: boolean; timeout_seconds: number; }
