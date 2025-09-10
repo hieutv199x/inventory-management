@@ -170,7 +170,9 @@ async function processProductBatch(products: any[], shopObjectId: string, client
                     productId, 
                     credentials.accessToken, 
                     "application/json", 
+                    false,
                     false, 
+                    undefined,
                     credentials.shopCipher
                 );
 
@@ -182,6 +184,7 @@ async function processProductBatch(products: any[], shopObjectId: string, client
                 // Add delay between detail requests
                 await new Promise(resolve => setTimeout(resolve, 50));
             } catch (error) {
+                console.error('Error fetching product detail:', error);
             }
         }
         // Process each product individually to avoid large transaction timeouts
