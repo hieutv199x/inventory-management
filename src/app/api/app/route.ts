@@ -24,6 +24,12 @@ export async function GET(request: NextRequest) {
             where: {
                 isActive: true
             },
+            include:{
+                // Count of shops using this app
+                _count: {
+                    select: { authorizations: true }
+                }
+            },
             orderBy: {
                 appName: 'asc'
             }

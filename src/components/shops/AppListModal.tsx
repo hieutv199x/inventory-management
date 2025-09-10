@@ -19,6 +19,9 @@ interface App {
   appName: string | null;
   createdAt: string;
   isActive: boolean;
+  _count?: {
+    authorizations: number;
+  };
 }
 
 interface AppListModalProps {
@@ -77,6 +80,9 @@ const AppListModal: React.FC<AppListModalProps> = ({
               <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
                 App Secret
               </TableCell>
+               <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
+                Số shop sử dụng
+              </TableCell>
               <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
                 Trạng thái
               </TableCell>
@@ -127,6 +133,9 @@ const AppListModal: React.FC<AppListModalProps> = ({
                           {app.appSecret ? '••••••••••••' : 'N/A'}
                         </span>
                       )}
+                    </TableCell>
+                    <TableCell className="py-3 text-gray-700 dark:text-gray-300 font-mono text-sm">
+                      {app._count?.authorizations || 0}
                     </TableCell>
                     <TableCell className="py-3">
                       {app.isActive ? (
