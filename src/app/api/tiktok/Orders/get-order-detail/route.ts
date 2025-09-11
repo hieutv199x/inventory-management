@@ -3,7 +3,7 @@ import { PrismaClient } from "@prisma/client";
 import {
     TikTokShopNodeApiClient,
 } from "@/nodejs_sdk";
-import { syncOrderById } from "../../webhook/route";
+//import { syncOrderById } from "../../webhook/route";
 
 const prisma = new PrismaClient();
 
@@ -61,10 +61,10 @@ export async function GET(req: NextRequest) {
             },
         });
         
-        const result = await client.api.OrderV202309Api.OrdersGet(['576786302672869930'], credentials.accessToken, "application/json", shopCipher);
+        const result = await client.api.OrderV202309Api.OrdersGet(['576786477759043914'], credentials.accessToken, "application/json", shopCipher);
         console.log('response: ', JSON.stringify(result, null, 2));
 
-        // const syncResult = await syncOrderById(credentials.shopId, "576786302672869930", {
+        // const syncResult = await syncOrderById(credentials.shopId, "576786477759043914", {
         //                 create_notifications: false,
         //                 timeout_seconds: 60
         //             });

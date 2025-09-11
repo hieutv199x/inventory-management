@@ -11,6 +11,28 @@ import { TikTokOrderSync } from "@/lib/tiktok-order-sync";
 
 const prisma = new PrismaClient();
 
+async function syncOrderById(
+    shop_id: string,
+    order_id: string,
+    options: { create_notifications: boolean; timeout_seconds: number; }
+) {
+    // Use TikTokOrderSync utility to sync a single order by ID
+    try {
+        const tikTokOrderSync = await TikTokOrderSync.create(shop_id);
+        const syncResult = await tikTokOrderSync.syncOrders({
+            shop_id,
+            order_ids: [order_id],
+            create_notifications: options.create_notifications,
+            timeout_seconds: options.timeout_seconds
+        });
+        return syncResult;
+    } catch (error) {
+        console.error(`Error syncing order ${order_id} for shop ${shop_id}:`, error);
+        throw error;
+    }
+}
+
+
 interface TikTokWebhookData {
     type: number;
     tts_notification_id: string;
@@ -739,23 +761,3 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid verification' }, { status: 403 });
 }
 
-export async function syncOrderById(
-    shop_id: string,
-    order_id: string,
-    options: { create_notifications: boolean; timeout_seconds: number; }
-) {
-    // Use TikTokOrderSync utility to sync a single order by ID
-    try {
-        const tikTokOrderSync = await TikTokOrderSync.create(shop_id);
-        const syncResult = await tikTokOrderSync.syncOrders({
-            shop_id,
-            order_ids: [order_id],
-            create_notifications: options.create_notifications,
-            timeout_seconds: options.timeout_seconds
-        });
-        return syncResult;
-    } catch (error) {
-        console.error(`Error syncing order ${order_id} for shop ${shop_id}:`, error);
-        throw error;
-    }
-}
