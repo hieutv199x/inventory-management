@@ -11,15 +11,18 @@ export async function GET(req: NextRequest) {
 
     // Pagination parameters
     const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '10');
+    const limit = parseInt(searchParams.get('pageSize') || searchParams.get('limit') || '10');
     const offset = (page - 1) * limit;
 
     // Filter parameters
     const shopId = searchParams.get('shopId');
     const status = searchParams.get('status');
+    const customStatus = searchParams.get('customStatus');
     const channelParam = searchParams.get('channel');
     const channel = channelParam && channelParam !== 'all' ? channelParam as Channel : null;
-    const search = searchParams.get('search');
+    const keyword = searchParams.get('keyword') || searchParams.get('search');
+    const createTimeGe = searchParams.get('createTimeGe');
+    const createTimeLt = searchParams.get('createTimeLt');
     const dateFrom = searchParams.get('dateFrom');
     const dateTo = searchParams.get('dateTo');
     const sortBy = searchParams.get('sortBy') || 'createTime';
@@ -43,21 +46,35 @@ export async function GET(req: NextRequest) {
       where.channel = channel;
     }
 
-    if (search) {
+    if (keyword) {
       where.OR = [
-        { orderId: { contains: search, mode: 'insensitive' } },
-        { buyerEmail: { contains: search, mode: 'insensitive' } },
-        { buyerMessage: { contains: search, mode: 'insensitive' } }
+        { orderId: { contains: keyword, mode: 'insensitive' } },
+        { buyerEmail: { contains: keyword, mode: 'insensitive' } },
+        { buyerMessage: { contains: keyword, mode: 'insensitive' } }
       ];
     }
 
-    // Date range filter
-    if (dateFrom || dateTo) {
+    // Add customStatus filter
+    if (customStatus && customStatus !== 'all') {
+      // You can implement custom status logic here
+      // For now, just use regular status
+      where.status = customStatus;
+    }
+
+    // Date range filter - support both timestamp and date string
+    if (createTimeGe || createTimeLt || dateFrom || dateTo) {
       where.createTime = {};
-      if (dateFrom) {
+      
+      // Priority: use timestamp parameters if available
+      if (createTimeGe) {
+        where.createTime.gte = parseInt(createTimeGe);
+      } else if (dateFrom) {
         where.createTime.gte = Math.floor(new Date(dateFrom).getTime() / 1000);
       }
-      if (dateTo) {
+      
+      if (createTimeLt) {
+        where.createTime.lte = parseInt(createTimeLt);
+      } else if (dateTo) {
         where.createTime.lte = Math.floor(new Date(dateTo + 'T23:59:59').getTime() / 1000);
       }
     }
@@ -96,7 +113,8 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      data: orders,
+      orders: orders, // Frontend expects "orders" field
+      data: orders,   // Keep for backward compatibility
       pagination: {
         currentPage: page,
         totalPages,

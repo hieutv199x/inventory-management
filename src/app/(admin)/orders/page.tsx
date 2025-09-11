@@ -10,6 +10,8 @@ import OrderDetailModal from '@/components/Orders/OrderDetailModal';
 import ShopSelector from '@/components/ui/ShopSelector';
 import { formatCurrency } from "@/utils/common/functionFormat";
 import AddTrackingModal from '@/components/Orders/AddTrackingModal';
+import SyncOrderModal from '@/components/Orders/SyncOrderModal';
+import toast from 'react-hot-toast';
 
 interface Order {
     id: string;
@@ -87,6 +89,7 @@ export default function OrdersPage() {
     const [orders, setOrders] = useState<Order[]>([]);
     const [syncing, setSyncing] = useState(false);
     const [needSearch, setNeedSearch] = useState(false);
+    const [showSyncModal, setShowSyncModal] = useState(false);
 
     // Helper function to get date with timezone offset
     const getDateWithTimezone = (date: Date) => {
@@ -136,9 +139,54 @@ export default function OrdersPage() {
     // Add search function
     const handleSearch = async (e: React.FormEvent) => {
         e.preventDefault();
-        setFilters(prev => ({ ...prev, keyword: searchKeyword }));
+        setIsSearching(true);
+        
+        // Update filters and trigger fetch
+        const newFilters = { ...filters, keyword: searchKeyword };
+        setFilters(newFilters);
         setCurrentPage(1);
-        setNeedSearch(true);
+        
+        // Manually trigger search with new keyword
+        try {
+            showLoading('Searching orders...');
+            
+            const params = new URLSearchParams();
+            params.append('page', '1');
+            params.append('pageSize', pageSize.toString());
+            
+            // Add filter params with new keyword
+            if (newFilters.shopId) params.append('shopId', newFilters.shopId);
+            if (newFilters.status) params.append('status', newFilters.status);
+            if (newFilters.customStatus) params.append('customStatus', newFilters.customStatus);
+            if (newFilters.keyword) params.append('keyword', newFilters.keyword);
+            
+            // Add date filters
+            if (newFilters.dateFrom) {
+                const startTime = Math.floor(new Date(newFilters.dateFrom).getTime() / 1000);
+                params.append('createTimeGe', startTime.toString());
+            }
+            if (newFilters.dateTo) {
+                const endTime = Math.floor(new Date(newFilters.dateTo).getTime() / 1000);
+                params.append('createTimeLt', endTime.toString());
+            }
+
+            const response = await httpClient.get(`/orders?${params.toString()}`);
+            setOrders(response.orders || []);
+            setPagination(response.pagination || {
+                currentPage: 1,
+                pageSize: pageSize,
+                totalItems: 0,
+                totalPages: 0,
+                hasNextPage: false,
+                hasPreviousPage: false,
+            });
+        } catch (error) {
+            console.error('Error searching orders:', error);
+            setOrders([]);
+        } finally {
+            hideLoading();
+            setIsSearching(false);
+        }
     };
 
     const fetchOrders = useCallback(async () => {
@@ -215,38 +263,34 @@ export default function OrdersPage() {
         }
     };
 
-    const syncOrders = async () => {
-        if (!filters?.shopId) {
-            alert('Please select a shop to sync orders');
-            return;
-        }
-
+    const syncOrders = async (shopId: string, dateFrom?: string, dateTo?: string) => {
         showLoading('Syncing orders...');
+        setSyncing(true);
         try {
             const response = await httpClient.post('/tiktok/Orders/get-order-list', {
-                shop_id: filters.shopId,
+                shop_id: shopId,
                 sync: true,
                 filters: {
-                    createTimeGe: filters.dateFrom ? Math.floor(new Date(filters.dateFrom).getTime() / 1000) : undefined,
-                    createTimeLt: filters.dateTo ? Math.floor(new Date(filters.dateTo).getTime() / 1000) : undefined,
+                    createTimeGe: dateFrom ? Math.floor(new Date(dateFrom).getTime() / 1000) : undefined,
+                    createTimeLt: dateTo ? Math.floor(new Date(dateTo).getTime() / 1000) : undefined,
                 },
                 page_size: 50,
             });
 
-            alert('Orders synced successfully');
-            // This will trigger fetchOrders through the useEffect
-            setFilters(prev => ({ ...prev })); // Force re-render to trigger useEffect
+            toast.success('Orders synced successfully');
+            await fetchOrders();
         } catch (error) {
             console.error('Error syncing orders:', error);
-            alert('Sync failed');
+            toast.error('Sync failed');
         } finally {
             hideLoading();
+            setSyncing(false);
         }
     };
 
     const syncUnsettledTransactions = async () => {
         if (!filters?.shopId) {
-            alert('Please select a shop to sync unsettled transactions');
+            toast.error('Please select a shop to sync unsettled transactions');
             return;
         }
 
@@ -264,7 +308,7 @@ export default function OrdersPage() {
             setFilters(prev => ({ ...prev })); // Force re-render to trigger useEffect
         } catch (error) {
             console.error('Error syncing unsettled transactions:', error);
-            alert('Sync failed');
+            toast.error('Sync failed');
         } finally {
             hideLoading();
         }
@@ -281,7 +325,7 @@ export default function OrdersPage() {
             setSelectedOrder(detailedOrder);
         } catch (error) {
             console.error('Failed to load order details:', error);
-            alert('Failed to load order details');
+            toast.error('Failed to load order details');
             closeOrderModal();
         } finally {
             hideLoading();
@@ -375,7 +419,7 @@ export default function OrdersPage() {
             );
         } catch (error) {
             console.error('Error updating custom status:', error);
-            alert('Failed to update custom status');
+            toast.error('Failed to update custom status');
         } finally {
             setUpdatingStatus(null);
         }
@@ -396,10 +440,10 @@ export default function OrdersPage() {
                 shippingProviderId
             });
 
-            alert(res);
+            toast.success('Tracking information added successfully');
         } catch (error) {
             console.error('Error adding tracking information:', error);
-            alert('Failed to add tracking information');
+            toast.error('Failed to add tracking information');
             throw error; // Re-throw to handle in modal
         }
     };
@@ -422,7 +466,7 @@ export default function OrdersPage() {
                 <div className="flex items-start w-full gap-3 sm:justify-end">
                     <div className="flex items-center gap-2">
                         <button
-                            onClick={syncOrders}
+                            onClick={() => setShowSyncModal(true)}
                             disabled={syncing}
                             className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 disabled:opacity-50 flex items-center justify-center hover:shadow-lg transition duration-200"
                         >
@@ -945,6 +989,13 @@ export default function OrdersPage() {
                 onClose={closeTrackingModal}
                 onSave={handleSaveTracking}
                 orderId={selectedOrderForTracking?.orderId || ''}
+            />
+
+            {/* Sync Order Modal */}
+            <SyncOrderModal
+                isOpen={showSyncModal}
+                onClose={() => setShowSyncModal(false)}
+                onSync={syncOrders}
             />
         </div>
     );

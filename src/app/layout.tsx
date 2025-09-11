@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter, Roboto, Outfit } from "next/font/google";
 import "./globals.css";
+import { Toaster } from 'react-hot-toast';
 
 import { SidebarProvider } from '@/context/SidebarContext';
 import { ThemeProvider } from '@/context/ThemeContext';
@@ -54,6 +55,45 @@ export default function RootLayout({
             </LanguageProvider>
           </AuthProvider>
         </LoadingProvider>
+        <Toaster 
+          position="top-right"
+          reverseOrder={false}
+          gutter={8}
+          containerClassName=""
+          containerStyle={{
+            zIndex: 9999,
+          }}
+          toastOptions={{
+            duration: 4000,
+            className: '',
+            style: {
+              background: '#ffffff',
+              color: '#374151',
+              zIndex: 9999,
+              fontSize: '14px',
+              borderRadius: '8px',
+              padding: '12px 16px',
+              border: '1px solid #e5e7eb',
+              boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
+            },
+            success: {
+              duration: 3000,
+              style: {
+                background: '#ffffff',
+                color: '#10b981',
+                border: '1px solid #10b981',
+              },
+            },
+            error: {
+              duration: 4000,
+              style: {
+                background: '#ffffff',
+                color: '#ef4444',
+                border: '1px solid #ef4444',
+              },
+            },
+          }}
+        />
       </body>
     </html>
   );
