@@ -3,35 +3,9 @@ import { PrismaClient, ShopAuthorization, NotificationType } from "@prisma/clien
 import crypto from 'crypto';
 import { Order202309GetOrderDetailResponseDataOrders, TikTokShopNodeApiClient } from "@/nodejs_sdk";
 import { NotificationService } from "@/lib/notification-service";
-// If syncOrderById is the default export:
-import { TikTokOrderSync } from "@/lib/tiktok-order-sync";
-
-// Or, if the correct named export is different, for example:
-// import { correctExportName } from "@/lib/tiktok-order-sync";
+import { syncOrderById } from "@/lib/tiktok-order-sync";
 
 const prisma = new PrismaClient();
-
-async function syncOrderById(
-    shop_id: string,
-    order_id: string,
-    options: { create_notifications: boolean; timeout_seconds: number; }
-) {
-    // Use TikTokOrderSync utility to sync a single order by ID
-    try {
-        const tikTokOrderSync = await TikTokOrderSync.create(shop_id);
-        const syncResult = await tikTokOrderSync.syncOrders({
-            shop_id,
-            order_ids: [order_id],
-            create_notifications: options.create_notifications,
-            timeout_seconds: options.timeout_seconds
-        });
-        return syncResult;
-    } catch (error) {
-        console.error(`Error syncing order ${order_id} for shop ${shop_id}:`, error);
-        throw error;
-    }
-}
-
 
 interface TikTokWebhookData {
     type: number;

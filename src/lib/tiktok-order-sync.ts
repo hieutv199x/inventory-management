@@ -682,7 +682,7 @@ export class TikTokOrderSync {
         };
 
         // Create the order
-        const createdOrder = await tx.orders.create({
+        const createdOrder = await tx.order.create({
             data: {
                 orderId: order.id,
                 channel: Channel.TIKTOK,
@@ -933,4 +933,22 @@ export async function refreshPriceDetailsForOrders(
     }
 
     return results;
+}
+
+// Utility function to sync a single order by ID
+export async function syncOrderById(
+    shop_id: string,
+    order_id: string,
+    options: Partial<OrderSyncOptions> = {}
+): Promise<OrderSyncResult> {
+    const sync = await TikTokOrderSync.create(shop_id);
+    return sync.syncOrders({
+        shop_id,
+        order_ids: [order_id],
+        sync_all: false,
+        include_price_detail: true, // Always include price details for single order sync
+        create_notifications: options.create_notifications ?? true,
+        timeout_seconds: options.timeout_seconds ?? 300,
+        ...options
+    });
 }
