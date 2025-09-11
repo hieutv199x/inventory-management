@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 import { getUserWithShopAccess, getActiveShopIds } from "@/lib/auth";
+import { computeUKAddress } from "@/utils/common/functionFormat";
 
 const prisma = new PrismaClient();
 
@@ -152,6 +153,18 @@ export async function GET(
             );
         }
 
+        // Compute UK-style address format for recipientAddress
+        if (order.recipientAddress) {
+            const address = order.recipientAddress;
+            const ukFormattedAddress = computeUKAddress(address);
+            
+            // Add the computed UK address to the response
+            order.recipientAddress = {
+                ...address,
+                fullAddress: ukFormattedAddress
+            };
+        }
+
         return NextResponse.json({ order });
 
     } catch (err: any) {
@@ -164,4 +177,3 @@ export async function GET(
         await prisma.$disconnect();
     }
 }
-

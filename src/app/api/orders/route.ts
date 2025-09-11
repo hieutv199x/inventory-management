@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { PrismaClient, Channel } from "@prisma/client";
 import { getUserWithShopAccess } from "@/lib/auth";
+import { computeUKAddress } from "@/utils/common/functionFormat";
 
 const prisma = new PrismaClient();
 
@@ -94,6 +95,18 @@ export async function GET(req: NextRequest) {
       take: limit
     });
 
+    for (const order of orders) {
+      // Compute and add UK formatted address if recipientAddress exists
+      const address = order.recipientAddress;
+      if (address) {
+        const ukFormattedAddress = computeUKAddress(address);
+        order.recipientAddress = {
+          ...address,
+          fullAddress: ukFormattedAddress
+        };
+      }
+    }
+    
     return NextResponse.json({
       success: true,
       data: orders,
