@@ -69,11 +69,12 @@ const SyncOrderModal: React.FC<SyncOrderModalProps> = ({ isOpen, onClose, onSync
         <Modal isOpen={isOpen} onClose={handleClose} className="max-w-[60vw]" showCloseButton={false}>
             <div className="fixed inset-0 bg-gray-900/50 backdrop-blur-sm transition-opacity" onClick={handleClose} />
             
-            <div className="fixed inset-0 overflow-y-auto">
-                <div className="flex min-h-full items-center justify-center p-4">
+            <div className="fixed inset-0 overflow-y-auto" style={{ zIndex: 9999 }}>
+                <div className="flex min-h-full items-center justify-center p-4" style={{ overflow: 'visible' }}>
                     <div 
-                        className="relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg dark:bg-gray-800"
+                        className="relative transform overflow-visible rounded-lg bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg dark:bg-gray-800"
                         onClick={(e) => e.stopPropagation()}
+                        style={{ zIndex: 10000 }}
                     >
                         {/* Header */}
                         <div className="flex items-center justify-between border-b border-gray-200 bg-white px-6 py-4 dark:border-gray-700 dark:bg-gray-800">
@@ -100,8 +101,8 @@ const SyncOrderModal: React.FC<SyncOrderModalProps> = ({ isOpen, onClose, onSync
                         </div>
 
                         {/* Content */}
-                        <div className="bg-white px-6 py-6 dark:bg-gray-800">
-                            <div className="space-y-6">
+                        <div className="bg-white px-6 py-6 dark:bg-gray-800" style={{ overflow: 'visible' }}>
+                            <div className="space-y-6" style={{ overflow: 'visible' }}>
                                 {/* Shop Selection */}
                                 <div>
                                     <ShopSelector

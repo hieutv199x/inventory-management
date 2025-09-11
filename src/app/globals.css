@@ -335,6 +335,32 @@
   @apply mt-2 !bg-white !rounded-xl !p-5 !border !border-gray-200 dark:!border-gray-800 !text-gray-500 dark:!bg-gray-dark dark:!text-gray-400 dark:!shadow-theme-xl 2xsm:!w-auto;
 }
 
+/* DatePicker styles - Enhanced for modal compatibility */
+.flatpickr-calendar {
+  z-index: 99999 !important;
+  position: fixed !important;
+}
+
+.flatpickr-calendar.static {
+  position: fixed !important;
+  z-index: 99999 !important;
+}
+
+.flatpickr-calendar.open {
+  z-index: 99999 !important;
+  position: fixed !important;
+}
+
+/* Ensure calendar shows above modal backdrop */
+.flatpickr-wrapper {
+  z-index: 10001 !important;
+}
+
+/* Override any container overflow that might clip the calendar */
+.flatpickr-calendar.open {
+  transform: translateZ(0) !important;
+}
+
 .flatpickr-months .flatpickr-prev-month:hover svg,
 .flatpickr-months .flatpickr-next-month:hover svg {
   @apply stroke-brand-500;
