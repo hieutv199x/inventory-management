@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { PrismaClient, Channel } from "@prisma/client";
 import { TikTokShopNodeApiClient } from '@/nodejs_sdk/client/client';
 import { Fulfillment202309UpdateShippingInfoRequestBody } from '@/nodejs_sdk';
+import { TikTokOrderSync } from '@/lib/tiktok-order-sync';
 
 const prisma = new PrismaClient();
 
@@ -71,6 +72,13 @@ export async function POST(req: NextRequest) {
             fulfillment202309UpdateShippingInfoRequestBody.shippingProviderId = shippingProviderId;
             const result = await client.api.FulfillmentV202309Api.OrdersOrderIdShippingInfoUpdatePost(orderId, shop.accessToken, 'application/json', credentials.shopCipher, fulfillment202309UpdateShippingInfoRequestBody);
             console.log('response: ', JSON.stringify(result, null, 2));
+            if (result.body.code === 0) {
+                const tikTokOrderSync = await TikTokOrderSync.create(shop.shopId);
+                await tikTokOrderSync.syncOrders({
+                    shop_id: shop.shopId,
+                    order_ids: [orderId]
+                });
+            }
             return NextResponse.json(result.body.message);
 
         } catch (error) {

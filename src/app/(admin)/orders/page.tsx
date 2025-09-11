@@ -397,6 +397,9 @@ export default function OrdersPage() {
             });
 
             alert(res);
+            showLoading("Updating orders...");
+            fetchOrders();
+            hideLoading();
         } catch (error) {
             console.error('Error adding tracking information:', error);
             alert('Failed to add tracking information');
