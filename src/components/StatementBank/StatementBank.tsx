@@ -14,6 +14,7 @@ import { useLoading } from "@/context/loadingContext";
 interface Statement {
   statementId: string;
   shopId: string;
+  managedName?: string;
   shopName: string;
   revenue: string;
   holdAmount: string;
@@ -35,6 +36,7 @@ interface PaidHistory {
   shop: {
     shopName: string;
     shopId: string;
+    managedName?: string
   };
 }
 
@@ -74,6 +76,7 @@ interface TikTokTransaction {
   reserveStatus?: string;
   estimatedReleaseTime?: string;
   createdAt: string;
+  managedName?: string;
 }
 
 export const StatementBank = () => {
@@ -152,6 +155,7 @@ export const StatementBank = () => {
           }
 
           return {
+            managedName: item.shop?.managedName || '',
             statementId: item.statementId,
             shopId: item.shop?.shopId || item.shopId || '',
             shopName: item.shop?.shopName || '',
@@ -184,6 +188,7 @@ export const StatementBank = () => {
           }
 
           return {
+            managedName: item.shop?.managedName || '',
             statementId: item.statementId,
             shopId: item.shop?.shopId || item.shopId || '',
             shopName: item.shop?.shopName || '',
@@ -356,6 +361,7 @@ export const StatementBank = () => {
           transactionId: item.transactionId,
           shopId: item.shopId,
           shopName: item.shopName || '',
+          managedName: item.managedName || '',
           statementId: item.statementId,
           currency: item.currency || 'USD',
           transactionType: item.transactionType || 'UNKNOWN', // API trả về transactionType
@@ -392,6 +398,7 @@ export const StatementBank = () => {
           orderId: item.orderId || '',
           shopId: item.shopId,
           shopName: item.shopName || '',
+          managedName: item.managedName || '',
           currency: item.currency || 'USD',
           transactionType: item.transactionType || '',
           reserveStatus: item.reserveStatus || 'UNKNOWN',
@@ -709,86 +716,86 @@ export const StatementBank = () => {
                         </div>
                       </div>
 
-                  <Table>
-                    <TableHeader className="border-gray-100 dark:border-gray-700 border-y">
-                      <TableRow>
-                        <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
-                          Mã báo cáo
-                        </TableCell>
-                        <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
-                          Shop ID
-                        </TableCell>
-                        <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
-                          Tên shop
-                        </TableCell>
-                        <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
-                          Doanh thu
-                        </TableCell>
-                        <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
-                          Tiền giữ
-                        </TableCell>
-                        <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
-                          Đã thanh toán
-                        </TableCell>
-                        <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
-                          Ngày báo cáo
-                        </TableCell>
-                        <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
-                          Tài khoản ngân hàng
-                        </TableCell>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody className="divide-y divide-gray-100 dark:divide-gray-700">
-                      {error ? (
-                        <TableRow>
-                          <TableCell colSpan={8} className="py-12 text-center">
-                            <div className="text-red-500 dark:text-red-400">
-                              <p className="font-medium">Có lỗi xảy ra</p>
-                              <p className="text-sm mt-1">{error}</p>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ) : statements.length === 0 ? (
-                        <TableRow>
-                          <TableCell colSpan={8} className="py-12 text-center">
-                            <div className="text-gray-500 dark:text-gray-400">
-                              <p className="font-medium">Không có dữ liệu</p>
-                              <p className="text-sm mt-1">Chọn shop và khoảng thời gian để xem báo cáo</p>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ) : (
-                        statements.map((s) => (
-                          <TableRow key={s.statementId} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                            <TableCell className="py-3 text-gray-900 dark:text-gray-100 font-mono text-sm">
-                              {s.statementId}
+                      <Table>
+                        <TableHeader className="border-gray-100 dark:border-gray-700 border-y">
+                          <TableRow>
+                            <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
+                              Mã báo cáo
                             </TableCell>
-                            <TableCell className="py-3 text-gray-700 dark:text-gray-300">
-                              {s.shopId}
+                            <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
+                              Shop ID
                             </TableCell>
-                            <TableCell className="py-3 text-gray-700 dark:text-gray-300 font-medium">
-                              {s.shopName}
+                            <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
+                              Tên shop
                             </TableCell>
-                            <TableCell className="py-3 text-gray-700 dark:text-gray-300 font-medium">
-                              {formatCurrency(s.revenue, s.currency)}
+                            <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
+                              Doanh thu
                             </TableCell>
-                            <TableCell className="py-3 text-gray-700 dark:text-gray-300 font-medium">
-                              {formatCurrency(s.holdAmount, s.currency)}
+                            <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
+                              Tiền giữ
                             </TableCell>
-                            <TableCell className="py-3 text-green-600 dark:text-green-400 font-medium">
-                              {formatCurrency(s.paidAmount, s.currency)}
+                            <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
+                              Đã thanh toán
                             </TableCell>
-                            <TableCell className="py-3 text-gray-700 dark:text-gray-300">
-                              {formatDate(s.holdDate)}
+                            <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
+                              Ngày báo cáo
                             </TableCell>
-                            <TableCell className="py-3 text-gray-700 dark:text-gray-300">
-                              {s.bankAccount || '—'}
+                            <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
+                              Tài khoản ngân hàng
                             </TableCell>
                           </TableRow>
-                        ))
-                      )}
-                    </TableBody>
-                  </Table>
+                        </TableHeader>
+                        <TableBody className="divide-y divide-gray-100 dark:divide-gray-700">
+                          {error ? (
+                            <TableRow>
+                              <TableCell colSpan={8} className="py-12 text-center">
+                                <div className="text-red-500 dark:text-red-400">
+                                  <p className="font-medium">Có lỗi xảy ra</p>
+                                  <p className="text-sm mt-1">{error}</p>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          ) : statements.length === 0 ? (
+                            <TableRow>
+                              <TableCell colSpan={8} className="py-12 text-center">
+                                <div className="text-gray-500 dark:text-gray-400">
+                                  <p className="font-medium">Không có dữ liệu</p>
+                                  <p className="text-sm mt-1">Chọn shop và khoảng thời gian để xem báo cáo</p>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          ) : (
+                            statements.map((s) => (
+                              <TableRow key={s.statementId} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                                <TableCell className="py-3 text-gray-900 dark:text-gray-100 font-mono text-sm">
+                                  {s.statementId}
+                                </TableCell>
+                                <TableCell className="py-3 text-gray-700 dark:text-gray-300">
+                                  {s.shopId}
+                                </TableCell>
+                                <TableCell className="py-3 text-gray-700 dark:text-gray-300 font-medium">
+                                  {s.managedName}
+                                </TableCell>
+                                <TableCell className="py-3 text-gray-700 dark:text-gray-300 font-medium">
+                                  {formatCurrency(s.revenue, s.currency)}
+                                </TableCell>
+                                <TableCell className="py-3 text-gray-700 dark:text-gray-300 font-medium">
+                                  {formatCurrency(s.holdAmount, s.currency)}
+                                </TableCell>
+                                <TableCell className="py-3 text-green-600 dark:text-green-400 font-medium">
+                                  {formatCurrency(s.paidAmount, s.currency)}
+                                </TableCell>
+                                <TableCell className="py-3 text-gray-700 dark:text-gray-300">
+                                  {formatDate(s.holdDate)}
+                                </TableCell>
+                                <TableCell className="py-3 text-gray-700 dark:text-gray-300">
+                                  {s.bankAccount || '—'}
+                                </TableCell>
+                              </TableRow>
+                            ))
+                          )}
+                        </TableBody>
+                      </Table>
 
                       {/* Pagination for Statements Tab */}
                       {statementsPagination.totalPages > 1 && (
@@ -875,7 +882,7 @@ export const StatementBank = () => {
                                   {t.transactionId}
                                 </TableCell>
                                 <TableCell className="py-3 text-gray-700 dark:text-gray-300 font-medium">
-                                  {t.shopName}
+                                  {t.managedName}
                                 </TableCell>
                                 <TableCell className="py-3 text-gray-700 dark:text-gray-300 font-medium">
                                   {formatCurrency(t.settlementAmount?.toString() || t.revenueAmount?.toString() || '0', t.currency)}
@@ -1004,7 +1011,7 @@ export const StatementBank = () => {
                               {p.id}
                             </TableCell>
                             <TableCell className="py-3 text-gray-700 dark:text-gray-300">
-                              {p.shop.shopName}
+                              {p.shop.managedName}
                             </TableCell>
                             <TableCell className="py-3 text-gray-700 dark:text-gray-300 font-mono">
                               {p.paymentId}

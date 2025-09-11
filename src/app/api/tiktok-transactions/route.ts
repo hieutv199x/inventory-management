@@ -124,7 +124,7 @@ export async function GET(req: NextRequest) {
     
     const shops = await prisma.shopAuthorization.findMany({
       where: { shopId: { in: shopIds } },
-      select: { shopId: true, shopName: true }
+      select: { shopId: true, shopName: true, managedName: true }
     });
     console.log("Debug - shops found:", shops);
 
@@ -140,6 +140,7 @@ export async function GET(req: NextRequest) {
         orderId: transaction.orderId || '',
         shopId: transaction.shopId || '',
         shopName: shop?.shopName || 'Unknown Shop',
+        managedName: shop?.managedName || 'Unknown Managed Name',
         currency: transaction.currency || 'USD',
         transactionType: transaction.type || '',
         status: transaction.reserveStatus || 'SETTLED',

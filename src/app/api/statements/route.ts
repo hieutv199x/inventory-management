@@ -56,7 +56,8 @@ export async function GET(req: NextRequest) {
         shop: {
           select: {
             shopName: true,
-            shopId: true
+            shopId: true,
+            managedName: true
           }
         }
       },

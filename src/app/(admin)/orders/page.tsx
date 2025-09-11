@@ -88,13 +88,20 @@ export default function OrdersPage() {
     const [syncing, setSyncing] = useState(false);
     const [needSearch, setNeedSearch] = useState(false);
 
-    // Updated filter and search states with default date range
+    // Helper function to get date with timezone offset
+    const getDateWithTimezone = (date: Date) => {
+        const offset = date.getTimezoneOffset() * 60000; // Convert to milliseconds
+        const localTime = new Date(date.getTime() - offset);
+        return localTime.toISOString().slice(0, 16);
+    };
+
+    // Updated filter and search states with default date range using browser timezone
     const [filters, setFilters] = useState({
         shopId: '',
         status: '',
         customStatus: '', // Added customStatus filter
-        dateFrom: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().slice(0, 16), // 1 day ago
-        dateTo: new Date().toISOString().slice(0, 16), // now
+        dateFrom: getDateWithTimezone(new Date(Date.now() - 24 * 60 * 60 * 1000)), // 1 day ago
+        dateTo: getDateWithTimezone(new Date()), // now
         keyword: '',
     });
 

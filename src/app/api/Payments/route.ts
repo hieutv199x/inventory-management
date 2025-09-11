@@ -114,6 +114,7 @@ export async function GET(request: NextRequest) {
           select: {
             shopName: true,
             shopId: true,
+            managedName: true
           },
         },
       },
@@ -139,6 +140,7 @@ export async function GET(request: NextRequest) {
       bankAccount: payment.bankAccount,
       shop: {
         shopName: payment.shop?.shopName || '',
+        managedName: payment.shop?.managedName || '',
         shopId: payment.shop?.shopId || '',
       },
     }));
