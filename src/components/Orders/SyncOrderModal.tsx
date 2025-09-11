@@ -66,7 +66,7 @@ const SyncOrderModal: React.FC<SyncOrderModalProps> = ({ isOpen, onClose, onSync
     };
 
     return (
-        <Modal isOpen={isOpen} onClose={handleClose} className="max-w-lg" showCloseButton={false}>
+        <Modal isOpen={isOpen} onClose={handleClose} className="max-w-[60vw]" showCloseButton={false}>
             <div className="fixed inset-0 bg-gray-900/50 backdrop-blur-sm transition-opacity" onClick={handleClose} />
             
             <div className="fixed inset-0 overflow-y-auto">

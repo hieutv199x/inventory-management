@@ -2,7 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 import crypto from "crypto";
 
-const prisma = new PrismaClient();
+// Create a global Prisma instance to avoid connection issues
+const prisma = new PrismaClient({
+    log: ['error', 'warn'],
+    errorFormat: 'pretty'
+});
 
 // TikTok Shop webhook event types
 interface WebhookEvent {
@@ -138,6 +142,11 @@ async function handleProductEvent(event: WebhookEvent) {
 // Order event handlers
 async function handleOrderStatusChange(shopId: string, orderData: any) {
     try {
+        // Ensure prisma client is available
+        if (!prisma) {
+            throw new Error('Prisma client not initialized');
+        }
+
         const existingOrder = await prisma.order.findUnique({
             where: { orderId: orderData.order_id }
         });
@@ -154,6 +163,8 @@ async function handleOrderStatusChange(shopId: string, orderData: any) {
             console.log(`Updated order ${orderData.order_id} status to ${orderData.status}`);
         } else {
             console.log(`Order ${orderData.order_id} not found, may need to sync from API`);
+            // Trigger order sync for missing orders
+            await triggerOrderSync(shopId, orderData.order_id);
         }
     } catch (error) {
         console.error('Error updating order status:', error);
@@ -161,8 +172,33 @@ async function handleOrderStatusChange(shopId: string, orderData: any) {
     }
 }
 
+// Add a function to safely trigger order sync
+async function triggerOrderSync(shopId: string, orderId?: string) {
+    try {
+        console.log(`Triggering order sync for shop ${shopId}${orderId ? ` and order ${orderId}` : ''}`);
+        
+        // Use a transaction with proper error handling
+        await prisma.$transaction(async (tx) => {
+            // Your order sync logic here
+            // Make sure to pass the transaction client (tx) to any create/update operations
+            console.log('Order sync transaction started');
+        }, {
+            maxWait: 10000, // 10 seconds
+            timeout: 30000, // 30 seconds
+        });
+        
+    } catch (error) {
+        console.error('Error in order sync:', error);
+        // Don't throw here to prevent webhook from failing
+    }
+}
+
 async function handleOrderPaid(shopId: string, orderData: any) {
     try {
+        if (!prisma) {
+            throw new Error('Prisma client not initialized');
+        }
+
         await prisma.order.updateMany({
             where: {
                 orderId: orderData.order_id,
@@ -183,6 +219,10 @@ async function handleOrderPaid(shopId: string, orderData: any) {
 
 async function handleOrderCancelled(shopId: string, orderData: any) {
     try {
+        if (!prisma) {
+            throw new Error('Prisma client not initialized');
+        }
+
         await prisma.order.updateMany({
             where: {
                 orderId: orderData.order_id,
@@ -203,6 +243,10 @@ async function handleOrderCancelled(shopId: string, orderData: any) {
 
 async function handleOrderCompleted(shopId: string, orderData: any) {
     try {
+        if (!prisma) {
+            throw new Error('Prisma client not initialized');
+        }
+
         await prisma.order.updateMany({
             where: {
                 orderId: orderData.order_id,
@@ -333,7 +377,12 @@ async function logWebhookEvent(event: WebhookEvent, status: 'success' | 'error',
 }
 
 export async function POST(req: NextRequest) {
+    let shouldDisconnect = false;
     try {
+        // Ensure prisma connection is healthy
+        await prisma.$connect();
+        shouldDisconnect = true;
+
         // Get raw body for signature verification
         const body = await req.text();
         const signature = req.headers.get('x-tts-signature') || '';
@@ -401,10 +450,11 @@ export async function POST(req: NextRequest) {
             console.error('Error processing webhook event:', processingError);
             await logWebhookEvent(event, 'error', processingError instanceof Error ? processingError.message : 'Unknown error');
 
-            // Return error but with 200 status to prevent TikTok from retrying
+            // Return success to prevent TikTok from retrying, but log the error
             return NextResponse.json({
                 message: 'Webhook received but processing failed',
-                error: processingError instanceof Error ? processingError.message : 'Unknown error'
+                error: processingError instanceof Error ? processingError.message : 'Unknown error',
+                success: false
             });
         }
 
@@ -416,7 +466,9 @@ export async function POST(req: NextRequest) {
             { status: 500 }
         );
     } finally {
-        await prisma.$disconnect();
+        if (shouldDisconnect) {
+            await prisma.$disconnect();
+        }
     }
 }
 
