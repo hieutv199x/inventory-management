@@ -446,6 +446,11 @@ export class TikTokOrderSync {
                                 await this.updateExistingPaymentWithPriceDetails(tx, existingOrderMap.get(order.id)!, priceDetails);
                             }
 
+                            // Upsert recipient address if it exists
+                            if (order.recipientAddress) {
+                                await this.upsertRecipientAddress(tx, existingOrderMap.get(order.id)!, order.recipientAddress);
+                            }
+
                             updated++;
                         } else {
                             // Create new order with all associations including price details
@@ -568,6 +573,47 @@ export class TikTokOrderSync {
         }
     }
 
+    public async upsertRecipientAddress(tx: any, orderId: string, recipientAddress: any) {
+        try {
+            const addressChannelData = {
+                addressDetail: recipientAddress.addressDetail,
+                addressLine1: recipientAddress.addressLine1,
+                addressLine2: recipientAddress.addressLine2 || "",
+                addressLine3: recipientAddress.addressLine3 || "",
+                addressLine4: recipientAddress.addressLine4 || "",
+                firstName: recipientAddress.firstName || "",
+                firstNameLocalScript: recipientAddress.firstNameLocalScript || "",
+                lastName: recipientAddress.lastName || "",
+                lastNameLocalScript: recipientAddress.lastNameLocalScript || "",
+                regionCode: recipientAddress.regionCode,
+                districtInfo: recipientAddress.districtInfo || []
+            };
+
+            await tx.orderRecipientAddress.upsert({
+                where: { orderId: orderId },
+                update: {
+                    fullAddress: recipientAddress.fullAddress,
+                    name: recipientAddress.name,
+                    phoneNumber: recipientAddress.phoneNumber,
+                    postalCode: recipientAddress.postalCode || "",
+                    channelData: JSON.stringify(addressChannelData)
+                },
+                create: {
+                    orderId: orderId,
+                    fullAddress: recipientAddress.fullAddress,
+                    name: recipientAddress.name,
+                    phoneNumber: recipientAddress.phoneNumber,
+                    postalCode: recipientAddress.postalCode || "",
+                    channelData: JSON.stringify(addressChannelData)
+                }
+            });
+
+            console.log(`Upserted recipient address for order ${orderId}`);
+        } catch (error) {
+            console.warn(`Failed to upsert recipient address for order ${orderId}:`, error);
+        }
+    }
+
     private async createOrderPayment(tx: any, orderId: string, paymentData: any, priceDetails: any = null) {
         // Enhanced payment channel data with detailed pricing
         const paymentChannelData = {
@@ -636,7 +682,7 @@ export class TikTokOrderSync {
         };
 
         // Create the order
-        const createdOrder = await tx.order.create({
+        const createdOrder = await tx.orders.create({
             data: {
                 orderId: order.id,
                 channel: Channel.TIKTOK,
@@ -678,7 +724,7 @@ export class TikTokOrderSync {
                         rtsTime: item.rtsTime
                     };
 
-                    await tx.orderItem.create({
+                    await tx.orderLineItem.create({
                         data: {
                             orderId: createdOrder.id,
                             lineItemId: item.id,
@@ -716,7 +762,7 @@ export class TikTokOrderSync {
                     districtInfo: order.recipientAddress.districtInfo || []
                 };
 
-                await tx.orderAddress.create({
+                await tx.orderRecipientAddress.create({
                     data: {
                         orderId: createdOrder.id,
                         fullAddress: order.recipientAddress.fullAddress,

@@ -3,6 +3,7 @@ import { PrismaClient } from "@prisma/client";
 import {
     TikTokShopNodeApiClient,
 } from "@/nodejs_sdk";
+import { syncOrderById } from "../../webhook/route";
 
 const prisma = new PrismaClient();
 
@@ -20,7 +21,7 @@ export async function GET(req: NextRequest) {
         // Get shop and app info using unified schema
         const credentials = await prisma.shopAuthorization.findUnique({
             where: {
-                shopId: shop_id,
+                id: shop_id,
             },
             include: {
                 app: true,
@@ -36,6 +37,7 @@ export async function GET(req: NextRequest) {
             return NextResponse.json({ error: "Not a TikTok shop" }, { status: 400 });
         }
 
+        
         const app_key = credentials.app.appKey;
         const app_secret = credentials.app.appSecret;
         const baseUrl = process.env.TIKTOK_BASE_URL;
@@ -59,9 +61,13 @@ export async function GET(req: NextRequest) {
             },
         });
         
-        const result = await client.api.OrderV202309Api.OrdersGet([], credentials.accessToken, "application/json", shopCipher);
+        const result = await client.api.OrderV202309Api.OrdersGet(['576786302672869930'], credentials.accessToken, "application/json", shopCipher);
         console.log('response: ', JSON.stringify(result, null, 2));
 
+        // const syncResult = await syncOrderById(credentials.shopId, "576786302672869930", {
+        //                 create_notifications: false,
+        //                 timeout_seconds: 60
+        //             });
         return NextResponse.json(result);
     } catch (err: any) {
         console.error("Error getting orders:", err);
