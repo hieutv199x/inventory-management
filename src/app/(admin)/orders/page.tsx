@@ -440,6 +440,9 @@ export default function OrdersPage() {
                 shippingProviderId
             });
 
+            showLoading("Updating orders...");
+            fetchOrders();
+            hideLoading();
             toast.success('Tracking information added successfully');
         } catch (error) {
             console.error('Error adding tracking information:', error);
