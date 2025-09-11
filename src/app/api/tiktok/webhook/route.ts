@@ -199,106 +199,84 @@ async function handleOrderStatusChange(webhookData: TikTokWebhookData) {
             return;
         }
 
-        // Find the order in our database
+        // Store previous status for comparison (if order exists)
         const existingOrder = await prisma.order.findFirst({
             where: {
                 orderId: order_id,
                 shopId: credentials.id
-            }
+            },
+            select: { status: true, id: true }
         });
 
-        if (!existingOrder) {
-            console.log(`Order ${order_id} not found in database, will sync from API`);
+        const previousStatus = existingOrder?.status || null;
 
-            // Create notification about missing order being synced
-            await NotificationService.createNotification({
-                type: NotificationType.NEW_ORDER,
-                title: 'Có đơn hàng mới',
-                message: `Có đơn hàng mới ${order_id} trên shop: ${credentials.managedName}`,
-                userId: 'system',
-                data: {
-                    webhookType: 'ORDER_STATUS_CHANGE',
-                    orderId: order_id,
-                    shopId: shop_id,
-                    timestamp: webhookData.timestamp,
-                    syncTriggered: true
-                }
-            });
-
-            // Use the utility function instead of custom sync logic
-            setTimeout(async () => {
-                try {
-                    const syncResult = await syncOrderById(shop_id, order_id, {
-                        create_notifications: false, // Don't create duplicate notifications
-                        timeout_seconds: 60
-                    });
-                    console.log(`Webhook order sync completed:`, syncResult);
-                } catch (syncError) {
-                    console.error(`Failed to sync order ${order_id} from webhook:`, syncError);
-                }
-            }, 1000);
-
-            return;
-        }
-
-        // Store previous status for notification
-        const previousStatus = existingOrder.status;
-
-        // Update order status and other relevant fields
-        const updateData: any = {
-            status: order_status,
-            updateTime: update_time,
-        };
-
-        // Handle on hold status
-        if (is_on_hold_order !== undefined) {
-            let channelData = {};
+        // Always sync the order to get latest data including recipient address
+        console.log(`Syncing order ${order_id} to get latest data including status change`);
+        
+        // Use syncOrderById to handle both create and update with full data
+        setTimeout(async () => {
             try {
-                channelData = JSON.parse(existingOrder.channelData || '{}');
-            } catch (error) {
-                console.warn('Failed to parse existing channelData');
-            }
+                const syncResult = await syncOrderById(shop_id, order_id, {
+                    create_notifications: false, // We'll create specific notifications below
+                    timeout_seconds: 120
+                });
+                
+                console.log(`Webhook order sync completed:`, syncResult);
 
-            channelData = {
-                ...channelData,
-                isOnHoldOrder: is_on_hold_order,
-                lastWebhookUpdate: Date.now(),
-                lastWebhookTimestamp: webhookData.timestamp,
-                notificationId: webhookData.tts_notification_id
-            };
-            updateData.channelData = JSON.stringify(channelData);
-        }
+                // After sync, get the updated order to create proper notifications
+                const updatedOrder = await prisma.order.findFirst({
+                    where: {
+                        orderId: order_id,
+                        shopId: credentials.id
+                    },
+                    include: {
+                        payment: true,
+                        shop: true,
+                        recipientAddress: true
+                    }
+                });
 
-        // Update the order in database
-        const updatedOrder = await prisma.order.update({
-            where: { id: existingOrder.id },
-            data: updateData,
-            include: {
-                payment: true,
-                shop: true
-            }
-        });
+                if (updatedOrder) {
+                    // Create notification for order status change (only if status actually changed)
+                    if (previousStatus !== order_status && credentials.id) {
+                        await NotificationService.createOrderNotification(
+                            NotificationType.ORDER_STATUS_CHANGE,
+                            updatedOrder,
+                            credentials.id,
+                            {
+                                previousStatus: previousStatus,
+                                newStatus: order_status,
+                                webhookTimestamp: webhookData.timestamp,
+                                isOnHold: is_on_hold_order,
+                                notificationId: webhookData.tts_notification_id,
+                                syncTriggered: true
+                            }
+                        );
+                    }
 
-        console.log(`Successfully updated order ${order_id} status to ${order_status}`);
-
-        // Create notification for order status change (only if status actually changed)
-        if (previousStatus !== order_status && credentials.id) {
-            await NotificationService.createOrderNotification(
-                NotificationType.ORDER_STATUS_CHANGE,
-                updatedOrder,
-                credentials.id,
-                {
-                    previousStatus: previousStatus,
-                    newStatus: order_status,
-                    webhookTimestamp: webhookData.timestamp,
-                    isOnHold: is_on_hold_order,
-                    notificationId: webhookData.tts_notification_id
+                    // Handle specific status changes for business logic
+                    await handleSpecificStatusChanges(updatedOrder.id, order_status ?? '', webhookData, credentials.id);
                 }
-            );
-        }
 
-        // Handle specific status changes for business logic
-        await handleSpecificStatusChanges(existingOrder.id, order_status ?? '', webhookData, credentials.id);
+            } catch (syncError) {
+                console.error(`Failed to sync order ${order_id} from webhook:`, syncError);
+                
+                // Create error notification
+                await NotificationService.createNotification({
+                    type: NotificationType.WEBHOOK_ERROR,
+                    title: 'Order Sync Failed',
+                    message: `Failed to sync order ${order_id} after status change: ${syncError instanceof Error ? syncError.message : String(syncError)}`,
+                    userId: 'system',
+                    data: {
+                        webhookType: 'ORDER_STATUS_CHANGE',
+                        orderId: order_id,
+                        shopId: shop_id,
+                        error: syncError instanceof Error ? syncError.message : String(syncError),
+                        timestamp: webhookData.timestamp
+                    }
+                });
+            }
+        }, 1000); // Delay to ensure webhook response is sent first
 
     } catch (error) {
         console.error('Error handling order status change:', error);
