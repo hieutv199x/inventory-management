@@ -342,134 +342,130 @@ export class TikTokOrderSync {
         let errors: { orderId: string; error: string }[] = [];
 
         try {
-            await prisma.$transaction(async (tx) => {
-                const orderIds = orders.map(o => o.id);
-                const existingOrders = await tx.order.findMany({
-                    where: { orderId: { in: orderIds } },
-                    select: { id: true, orderId: true }
-                });
-
-                const existingOrderMap = new Map(existingOrders.map(o => [o.orderId, o.id]));
-
-                for (const order of orders) {
-                    try {
-                        processed++;
-
-                        // Fetch price details for each order
-                        let priceDetails = null;
-                        if (includePriceDetail) {
-                            try {
-                                console.log(`Fetching price details for order ${order.id}`);
-                                const priceResult = await this.client.api.OrderV202407Api.OrdersOrderIdPriceDetailGet(
-                                    order.id,
-                                    this.credentials.accessToken,
-                                    "application/json",
-                                    this.shopCipher
-                                );
-                                if (priceResult?.body?.data) {
-                                    priceDetails = priceResult.body.data;
-                                    withPriceDetails++;
-                                    console.log(`Successfully fetched price details for order ${order.id}`);
-                                }
-
-                                // Add small delay between price detail requests to avoid rate limiting
-                                await new Promise(resolve => setTimeout(resolve, 50));
-                            } catch (priceError) {
-                                console.warn(`Failed to fetch price details for order ${order.id}:`, priceError);
-                                // Don't fail the entire sync if price details fail
-                            }
-                        }
-
-                        // Enhanced channel data with price details
-                        const channelData = {
-                            // Standard TikTok order data
-                            orderType: order.orderType,
-                            fulfillmentType: order.fulfillmentType,
-                            deliveryType: order.deliveryType,
-                            paymentMethodName: order.paymentMethodName,
-                            shippingProvider: order.shippingProvider,
-                            deliveryOptionName: order.deliveryOptionName,
-                            collectionTime: order.collectionTime,
-                            userId: order.userId,
-                            isOnHoldOrder: order.isOnHoldOrder,
-                            splitOrCombineTag: order.splitOrCombineTag,
-                            trackingNumber: order.trackingNumber,
-                            warehouseId: order.warehouseId,
-                            sellerNote: order.sellerNote,
-                            // Additional fields
-                            cancelOrderSlaTime: order.cancelOrderSlaTime,
-                            ttsSlaTime: order.ttsSlaTime,
-                            rtsSlaTime: order.rtsSlaTime,
-                            rtsTime: order.rtsTime,
-                            // Enhanced price details
-                            ...(priceDetails && {
-                                priceDetails,
-                                priceDetailsFetchedAt: Date.now(),
-                                detailedBreakdown: this.extractPriceBreakdown(priceDetails)
-                            })
-                        };
-
-                        const orderData = {
-                            orderId: order.id,
-                            channel: Channel.TIKTOK,
-                            buyerEmail: order.buyerEmail || "",
-                            buyerMessage: order.buyerMessage || "",
-                            createTime: order.createTime || Math.floor(Date.now() / 1000),
-                            updateTime: order.updateTime || Math.floor(Date.now() / 1000),
-                            status: order.status || "UNKNOWN",
-                            totalAmount: order.payment?.totalAmount || null,
-                            currency: order.payment?.currency || null,
-                            paidTime: order.paidTime,
-                            deliveryTime: order.deliveryTime,
-                            channelData: JSON.stringify(channelData),
-                            shopId: shopId,
-                        };
-
-                        if (existingOrderMap.has(order.id)) {
-                            // Update existing order with price details
-                            await tx.order.update({
-                                where: { id: existingOrderMap.get(order.id) },
-                                data: {
-                                    status: orderData.status,
-                                    updateTime: orderData.updateTime,
-                                    deliveryTime: orderData.deliveryTime,
-                                    paidTime: orderData.paidTime,
-                                    totalAmount: orderData.totalAmount,
-                                    currency: orderData.currency,
-                                    buyerMessage: orderData.buyerMessage,
-                                    channelData: orderData.channelData,
-                                }
-                            });
-
-                            // Update payment information with price details if it exists
-                            if (priceDetails) {
-                                await this.updateExistingPaymentWithPriceDetails(tx, existingOrderMap.get(order.id)!, priceDetails);
-                            }
-
-                            // Upsert recipient address if it exists
-                            if (order.recipientAddress) {
-                                await this.upsertRecipientAddress(tx, existingOrderMap.get(order.id)!, order.recipientAddress);
-                            }
-
-                            updated++;
-                        } else {
-                            // Create new order with all associations including price details
-                            await this.insertOrderWithAssociations(tx, order, shopId, priceDetails);
-                            created++;
-                        }
-
-                    } catch (orderError) {
-                        console.error(`Error processing order ${order.id}:`, orderError);
-                        errors.push({
-                            orderId: order.id,
-                            error: orderError instanceof Error ? orderError.message : String(orderError)
-                        });
-                    }
-                }
-            }, {
-                maxWait: timeoutSeconds * 1000,
-                timeout: timeoutSeconds * 2000,
+            // Remove transaction wrapper - process directly
+            const orderIds = orders.map(o => o.id);
+            const existingOrders = await prisma.order.findMany({
+                where: { orderId: { in: orderIds } },
+                select: { id: true, orderId: true }
             });
+
+            const existingOrderMap = new Map(existingOrders.map(o => [o.orderId, o.id]));
+
+            for (const order of orders) {
+                try {
+                    processed++;
+
+                    // Fetch price details for each order
+                    let priceDetails = null;
+                    if (includePriceDetail) {
+                        try {
+                            console.log(`Fetching price details for order ${order.id}`);
+                            const priceResult = await this.client.api.OrderV202407Api.OrdersOrderIdPriceDetailGet(
+                                order.id,
+                                this.credentials.accessToken,
+                                "application/json",
+                                this.shopCipher
+                            );
+                            if (priceResult?.body?.data) {
+                                priceDetails = priceResult.body.data;
+                                withPriceDetails++;
+                                console.log(`Successfully fetched price details for order ${order.id}`);
+                            }
+
+                            // Add small delay between price detail requests to avoid rate limiting
+                            await new Promise(resolve => setTimeout(resolve, 50));
+                        } catch (priceError) {
+                            console.warn(`Failed to fetch price details for order ${order.id}:`, priceError);
+                            // Don't fail the entire sync if price details fail
+                        }
+                    }
+
+                    // Enhanced channel data with price details
+                    const channelData = {
+                        // Standard TikTok order data
+                        orderType: order.orderType,
+                        fulfillmentType: order.fulfillmentType,
+                        deliveryType: order.deliveryType,
+                        paymentMethodName: order.paymentMethodName,
+                        shippingProvider: order.shippingProvider,
+                        deliveryOptionName: order.deliveryOptionName,
+                        collectionTime: order.collectionTime,
+                        userId: order.userId,
+                        isOnHoldOrder: order.isOnHoldOrder,
+                        splitOrCombineTag: order.splitOrCombineTag,
+                        trackingNumber: order.trackingNumber,
+                        warehouseId: order.warehouseId,
+                        sellerNote: order.sellerNote,
+                        // Additional fields
+                        cancelOrderSlaTime: order.cancelOrderSlaTime,
+                        ttsSlaTime: order.ttsSlaTime,
+                        rtsSlaTime: order.rtsSlaTime,
+                        rtsTime: order.rtsTime,
+                        // Enhanced price details
+                        ...(priceDetails && {
+                            priceDetails,
+                            priceDetailsFetchedAt: Date.now(),
+                            detailedBreakdown: this.extractPriceBreakdown(priceDetails)
+                        })
+                    };
+
+                    const orderData = {
+                        orderId: order.id,
+                        channel: Channel.TIKTOK,
+                        buyerEmail: order.buyerEmail || "",
+                        buyerMessage: order.buyerMessage || "",
+                        createTime: order.createTime || Math.floor(Date.now() / 1000),
+                        updateTime: order.updateTime || Math.floor(Date.now() / 1000),
+                        status: order.status || "UNKNOWN",
+                        totalAmount: order.payment?.totalAmount || null,
+                        currency: order.payment?.currency || null,
+                        paidTime: order.paidTime,
+                        deliveryTime: order.deliveryTime,
+                        channelData: JSON.stringify(channelData),
+                        shopId: shopId,
+                    };
+
+                    if (existingOrderMap.has(order.id)) {
+                        // Update existing order with price details
+                        await prisma.order.update({
+                            where: { id: existingOrderMap.get(order.id) },
+                            data: {
+                                status: orderData.status,
+                                updateTime: orderData.updateTime,
+                                deliveryTime: orderData.deliveryTime,
+                                paidTime: orderData.paidTime,
+                                totalAmount: orderData.totalAmount,
+                                currency: orderData.currency,
+                                buyerMessage: orderData.buyerMessage,
+                                channelData: orderData.channelData,
+                            }
+                        });
+
+                        // Update payment information with price details if it exists
+                        if (priceDetails) {
+                            await this.updateExistingPaymentWithPriceDetails(existingOrderMap.get(order.id)!, priceDetails);
+                        }
+
+                        // Upsert recipient address if it exists
+                        if (order.recipientAddress) {
+                            await this.upsertRecipientAddress(existingOrderMap.get(order.id)!, order.recipientAddress);
+                        }
+
+                        updated++;
+                    } else {
+                        // Create new order with all associations including price details
+                        await this.insertOrderWithAssociations(order, shopId, priceDetails);
+                        created++;
+                    }
+
+                } catch (orderError) {
+                    console.error(`Error processing order ${order.id}:`, orderError);
+                    errors.push({
+                        orderId: order.id,
+                        error: orderError instanceof Error ? orderError.message : String(orderError)
+                    });
+                }
+            }
 
         } catch (error) {
             console.error('Error processing order batch:', error);
@@ -533,9 +529,9 @@ export class TikTokOrderSync {
         return breakdown;
     }
 
-    public async updateExistingPaymentWithPriceDetails(tx: any, orderId: string, priceDetails: any) {
+    public async updateExistingPaymentWithPriceDetails(orderId: string, priceDetails: any) {
         try {
-            const existingPayment = await tx.orderPayment.findUnique({
+            const existingPayment = await prisma.orderPayment.findUnique({
                 where: { orderId: orderId }
             });
 
@@ -559,7 +555,7 @@ export class TikTokOrderSync {
                     pricingBreakdown: this.extractPriceBreakdown(priceDetails)
                 };
 
-                await tx.orderPayment.update({
+                await prisma.orderPayment.update({
                     where: { id: existingPayment.id },
                     data: {
                         channelData: JSON.stringify(enhancedChannelData)
@@ -573,7 +569,7 @@ export class TikTokOrderSync {
         }
     }
 
-    public async upsertRecipientAddress(tx: any, orderId: string, recipientAddress: any) {
+    public async upsertRecipientAddress(orderId: string, recipientAddress: any) {
         try {
             const addressChannelData = {
                 addressDetail: recipientAddress.addressDetail,
@@ -589,7 +585,7 @@ export class TikTokOrderSync {
                 districtInfo: recipientAddress.districtInfo || []
             };
 
-            await tx.orderRecipientAddress.upsert({
+            await prisma.orderRecipientAddress.upsert({
                 where: { orderId: orderId },
                 update: {
                     fullAddress: recipientAddress.fullAddress,
@@ -614,7 +610,7 @@ export class TikTokOrderSync {
         }
     }
 
-    private async createOrderPayment(tx: any, orderId: string, paymentData: any, priceDetails: any = null) {
+    private async createOrderPayment(orderId: string, paymentData: any, priceDetails: any = null) {
         // Enhanced payment channel data with detailed pricing
         const paymentChannelData = {
             // Original TikTok payment fields
@@ -634,7 +630,7 @@ export class TikTokOrderSync {
             })
         };
 
-        await tx.orderPayment.create({
+        await prisma.orderPayment.create({
             data: {
                 orderId: orderId,
                 currency: paymentData.currency || 'USD',
@@ -648,7 +644,6 @@ export class TikTokOrderSync {
 
     // Insert a new order and its associations, including payment and price details
     private async insertOrderWithAssociations(
-        tx: any,
         order: any,
         shopId: string,
         priceDetails: any = null
@@ -680,7 +675,7 @@ export class TikTokOrderSync {
         };
 
         // Create the order
-        const createdOrder = await tx.order.create({
+        const createdOrder = await prisma.order.create({
             data: {
                 orderId: order.id,
                 channel: Channel.TIKTOK,
@@ -700,7 +695,7 @@ export class TikTokOrderSync {
 
         // Create payment record if payment exists
         if (order.payment) {
-            await this.createOrderPayment(tx, createdOrder.id, order.payment, priceDetails);
+            await this.createOrderPayment(createdOrder.id, order.payment, priceDetails);
         }
 
         // Create order items
@@ -722,7 +717,7 @@ export class TikTokOrderSync {
                         rtsTime: item.rtsTime
                     };
 
-                    await tx.orderLineItem.create({
+                    await prisma.orderLineItem.create({
                         data: {
                             orderId: createdOrder.id,
                             lineItemId: item.id,
@@ -760,7 +755,7 @@ export class TikTokOrderSync {
                     districtInfo: order.recipientAddress.districtInfo || []
                 };
 
-                await tx.orderRecipientAddress.create({
+                await prisma.orderRecipientAddress.create({
                     data: {
                         orderId: createdOrder.id,
                         fullAddress: order.recipientAddress.fullAddress,
@@ -883,14 +878,11 @@ export async function refreshPriceDetailsForOrders(
                             }
                         });
 
-                        // Also update payment record if exists using transaction
-                        await prisma.$transaction(async (tx) => {
-                            await sync.updateExistingPaymentWithPriceDetails(
-                                tx,
-                                existingOrder.id,
-                                priceResult.body.data
-                            );
-                        });
+                        // Also update payment record if exists without transaction
+                        await sync.updateExistingPaymentWithPriceDetails(
+                            existingOrder.id,
+                            priceResult.body.data
+                        );
 
                         results.successCount++;
                         console.log(`Successfully refreshed price details for order ${orderId}`);
