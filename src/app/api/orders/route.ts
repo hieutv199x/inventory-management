@@ -127,7 +127,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       success: true,
       orders: orders, // Frontend expects "orders" field
-      data: orders,   // Keep for backward compatibility
       pagination: {
         currentPage: page,
         totalPages,

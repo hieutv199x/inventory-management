@@ -387,7 +387,6 @@ export default function OrdersPage() {
 
     const formatCustomerInfo = (order: Order) => {
         const customerInfo = [
-            `Order ID: ${order.orderId}`,
             `Customer: ${order.recipientAddress?.name || 'N/A'}`,
             `Phone: ${order.recipientAddress?.phoneNumber || 'N/A'}`,
             `Address: ${order.recipientAddress?.fullAddress || 'N/A'}`,
@@ -823,9 +822,6 @@ export default function OrdersPage() {
                                                     </div>
                                                     <div className="text-xs text-gray-500 truncate max-w-48 dark:text-gray-400">
                                                         {order.recipientAddress?.phoneNumber || 'N/A'}
-                                                    </div>
-                                                    <div className="text-xs text-gray-500 truncate max-w-48 dark:text-gray-400">
-                                                        {order.buyerEmail}
                                                     </div>
                                                     <div className="text-xs text-gray-500 truncate max-w-48 dark:text-gray-400">
                                                         {order.recipientAddress?.fullAddress || 'N/A'}

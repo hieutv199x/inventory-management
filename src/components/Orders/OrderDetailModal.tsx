@@ -72,7 +72,6 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({ order, isOpen, onCl
             `Phone: ${order.recipientAddress?.phoneNumber}`,
             `Address: ${order.recipientAddress?.fullAddress}`,
             `Postal Code: ${order.recipientAddress?.postalCode}`,
-            `Region: ${addressChannelData.regionCode}`
         ].filter(line => !line.includes('undefined') && !line.endsWith(': ')).join('\n');
         return address;
     };

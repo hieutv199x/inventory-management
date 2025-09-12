@@ -129,3 +129,108 @@ export const computeUKAddress = (address: any): string => {
     
     return parts.filter(part => part && part.trim()).join(', ');
 }
+
+// Helper function to format shipping address in UK style
+export const formatShippingAddress = (address: any): string => {
+    const lines = [];
+    
+    // Parse channelData if available
+    let addressData = address;
+    if (address.channelData) {
+        try {
+            const channelData = JSON.parse(address.channelData);
+            addressData = { ...address, ...channelData };
+        } catch (error) {
+            console.warn('Failed to parse address channelData, using original address');
+        }
+    }
+    
+    // Line 1: Name
+    if (address.name || addressData.firstName || addressData.lastName) {
+        const fullName = address.name || `${addressData.firstName || ''} ${addressData.lastName || ''}`.trim();
+        if (fullName) {
+            lines.push(fullName);
+        }
+    }
+    
+    // Line 2: Phone number
+    if (address.phoneNumber) {
+        lines.push(address.phoneNumber);
+    }
+    
+    // Line 3: Email (if available)
+    if (address.email || addressData.email) {
+        lines.push(address.email || addressData.email);
+    }
+    
+    // Line 4: Street address (main address line)
+    if (addressData.addressLine1) {
+        lines.push(addressData.addressLine1);
+    } else if (addressData.addressDetail) {
+        lines.push(addressData.addressDetail);
+    } else if (address.fullAddress) {
+        // Extract first line from full address if available
+        const addressParts = address.fullAddress.split(',');
+        if (addressParts.length > 0) {
+            lines.push(addressParts[0].trim());
+        }
+    }
+    
+    // Line 5: Additional address lines
+    if (addressData.addressLine2 && addressData.addressLine2.trim()) {
+        lines.push(addressData.addressLine2);
+    }
+    
+    // Line 6: City, County, Country
+    const locationParts = [];
+    
+    // Extract location from districtInfo if available
+    let city = '';
+    let county = '';
+    let country = '';
+    
+    if (addressData.districtInfo && Array.isArray(addressData.districtInfo)) {
+        addressData.districtInfo.forEach((district: any) => {
+            switch (district.addressLevel) {
+                case 'L0':
+                    if (district.addressLevelName?.toLowerCase() === 'country') {
+                        country = district.addressName;
+                    }
+                    break;
+                case 'L1':
+                    county = district.addressName;
+                    break;
+                case 'L2':
+                    city = district.addressName;
+                    break;
+            }
+        });
+    }
+    
+    // Fallback to address fields
+    if (!city && (addressData.city || address.city)) {
+        city = addressData.city || address.city;
+    }
+    if (!county && (addressData.state || address.state)) {
+        county = addressData.state || address.state;
+    }
+    if (!country && (addressData.country || address.country)) {
+        country = addressData.country || address.country;
+    }
+    
+    // Build location line
+    if (city) locationParts.push(city);
+    if (county && county !== city) locationParts.push(county);
+    if (country && country !== county) locationParts.push(country);
+    
+    if (locationParts.length > 0) {
+        lines.push(locationParts.join(','));
+    }
+    
+    // Line 7: Postal code
+    if (address.postalCode || address.postcode || address.zipCode) {
+        lines.push(address.postalCode || address.postcode || address.zipCode);
+    }
+    
+    return lines.filter(line => line && line.trim()).join('\n');
+};
