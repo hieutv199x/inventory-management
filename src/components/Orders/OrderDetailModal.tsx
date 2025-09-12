@@ -4,6 +4,7 @@ import { X, Package, MapPin, CreditCard, Truck, User, Calendar, ShoppingBag, Inf
 import Image from "next/image";
 import { Modal } from "../ui/modal";
 import { format } from 'date-fns';
+import { formatTikTokTimestamp } from '@/utils/datetime';
 
 interface OrderDetailModalProps {
     order: any | null;
@@ -17,7 +18,7 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({ order, isOpen, onCl
     if (!isOpen || !order) return null;
 
     const formatTimestamp = (timestamp: number) => {
-        return format(new Date(timestamp * 1000), 'MMM dd, yyyy HH:mm:ss');
+        return formatTikTokTimestamp(timestamp, { includeSeconds: true });
     };
 
     const formatCurrency = (amount: string, currency: string) => {

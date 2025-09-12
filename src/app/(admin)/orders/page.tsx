@@ -9,6 +9,8 @@ import { useLoading } from '@/context/loadingContext';
 import OrderDetailModal from '@/components/Orders/OrderDetailModal';
 import ShopSelector from '@/components/ui/ShopSelector';
 import { formatCurrency } from "@/utils/common/functionFormat";
+import { formatTikTokTimestamp } from '@/utils/datetime';
+import TimezoneInfo from '@/components/ui/TimezoneInfo';
 import AddTrackingModal from '@/components/Orders/AddTrackingModal';
 import SyncOrderModal from '@/components/Orders/SyncOrderModal';
 import toast from 'react-hot-toast';
@@ -338,7 +340,7 @@ export default function OrdersPage() {
     };
 
     const formatTimestamp = (timestamp: number) => {
-        return format(new Date(timestamp * 1000), 'MMM dd, yyyy HH:mm');
+        return formatTikTokTimestamp(timestamp, { includeSeconds: false });
     };
 
     const getStatusColor = (status: string) => {
@@ -696,6 +698,9 @@ export default function OrdersPage() {
 
             {/* Orders Table */}
             <div className="bg-white rounded-lg shadow-sm border dark:border-gray-800 dark:bg-white/[0.03]">
+                <div className="px-6 py-3 border-b border-gray-200 dark:border-gray-700">
+                    <TimezoneInfo />
+                </div>
                 <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-200">
                         <thead className="bg-gray-50 dark:border-gray-800 dark:bg-white/[0.03]">
