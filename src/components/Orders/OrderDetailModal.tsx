@@ -59,19 +59,18 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({ order, isOpen, onCl
 
     const formatCustomerInfo = () => {
         const customerInfo = [
-            `Buyer Email: ${order.buyerEmail}`,
-            `User ID: ${orderChannelData.userId || 'N/A'}`,
-            order.buyerMessage ? `Buyer Message: ${order.buyerMessage}` : ''
+            `${order.buyerEmail}`,
+            `${orderChannelData.userId || 'N/A'}`,
+            order.buyerMessage ? `${order.buyerMessage}` : ''
         ].filter(Boolean).join('\n');
         return customerInfo;
     };
 
     const formatDeliveryAddress = () => {
         const address = [
-            `Recipient: ${addressChannelData.firstName} ${addressChannelData.lastName || order.recipientAddress?.name}`,
-            `Phone: ${order.recipientAddress?.phoneNumber}`,
-            `Address: ${order.recipientAddress?.fullAddress}`,
-            `Postal Code: ${order.recipientAddress?.postalCode}`,
+            `${addressChannelData.firstName} ${addressChannelData.lastName || order.recipientAddress?.name}`,
+            `${order.recipientAddress?.phoneNumber}`,
+            `${order.recipientAddress?.fullAddress}`,
         ].filter(line => !line.includes('undefined') && !line.endsWith(': ')).join('\n');
         return address;
     };

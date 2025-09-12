@@ -387,9 +387,9 @@ export default function OrdersPage() {
 
     const formatCustomerInfo = (order: Order) => {
         const customerInfo = [
-            `Customer: ${order.recipientAddress?.name || 'N/A'}`,
-            `Phone: ${order.recipientAddress?.phoneNumber || 'N/A'}`,
-            `Address: ${order.recipientAddress?.fullAddress || 'N/A'}`,
+            `${order.recipientAddress?.name || 'N/A'}`,
+            `${order.recipientAddress?.phoneNumber || 'N/A'}`,
+            `${order.recipientAddress?.fullAddress || 'N/A'}`,
         ].join('\n');
         return customerInfo;
     };
