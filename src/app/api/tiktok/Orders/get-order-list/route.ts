@@ -4,7 +4,7 @@ import {
     Order202309GetOrderListRequestBody,
     TikTokShopNodeApiClient,
 } from "@/nodejs_sdk";
-import { getUserWithShopAccess, getActiveShopIds } from "@/lib/auth";
+import { getUserWithShopAccess } from "@/lib/auth";
 
 const prisma = new PrismaClient();
 

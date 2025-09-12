@@ -646,8 +646,6 @@ export class TikTokOrderSync {
         });
     }
 
-    // ...existing code...
-
     // Insert a new order and its associations, including payment and price details
     private async insertOrderWithAssociations(
         tx: any,

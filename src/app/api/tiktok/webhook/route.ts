@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { PrismaClient, ShopAuthorization, NotificationType } from "@prisma/client";
+import { PrismaClient, NotificationType } from "@prisma/client";
 import crypto from 'crypto';
-import { Order202309GetOrderDetailResponseDataOrders, TikTokShopNodeApiClient } from "@/nodejs_sdk";
 import { NotificationService } from "@/lib/notification-service";
 import { syncOrderById } from "@/lib/tiktok-order-sync";
 

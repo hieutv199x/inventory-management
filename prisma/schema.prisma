@@ -66,6 +66,10 @@ model User {
   userShopRoles UserShopRole[]
 
   notifications Notification[]
+
+  // Scheduler relations
+  createdJobs     SchedulerJob[]
+  schedulerConfigs SchedulerConfig[]
 }
 
 enum UserRole {
@@ -442,7 +446,7 @@ model Statement {
 
   // Shop relation (universal) - Fix: use ObjectId reference
   shopId                String   @db.ObjectId
-  shop                  ShopAuthorization @relation(fields: [shopId], references: [id])
+  shop                  ShopAuthorization @relation(fields: [shopId], references: [id], onDelete: Cascade)
 
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
@@ -875,4 +879,162 @@ model TiktokUnsettledTransaction {
   @@index([orderCreateTime])
   @@index([orderId])
   @@index([adjustmentId])
+}
+
+// Scheduler models
+enum JobType {
+  FUNCTION_CALL     // Call internal function
+  API_CALL          // Call external/internal API
+  DATABASE_QUERY    // Execute database operations
+  WEBHOOK_TRIGGER   // Send webhook
+}
+
+enum JobStatus {
+  ACTIVE
+  INACTIVE
+  PAUSED
+  DELETED
+}
+
+enum ExecutionStatus {
+  PENDING
+  RUNNING
+  SUCCESS
+  FAILED
+  CANCELLED
+  TIMEOUT
+}
+
+enum TriggerType {
+  CRON           // Cron expression
+  INTERVAL       // Fixed interval
+  ONE_TIME       // Single execution
+  EVENT_DRIVEN   // Triggered by events
+}
+
+model SchedulerJob {
+  id              String        @id @default(auto()) @map("_id") @db.ObjectId
+  name            String        // Job name
+  description     String?       // Job description
+  type            JobType       // Type of job
+  status          JobStatus     @default(ACTIVE)
+  
+  // Trigger configuration
+  triggerType     TriggerType
+  cronExpression  String?       // For CRON type: "0 */5 * * * *"
+  intervalMinutes Int?          // For INTERVAL type: minutes
+  scheduledAt     DateTime?     // For ONE_TIME type
+  
+  // Job configuration (JSON) - can include shopId in the config if needed
+  config          String        // Job-specific configuration as JSON
+  // Examples:
+  // FUNCTION_CALL: {"function": "syncOrders", "params": {"shopId": "xxx"}}
+  // API_CALL: {"url": "https://api.example.com/sync", "method": "POST", "headers": {...}, "body": {...}}
+  // DATABASE_QUERY: {"operation": "updateMany", "model": "product", "where": {...}, "data": {...}}
+  
+  // Execution settings
+  timeout         Int?          @default(300000) // Timeout in milliseconds (5 minutes default)
+  retryCount      Int?          @default(3)      // Number of retries on failure
+  retryDelay      Int?          @default(60000)  // Delay between retries in milliseconds
+  
+  // Tags for categorization and filtering
+  tags            String[]      @default([])     // Array of tags for organization
+  
+  // Metadata
+  createdBy       String?       @db.ObjectId
+  creator         User?         @relation(fields: [createdBy], references: [id])
+  
+  // Timestamps
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  lastExecutedAt  DateTime?     // Last successful execution
+  nextExecutionAt DateTime?     // Next scheduled execution
+  
+  // Relations
+  executions      JobExecution[]
+  logs            JobLog[]
+  
+  @@map("scheduler_jobs")
+}
+
+model JobExecution {
+  id              String          @id @default(auto()) @map("_id") @db.ObjectId
+  jobId           String          @db.ObjectId
+  job             SchedulerJob    @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  
+  // Execution details
+  status          ExecutionStatus @default(PENDING)
+  startedAt       DateTime?       // When execution started
+  completedAt     DateTime?       // When execution completed
+  duration        Int?            // Execution duration in milliseconds
+  
+  // Result and error information
+  result          String?         // Success result (JSON)
+  error           String?         // Error message if failed
+  stackTrace      String?         // Full stack trace for debugging
+  
+  // Retry information
+  retryCount      Int             @default(0)
+  isRetry         Boolean         @default(false)
+  parentExecutionId String?       @db.ObjectId
+  parentExecution JobExecution?   @relation("ExecutionRetries", fields: [parentExecutionId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  retries         JobExecution[]  @relation("ExecutionRetries")
+  
+  // Metadata
+  triggeredBy     String?         // How was this execution triggered
+  executionContext String?        // Additional context (JSON)
+  
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  
+  @@map("job_executions")
+}
+
+model JobLog {
+  id              String          @id @default(auto()) @map("_id") @db.ObjectId
+  jobId           String          @db.ObjectId
+  job             SchedulerJob    @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  
+  executionId     String?         @db.ObjectId
+  
+  // Log details
+  level           LogLevel        @default(INFO)
+  message         String
+  data            String?         // Additional log data (JSON)
+  
+  timestamp       DateTime        @default(now())
+  
+  @@map("job_logs")
+}
+
+enum LogLevel {
+  DEBUG
+  INFO
+  WARN
+  ERROR
+  FATAL
+}
+
+model SchedulerConfig {
+  id              String          @id @default(auto()) @map("_id") @db.ObjectId
+  
+  // Global scheduler settings
+  isEnabled       Boolean         @default(true)
+  maxConcurrentJobs Int           @default(10)
+  defaultTimeout  Int             @default(300000) // 5 minutes
+  cleanupDays     Int             @default(30)     // Days to keep execution history
+  
+  // Notification settings
+  notifyOnFailure Boolean         @default(true)
+  notifyOnSuccess Boolean         @default(false)
+  notificationChannels String?    // JSON array of notification channels
+  
+  // Metadata
+  updatedBy       String?         @db.ObjectId
+  updatedUser     User?           @relation(fields: [updatedBy], references: [id])
+  
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  
+  @@map("scheduler_config")
 }
