@@ -2,5 +2,16 @@
     "$schema": "https://openapi.vercel.sh/vercel.json",
     "regions": [
         "sin1"
+    ],
+    "functions": {
+        "src/app/api/**/*.ts": {
+            "maxDuration": 30
+        }
+    },
+    "crons": [
+        {
+            "path": "/api/tiktok/Orders/sync-recent-orders?pageSize=20&dayToSync=0.5",
+            "schedule": "0 */5 * * *"
+        }
     ]
 }

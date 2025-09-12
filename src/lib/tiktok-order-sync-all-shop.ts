@@ -3,101 +3,155 @@ import {
     Order202309GetOrderListRequestBody,
     TikTokShopNodeApiClient,
 } from "@/nodejs_sdk";
+import { SchedulerService } from "./scheduler/scheduler-service";
 
 const prisma = new PrismaClient();
 
 export async function sync_all_shop_orders(page_size: number = 50, day_to_sync: number = 1) {
     try {
         const allShops = await prisma.shopAuthorization.findMany({
-            where: { status: 'ACTIVE', app: { channel: 'TIKTOK' } },
-            include: { app: true },
+            where: { status: 'ACTIVE', app: { channel: 'TIKTOK' } }
         });
 
         if (!allShops) {
             throw new Error('No active TikTok shops found');
         }
 
-        for (const shop of allShops) {
-            // Tạo body request
-            const body = new Order202309GetOrderListRequestBody();
+        // Schedule individual shop sync jobs with 2-minute delays
+        for (let i = 0; i < allShops.length; i++) {
+            const shop = allShops[i];
+            const delayMinutes = i * 2; // 2 minutes delay per shop
 
-            body.createTimeGe = Math.floor(Date.now() / 1000) - day_to_sync * 24 * 60 * 60; // 7 days ago
-            body.createTimeLt = Math.floor(Date.now() / 1000); // now
-
-            const app_key = shop?.app?.appKey;
-            const app_secret = shop?.app?.appSecret;
-            const baseUrl = process.env.TIKTOK_BASE_URL;
-            // Khởi tạo client
-            const client = new TikTokShopNodeApiClient({
-                config: {
-                    basePath: baseUrl,
-                    app_key: app_key,
-                    app_secret: app_secret,
-                },
-            });
-
-            const sort_direction = "ASC";
-            const sort_by = "create_time";
-
-            // Gọi API
-            const result = await client.api.OrderV202309Api.OrdersSearchPost(
-                page_size,
-                shop.accessToken,
-                "application/json",
-                sort_direction,
-                "",
-                sort_by,
-                shop.shopCipher ?? undefined, // Use extracted shopCipher, ensure not null
-                body
-            );
-
-            if (result.body?.data?.orders) {
-                let allOrders = [...result.body.data.orders];
-                let nextPageToken = result.body.data.nextPageToken;
-
-                // Continue fetching all pages if there are more
-                while (nextPageToken) {
-                    try {
-                        console.log(`Fetching next page with token: ${nextPageToken}`);
-
-                        const nextPageResult = await client.api.OrderV202309Api.OrdersSearchPost(
-                            page_size,
-                            shop.accessToken,
-                            "application/json",
-                            sort_direction,
-                            nextPageToken, // Use the token for next page
-                            sort_by,
-                            shop.shopCipher ?? undefined, // Use extracted shopCipher, ensure not null
-                            body
-                        );
-
-                        if (nextPageResult.body?.data?.orders) {
-                            allOrders.push(...nextPageResult.body.data.orders);
-                            console.log(`Fetched ${nextPageResult.body.data.orders.length} more orders. Total: ${allOrders.length}`);
-                        }
-
-                        // Update token for next iteration
-                        nextPageToken = nextPageResult.body?.data?.nextPageToken;
-
-                        // Add a small delay to avoid rate limiting
-                        await new Promise(resolve => setTimeout(resolve, 100));
-
-                    } catch (paginationError) {
-                        console.error('Error fetching next page:', paginationError);
-                        break; // Stop pagination on error but continue with orders we have
-                    }
-                }
-
-                console.log(`Total orders to sync: ${allOrders.length}`);
-                await syncOrdersToDatabase(allOrders, shop.id); // Use shop.id (ObjectId) instead of credentials.id
-
-            }
-            return allShops.length
+            await scheduleShopSyncJob(shop, delayMinutes, page_size, day_to_sync);
         }
+
+        return allShops.length;
     } catch (err: any) {
         console.error("Error getting orders:", err);
     } finally {
         await prisma.$disconnect();
+    }
+}
+
+async function scheduleShopSyncJob(shop: any, delayMinutes: number, page_size: number, day_to_sync: number) {
+    try {
+        const scheduledAt = new Date(Date.now() + delayMinutes * 60 * 1000);
+
+        // Create a scheduler job for individual shop sync
+        const job = await prisma.schedulerJob.create({
+            data: {
+                name: `Sync Shop Orders - ${shop.shopName || shop.shopId}`,
+                description: `Automated sync of orders for shop ${shop.shopName || shop.shopId}`,
+                type: 'FUNCTION_CALL',
+                triggerType: 'ONE_TIME',
+                config: JSON.stringify({
+                    functionName: "syncSingleShopOrders",
+                    params: {
+                        shopId: shop.id,
+                        page_size: page_size,
+                        day_to_sync: day_to_sync
+                    }
+                }),
+                timeout: 600000, // 10 minutes
+                retryCount: 2,
+                retryDelay: 120000, // 2 minutes
+                nextExecutionAt: scheduledAt,
+                tags: ['shop-sync', 'auto-generated'],
+                status: 'ACTIVE'
+            }
+        });
+
+        SchedulerService.getInstance().scheduleJob(job);
+
+        console.log(`Scheduled shop sync job for ${shop.shopName || shop.shopId} at ${scheduledAt.toISOString()}`);
+    } catch (error) {
+        console.error(`Error scheduling job for shop ${shop.shopId}:`, error);
+    }
+}
+
+export async function processShop(shop_id: string, day_to_sync: number, page_size: number) {
+    // Tạo body request
+    const body = new Order202309GetOrderListRequestBody();
+
+    body.createTimeGe = Math.floor(Date.now() / 1000) - day_to_sync * 24 * 60 * 60; // 7 days ago
+    body.createTimeLt = Math.floor(Date.now() / 1000); // now
+
+    const shop = await prisma.shopAuthorization.findUnique({
+        where: { id: shop_id },
+        include: { app: true }
+    });
+
+    if (!shop) {
+        console.error(`Shop with ID ${shop_id} not found`);
+        return;
+    }
+    const app_key = shop?.app?.appKey;
+    const app_secret = shop?.app?.appSecret;
+    const baseUrl = process.env.TIKTOK_BASE_URL;
+    // Khởi tạo client
+    const client = new TikTokShopNodeApiClient({
+        config: {
+            basePath: baseUrl,
+            app_key: app_key,
+            app_secret: app_secret,
+        },
+    });
+
+    const sort_direction = "ASC";
+    const sort_by = "create_time";
+
+    // Gọi API
+    const result = await client.api.OrderV202309Api.OrdersSearchPost(
+        page_size,
+        shop.accessToken,
+        "application/json",
+        sort_direction,
+        "",
+        sort_by,
+        shop.shopCipher ?? undefined, // Use extracted shopCipher, ensure not null
+        body
+    );
+
+    if (result.body?.data?.orders) {
+        let allOrders = [...result.body.data.orders];
+        let nextPageToken = result.body.data.nextPageToken;
+
+        // Continue fetching all pages if there are more
+        while (nextPageToken) {
+            try {
+                console.log(`Fetching next page with token: ${nextPageToken}`);
+
+                const nextPageResult = await client.api.OrderV202309Api.OrdersSearchPost(
+                    page_size,
+                    shop.accessToken,
+                    "application/json",
+                    sort_direction,
+                    nextPageToken, // Use the token for next page
+                    sort_by,
+                    shop.shopCipher ?? undefined, // Use extracted shopCipher, ensure not null
+                    body
+                );
+
+                if (nextPageResult.body?.data?.orders) {
+                    allOrders.push(...nextPageResult.body.data.orders);
+                    console.log(`Fetched ${nextPageResult.body.data.orders.length} more orders. Total: ${allOrders.length}`);
+                }
+
+                // Update token for next iteration
+                nextPageToken = nextPageResult.body?.data?.nextPageToken;
+
+                // Add a small delay to avoid rate limiting
+                await new Promise(resolve => setTimeout(resolve, 100));
+
+            } catch (paginationError) {
+                console.error('Error fetching next page:', paginationError);
+                break; // Stop pagination on error but continue with orders we have
+            }
+        }
+
+        console.log(`Total orders to sync: ${allOrders.length}`);
+        await syncOrdersToDatabase(allOrders, shop.id); // Use shop.id (ObjectId) instead of credentials.id
+
     }
 }
 
