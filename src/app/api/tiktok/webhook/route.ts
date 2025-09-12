@@ -3,6 +3,8 @@ import { PrismaClient, NotificationType } from "@prisma/client";
 import crypto from 'crypto';
 import { NotificationService } from "@/lib/notification-service";
 import { syncOrderById } from "@/lib/tiktok-order-sync";
+import { syncUnsettledTransactions } from "@/lib/tiktok-unsettled-transactions-sync";
+import { set } from "zod";
 
 const prisma = new PrismaClient();
 
@@ -185,7 +187,7 @@ async function handleOrderStatusChange(webhookData: TikTokWebhookData) {
 
         // Always sync the order to get latest data including recipient address
         console.log(`Syncing order ${order_id} to get latest data including status change`);
-        
+
         // Use syncOrderById to handle both create and update with full data
         setTimeout(async () => {
             try {
@@ -193,7 +195,7 @@ async function handleOrderStatusChange(webhookData: TikTokWebhookData) {
                     create_notifications: false, // We'll create specific notifications below
                     timeout_seconds: 120
                 });
-                
+
                 console.log(`Webhook order sync completed:`, syncResult);
 
                 // After sync, get the updated order to create proper notifications
@@ -233,7 +235,7 @@ async function handleOrderStatusChange(webhookData: TikTokWebhookData) {
 
             } catch (syncError) {
                 console.error(`Failed to sync order ${order_id} from webhook:`, syncError);
-                
+
                 // Create error notification
                 await NotificationService.createNotification({
                     type: NotificationType.WEBHOOK_ERROR,
@@ -282,6 +284,33 @@ async function handleSpecificStatusChanges(orderId: string, newStatus: string, w
     switch (newStatus.toLowerCase()) {
         case 'awaiting_shipment':
             console.log(`Order ${webhookData.data.order_id} is awaiting shipment`);
+
+            setTimeout(async () => {
+                try {
+                    // Sync unsettled transactions to ensure payment status is up to date
+                    await syncUnsettledTransactions(prisma, {
+                        shop_id: shopId,
+                        search_time_ge: Math.floor(Date.now() / 1000) - 3600,
+                        search_time_lt: Math.floor(Date.now() / 1000),
+                        page_size: 10
+                    });
+                } catch (syncError) {
+                    console.error(`Failed to sync unsettled transactions for order ${orderId}:`, syncError);
+                }
+            }, 1000);
+            // Use the utility function
+            setTimeout(async () => {
+                try {
+                    const syncResult = await syncOrderById(shopId, orderId, {
+                        create_notifications: false,
+                        timeout_seconds: 60
+                    });
+                    console.log(`Webhook cancellation sync completed:`, syncResult);
+                } catch (syncError) {
+                    console.error(`Failed to sync order ${orderId} from cancellation webhook:`, syncError);
+                }
+            }, 1000);
+
             // Create specific notification for awaiting shipment
             await NotificationService.createNotification({
                 type: NotificationType.ORDER_STATUS_CHANGE,
