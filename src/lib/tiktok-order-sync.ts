@@ -648,7 +648,6 @@ export class TikTokOrderSync {
         shopId: string,
         priceDetails: any = null
     ) {
-        // Prepare channel data
         const channelData = {
             orderType: order.orderType,
             fulfillmentType: order.fulfillmentType,
@@ -674,60 +673,54 @@ export class TikTokOrderSync {
             })
         };
 
-        // Check if order already exists (by unique orderId)
         const existing = await prisma.order.findUnique({
-            where: { orderId: order.id }
+            where: { orderId: order.id },
+            select: { id: true }
         });
 
-        let persistedOrder;
-        if (existing) {
-            // Update existing order
-            persistedOrder = await prisma.order.update({
-                where: { id: existing.id },
-                data: {
-                    status: order.status || existing.status,
-                    buyerEmail: order.buyerEmail || existing.buyerEmail,
-                    buyerMessage: order.buyerMessage || existing.buyerMessage,
-                    updateTime: order.updateTime || Math.floor(Date.now() / 1000),
-                    deliveryTime: order.deliveryTime,
-                    paidTime: order.paidTime,
-                    totalAmount: order.payment?.totalAmount || existing.totalAmount,
-                    currency: order.payment?.currency || existing.currency,
-                    channelData: JSON.stringify(channelData)
-                }
-            });
+        const persistedOrder = await prisma.order.upsert({
+            where: { orderId: order.id },
+            create: {
+                orderId: order.id,
+                channel: Channel.TIKTOK,
+                buyerEmail: order.buyerEmail || "",
+                buyerMessage: order.buyerMessage || "",
+                createTime: order.createTime || Math.floor(Date.now() / 1000),
+                updateTime: order.updateTime || Math.floor(Date.now() / 1000),
+                status: order.status || "UNKNOWN",
+                totalAmount: order.payment?.totalAmount || null,
+                currency: order.payment?.currency || null,
+                paidTime: order.paidTime,
+                deliveryTime: order.deliveryTime,
+                channelData: JSON.stringify(channelData),
+                shopId: shopId,
+            },
+            update: {
+                status: order.status || "UNKNOWN",
+                buyerEmail: order.buyerEmail || "",
+                buyerMessage: order.buyerMessage || "",
+                updateTime: order.updateTime || Math.floor(Date.now() / 1000),
+                deliveryTime: order.deliveryTime,
+                paidTime: order.paidTime,
+                totalAmount: order.payment?.totalAmount || null,
+                currency: order.payment?.currency || null,
+                channelData: JSON.stringify(channelData),
+            }
+        });
 
-            // Replace associations to reflect latest data
-            await prisma.orderLineItem.deleteMany({ where: { orderId: persistedOrder.id } });
-            await prisma.orderPayment.deleteMany({ where: { orderId: persistedOrder.id } });
-            await prisma.orderRecipientAddress.deleteMany({ where: { orderId: persistedOrder.id } });
-        } else {
-            // Create new order
-            persistedOrder = await prisma.order.create({
-                data: {
-                    orderId: order.id,
-                    channel: Channel.TIKTOK,
-                    buyerEmail: order.buyerEmail || "",
-                    buyerMessage: order.buyerMessage || "",
-                    createTime: order.createTime || Math.floor(Date.now() / 1000),
-                    updateTime: order.updateTime || Math.floor(Date.now() / 1000),
-                    status: order.status || "UNKNOWN",
-                    totalAmount: order.payment?.totalAmount || null,
-                    currency: order.payment?.currency || null,
-                    paidTime: order.paidTime,
-                    deliveryTime: order.deliveryTime,
-                    channelData: JSON.stringify(channelData),
-                    shopId: shopId,
-                }
-            });
+        // If updating, clear old associations to reinsert fresh data
+        if (existing?.id) {
+            await Promise.all([
+                prisma.orderLineItem.deleteMany({ where: { orderId: persistedOrder.id } }),
+                prisma.orderPayment.deleteMany({ where: { orderId: persistedOrder.id } }),
+                prisma.orderRecipientAddress.deleteMany({ where: { orderId: persistedOrder.id } })
+            ]);
         }
 
-        // Create payment record if payment exists
         if (order.payment) {
             await this.createOrderPayment(persistedOrder.id, order.payment, priceDetails);
         }
 
-        // Line items
         if (order.lineItems && Array.isArray(order.lineItems)) {
             for (const item of order.lineItems) {
                 try {
@@ -767,7 +760,6 @@ export class TikTokOrderSync {
             }
         }
 
-        // Address
         if (order.recipientAddress) {
             try {
                 const addressChannelData = {

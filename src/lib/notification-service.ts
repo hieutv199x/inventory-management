@@ -17,96 +17,69 @@ export class NotificationService {
   
   static async createNotification(notificationData: NotificationData) {
     try {
-      // Handle system notifications differently
-      if (notificationData.userId === 'system') {
-        // For system notifications, notify all admin users
-        const adminUsers = await prisma.user.findMany({
-          where: { 
-            role: { in: ['ADMIN', 'MANAGER'] },
-            isActive: true 
-          }
-        });
+      // 1. Always include all active admin / manager users
+      const adminUsers = await prisma.user.findMany({
+        where: {
+          role: { in: ['ADMIN', 'MANAGER'] },
+          isActive: true
+        },
+        select: { id: true }
+      });
 
-        if (adminUsers.length === 0) {
-          console.warn('No admin users found for system notification');
-          return null;
-        }
+      const recipientIds = new Set<string>(adminUsers.map(a => a.id));
 
-        const notifications = [];
-        for (const admin of adminUsers) {
-          const notification = await prisma.notification.create({
-            data: {
-              type: notificationData.type,
-              title: notificationData.title,
-              message: notificationData.message,
-              userId: admin.id,
-              orderId: notificationData.orderId,
-              conversationId: notificationData.conversationId,
-              shopId: notificationData.shopId,
-              data: notificationData.data ? JSON.stringify(notificationData.data) : null,
-            },
-          });
-          notifications.push(notification);
-        }
-        
-        console.log(`Created ${notifications.length} system notifications for admin users`);
-        return notifications;
-      }
-
-      // For shop-level notifications, distribute to all shop users
-      if (notificationData.shopId && notificationData.userId === notificationData.shopId) {
+      // 2. If shopId provided, add all active users with a role on that shop
+      if (notificationData.shopId) {
         const shopUsers = await prisma.userShopRole.findMany({
-          where: { 
+          where: {
             shopId: notificationData.shopId,
             user: { isActive: true }
           },
-          include: { user: true }
+          include: { user: { select: { id: true } } }
         });
-
-        if (shopUsers.length === 0) {
-          console.warn(`No users found for shop ${notificationData.shopId}`);
-          return null;
+        for (const su of shopUsers) {
+          if (su.user) recipientIds.add(su.user.id);
         }
-
-        const notifications = [];
-        for (const shopUser of shopUsers) {
-          if (!shopUser.user) continue;
-          
-          const notification = await prisma.notification.create({
-            data: {
-              type: notificationData.type,
-              title: notificationData.title,
-              message: notificationData.message,
-              userId: shopUser.user.id,
-              orderId: notificationData.orderId,
-              conversationId: notificationData.conversationId,
-              shopId: notificationData.shopId,
-              data: notificationData.data ? JSON.stringify(notificationData.data) : null,
-            },
-          });
-          notifications.push(notification);
-        }
-        
-        console.log(`Created ${notifications.length} notifications for shop ${notificationData.shopId}`);
-        return notifications;
       }
 
-      // Regular user notification
-      const notification = await prisma.notification.create({
-        data: {
-          type: notificationData.type,
-          title: notificationData.title,
-          message: notificationData.message,
-          userId: notificationData.userId,
-          orderId: notificationData.orderId,
-          conversationId: notificationData.conversationId,
-          shopId: notificationData.shopId,
-          data: notificationData.data ? JSON.stringify(notificationData.data) : null,
-        },
-      });
-      
-      console.log(`Created notification: ${notification.id} for user: ${notificationData.userId}`);
-      return notification;
+      // 3. Optionally include the explicit userId if provided and active (not mandatory but keeps backward compatibility)
+      if (notificationData.userId && notificationData.userId !== 'system') {
+        const explicit = await prisma.user.findUnique({
+          where: { id: notificationData.userId }
+        });
+        if (explicit?.isActive) recipientIds.add(explicit.id);
+      }
+
+      if (recipientIds.size === 0) {
+        console.warn('No recipients resolved for notification');
+        return null;
+      }
+
+      const payload = {
+        type: notificationData.type,
+        title: notificationData.title,
+        message: notificationData.message,
+        orderId: notificationData.orderId,
+        conversationId: notificationData.conversationId,
+        shopId: notificationData.shopId,
+        data: notificationData.data ? JSON.stringify(notificationData.data) : null
+      };
+
+      const created: any[] = [];
+      for (const userId of recipientIds) {
+        try {
+          const n = await prisma.notification.create({
+            data: { ...payload, userId }
+          });
+            created.push(n);
+        } catch (e) {
+          console.error('Failed creating notification for user', userId, e);
+        }
+      }
+
+      console.log(`Created ${created.length} notifications (admins +${notificationData.shopId ? ' shop users' : ''})`);
+      // Return first for backward compatibility
+      return created[0] || null;
     } catch (error) {
       console.error('Error creating notification:', error);
       throw error;
