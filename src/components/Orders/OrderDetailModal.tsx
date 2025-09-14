@@ -86,6 +86,37 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({ order, isOpen, onCl
                 };
             })
             .filter(Boolean);
+
+        // Group similar items within this package
+        const itemGroups: Record<string, any> = {};
+        items.forEach(item => {
+            // Create grouping key based on item characteristics
+            const groupKey = JSON.stringify({
+                productId: item.productId,
+                skuId: item.skuId,
+                skuName: item.skuName,
+                sellerSku: item.sellerSku,
+                packageId: item.mergedChannelData.packageId,
+                salePrice: item.salePrice,
+                isCancelled: item.isCancelled
+            });
+
+            if (!itemGroups[groupKey]) {
+                itemGroups[groupKey] = {
+                    ...item,
+                    count: 1,
+                    lineItemIds: [item.lineItemId],
+                    totalQuantity: parseInt(item.mergedChannelData.quantity || 1)
+                };
+            } else {
+                itemGroups[groupKey].count += 1;
+                itemGroups[groupKey].lineItemIds.push(item.lineItemId);
+                itemGroups[groupKey].totalQuantity += parseInt(item.mergedChannelData.quantity || 1);
+            }
+        });
+
+        const groupedItems = Object.values(itemGroups);
+
         return {
             packageId: p.packageId,
             packageStatus: pkgDetail.packageStatus,
@@ -95,7 +126,7 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({ order, isOpen, onCl
             noteTag: pkgDetail.noteTag,
             hasMultiSkus: pkgDetail.hasMultiSkus,
             lastMileTrackingNumber: pkgDetail.lastMileTrackingNumber,
-            items
+            items: groupedItems
         };
     }).filter((pkg: { items: any[] }) => pkg.items.length > 0);
 
@@ -484,16 +515,21 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({ order, isOpen, onCl
                                                             </div>
                                                         </div>
                                                         <div className="lg:col-span-2">
-                                                            <h5 className="font-medium text-gray-900 dark:text-white mb-2">
+                                                            <h5 className="font-medium text-gray-900 dark:text-white mb-2 flex items-center gap-2">
                                                                 {item.productName}
+                                                                {item.count && item.count > 1 && (
+                                                                    <span className="px-3 py-1.5 bg-orange-500 text-white rounded-full text-sm font-bold shadow-lg">
+                                                                        ×{item.count}
+                                                                    </span>
+                                                                )}
                                                             </h5>
                                                             <div className="space-y-1 text-sm text-gray-600 dark:text-gray-400">
                                                                 <p>Product ID: {item.productId}</p>
-                                                                <p>Line Item ID: {item.lineItemId}</p>
+                                                                <p>Line Item ID: {item.lineItemIds ? item.lineItemIds.join(', ') : item.lineItemId}</p>
                                                                 <p>SKU ID: {item.skuId}</p>
                                                                 <p>SKU Name: {item.skuName}</p>
                                                                 <p>Seller SKU: {item.sellerSku}</p>
-                                                                <p>Quantity: {itemChannelData.quantity || 1}</p>
+                                                                <p>Quantity: {item.totalQuantity || itemChannelData.quantity || 1}</p>
                                                                 <p>Package ID: {itemChannelData.packageId}</p>
                                                                 {itemChannelData.trackingNumber && (
                                                                     <p>Tracking: {itemChannelData.trackingNumber}</p>
