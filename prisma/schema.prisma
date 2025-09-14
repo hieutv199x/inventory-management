@@ -637,20 +637,45 @@ model AddressDistrict {
 }
 
 model OrderPackage {
-  id                        String   @id @default(auto()) @map("_id") @db.ObjectId
-  packageId                 String   // Package ID from channel
-  
-  // Channel-specific package data (JSON)
-  channelData               String?  // Store channel-specific fields as JSON
-  
-  // Order relation
-  orderId                   String   @db.ObjectId
-  order                     Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  
-  createdAt                 DateTime @default(now())
-  updatedAt                 DateTime @updatedAt
-  
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  packageId     String   // Package ID from channel (maps to 'id' in API)
+
+  // Core TikTok package fields (Search Package API 202309)
+  status                String?        // API: status
+  trackingNumber        String?        // API: tracking_number
+  shippingProviderId    String?        // API: shipping_provider_id
+  shippingProviderName  String?        // API: shipping_provider_name
+
+  // Newly added to map API response fully
+  orderLineItemIds      String[]      // API: order_line_item_ids
+  ordersData            String?        // Raw JSON array from API: orders[]
+
+  // Extended lifecycle / logistics metadata (some may not appear in this specific endpoint but kept for enrichment)
+  shippingType          String?        // STANDARD / EXPEDITED etc.
+  collectionTime        Int?           // collection_time
+  rtsTime               Int?           // ready-to-ship time (if provided elsewhere)
+  createTime            Int?           // API: create_time
+  updateTime            Int?           // API: update_time (new explicit field)
+  updateTimeRaw         Int?           // (Deprecated) kept for backward compatibility; use updateTime instead
+  rtsSlaTime            Int?
+  ttsSlaTime            Int?
+  deliverSlaTime        Int?
+  deliveredTime         Int?
+  inTransitTime         Int?
+
+  // Full raw payload / future fields
+  channelData           String?
+
+  // Relation
+  orderId               String   @db.ObjectId
+  order                 Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
   @@unique([orderId, packageId])
+  @@index([trackingNumber])
+  @@index([status])
   @@map("order_packages")
 }
 

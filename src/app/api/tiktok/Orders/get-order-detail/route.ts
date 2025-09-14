@@ -61,7 +61,7 @@ export async function GET(req: NextRequest) {
             },
         });
         
-        const result = await client.api.OrderV202309Api.OrdersGet(['576786477759043914'], credentials.accessToken, "application/json", shopCipher);
+        const result = await client.api.OrderV202309Api.OrdersGet(['576787478479150032'], credentials.accessToken, "application/json", shopCipher);
         console.log('response: ', JSON.stringify(result, null, 2));
 
         // const syncResult = await syncOrderById(credentials.shopId, "576786477759043914", {
