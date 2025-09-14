@@ -153,7 +153,6 @@ async function processConversationBatch(conversations: any[], shopId: string) {
     let syncedCount = 0;
 
     try {
-        // Get shop ObjectID for reference
         const shopAuth = await prisma.shopAuthorization.findUnique({
             where: { shopId: shopId }
         });
@@ -163,110 +162,91 @@ async function processConversationBatch(conversations: any[], shopId: string) {
             return 0;
         }
 
-        await prisma.$transaction(async (tx) => {
-            for (const conversation of conversations) {
-                try {
-                    // Upsert conversation with updated schema
-                    const savedConversation = await tx.conversation.upsert({
-                        where: { conversationId: conversation.id },
-                        create: {
-                            conversationId: conversation.id,
-                            channel: 'TIKTOK', // Add required channel field
-                            participantCount: conversation.participant_count || 0,
-                            canSendMessage: conversation.can_send_message || false,
-                            unreadCount: conversation.unread_count || 0,
-                            createTime: conversation.create_time || 0,
-                            shopId: shopAuth.id, // Use ObjectID reference
-                            // Store TikTok-specific data in channelData
-                            channelData: JSON.stringify({
-                                originalShopId: shopId
-                            })
-                        },
-                        update: {
-                            participantCount: conversation.participant_count || 0,
-                            canSendMessage: conversation.can_send_message || false,
-                            unreadCount: conversation.unread_count || 0,
-                        }
+        // Removed prisma.$transaction (MongoDB setup - operations are now non-atomic)
+        for (const conversation of conversations) {
+            try {
+                const savedConversation = await prisma.conversation.upsert({
+                    where: { conversationId: conversation.id },
+                    create: {
+                        conversationId: conversation.id,
+                        channel: 'TIKTOK',
+                        participantCount: conversation.participant_count || 0,
+                        canSendMessage: conversation.can_send_message || false,
+                        unreadCount: conversation.unread_count || 0,
+                        createTime: conversation.create_time || 0,
+                        shopId: shopAuth.id,
+                        channelData: JSON.stringify({ originalShopId: shopId })
+                    },
+                    update: {
+                        participantCount: conversation.participant_count || 0,
+                        canSendMessage: conversation.can_send_message || false,
+                        unreadCount: conversation.unread_count || 0,
+                    }
+                });
+
+                if (conversation.participants) {
+                    await prisma.conversationParticipant.deleteMany({
+                        where: { conversationId: savedConversation.id }
                     });
 
-                    // Sync participants
-                    if (conversation.participants) {
-                        // Delete existing participants
-                        await tx.conversationParticipant.deleteMany({
-                            where: { conversationId: savedConversation.id }
-                        });
+                    const participantData = conversation.participants.map((participant: any) => ({
+                        participantId: participant.im_user_id,
+                        userId: participant.user_id,
+                        role: participant.role || '',
+                        nickname: participant.nickname || '',
+                        avatar: participant.avatar,
+                        conversationId: savedConversation.id,
+                        channelData: JSON.stringify({
+                            buyerPlatform: participant.buyer_platform
+                        })
+                    }));
 
-                        // Create new participants
-                        const participantData = conversation.participants.map((participant: any) => ({
-                            participantId: participant.im_user_id,
-                            userId: participant.user_id,
-                            role: participant.role || '',
-                            nickname: participant.nickname || '',
-                            avatar: participant.avatar,
-                            conversationId: savedConversation.id,
-                            // Store TikTok-specific data in channelData
-                            channelData: JSON.stringify({
-                                buyerPlatform: participant.buyer_platform
-                            })
-                        }));
-
-                        await tx.conversationParticipant.createMany({
-                            data: participantData,
-                        });
+                    if (participantData.length) {
+                        await prisma.conversationParticipant.createMany({ data: participantData });
                     }
+                }
 
-                    // Sync latest message
-                    if (conversation.latest_message) {
-                        const latestMessage = conversation.latest_message;
-                        
-                        // Find sender participant
-                        let senderId = null;
-                        if (latestMessage.sender?.im_user_id) {
-                            const senderParticipant = await tx.conversationParticipant.findFirst({
-                                where: {
-                                    conversationId: savedConversation.id,
-                                    participantId: latestMessage.sender.im_user_id
-                                }
-                            });
-                            senderId = senderParticipant?.id;
-                        }
+                if (conversation.latest_message) {
+                    const latestMessage = conversation.latest_message;
 
-                        await tx.conversationMessage.upsert({
-                            where: { messageId: latestMessage.id },
-                            create: {
-                                messageId: latestMessage.id,
-                                type: latestMessage.type || '',
-                                content: latestMessage.content || '',
-                                createTime: latestMessage.create_time || 0,
-                                isVisible: latestMessage.is_visible || true,
+                    let senderId: string | null = null;
+                    if (latestMessage.sender?.im_user_id) {
+                        const senderParticipant = await prisma.conversationParticipant.findFirst({
+                            where: {
                                 conversationId: savedConversation.id,
-                                senderId: senderId,
-                                isLatestForId: savedConversation.id,
-                                // Store TikTok-specific data in channelData
-                                channelData: JSON.stringify({
-                                    messageIndex: latestMessage.index
-                                })
-                            },
-                            update: {
-                                type: latestMessage.type || '',
-                                content: latestMessage.content || '',
-                                isVisible: latestMessage.is_visible || true,
-                                channelData: JSON.stringify({
-                                    messageIndex: latestMessage.index
-                                })
+                                participantId: latestMessage.sender.im_user_id
                             }
                         });
+                        senderId = senderParticipant?.id || null;
                     }
 
-                    syncedCount++;
-                } catch (error) {
-                    console.error(`Error syncing conversation ${conversation.id}:`, error);
+                    await prisma.conversationMessage.upsert({
+                        where: { messageId: latestMessage.id },
+                        create: {
+                            messageId: latestMessage.id,
+                            type: latestMessage.type || '',
+                            content: latestMessage.content || '',
+                            createTime: latestMessage.create_time || 0,
+                            isVisible: latestMessage.is_visible ?? true,
+                            conversationId: savedConversation.id,
+                            senderId: senderId,
+                            isLatestForId: savedConversation.id,
+                            channelData: JSON.stringify({ messageIndex: latestMessage.index })
+                        },
+                        update: {
+                            type: latestMessage.type || '',
+                            content: latestMessage.content || '',
+                            isVisible: latestMessage.is_visible ?? true,
+                            channelData: JSON.stringify({ messageIndex: latestMessage.index })
+                        }
+                    });
                 }
+
+                syncedCount++;
+            } catch (error) {
+                console.error(`Error syncing conversation ${conversation.id}:`, error);
             }
-        }, {
-            maxWait: 30000,
-            timeout: 60000,
-        });
+        }
 
     } catch (error) {
         console.error('Error processing conversation batch:', error);

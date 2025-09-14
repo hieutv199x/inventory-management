@@ -232,75 +232,65 @@ async function processStatementBatch(statements: any[], shopObjectId: string) {
     let syncedCount = 0;
 
     try {
-        await prisma.$transaction(async (tx) => {
-            // Get existing statement IDs
-            const statementIds = statements.map(s => s.id).filter(Boolean);
-            const existingStatements = await tx.statement.findMany({
-                where: { statementId: { in: statementIds } },
-                select: { statementId: true }
-            });
-
-            const existingStatementIds = new Set(existingStatements.map(s => s.statementId));
-
-            // Separate new statements from updates
-            const newStatements = [];
-            const updateStatements = [];
-
-            for (const statement of statements) {
-                if (!statement.id) continue;
-
-                // Prepare channelData for TikTok-specific fields
-                const channelData = {
-                    revenueAmount: statement.revenueAmount,
-                    feeAmount: statement.feeAmount,
-                    adjustmentAmount: statement.adjustmentAmount,
-                    netSalesAmount: statement.netSalesAmount,
-                    shippingCostAmount: statement.shippingCostAmount,
-                };
-
-                const statementData = {
-                    statementId: statement.id,
-                    channel: Channel.TIKTOK, // Use enum value
-                    statementTime: statement.statementTime ?? 0,
-                    settlementAmount: statement.settlementAmount,
-                    currency: statement.currency,
-                    channelData: JSON.stringify(channelData), // Store TikTok-specific data as JSON
-                    paymentStatus: statement.paymentStatus,
-                    paymentId: statement.paymentId,
-                    shopId: shopObjectId, // Use ObjectId reference
-                };
-
-                if (existingStatementIds.has(statement.id)) {
-                    updateStatements.push(statementData);
-                } else {
-                    newStatements.push(statementData);
-                }
-            }
-
-            // Batch create new statements
-            if (newStatements.length > 0) {
-                await tx.statement.createMany({
-                    data: newStatements,
-                });
-                syncedCount += newStatements.length;
-            }
-
-            // Batch update existing statements
-            if (updateStatements.length > 0) {
-                const updatePromises = updateStatements.map(statement =>
-                    tx.statement.update({
-                        where: { statementId: statement.statementId },
-                        data: statement,
-                    })
-                );
-                await Promise.all(updatePromises);
-                syncedCount += updateStatements.length;
-            }
-
-        }, {
-            maxWait: 30000,
-            timeout: 60000,
+        // Removed prisma.$transaction for MongoDB compatibility (non-atomic now)
+        const statementIds = statements.map(s => s.id).filter(Boolean);
+        const existingStatements = await prisma.statement.findMany({
+            where: { statementId: { in: statementIds } },
+            select: { statementId: true }
         });
+
+        const existingStatementIds = new Set(existingStatements.map(s => s.statementId));
+        const newStatements: any[] = [];
+        const updateStatements: any[] = [];
+
+        for (const statement of statements) {
+            if (!statement.id) continue;
+
+            const channelData = {
+                revenueAmount: statement.revenueAmount,
+                feeAmount: statement.feeAmount,
+                adjustmentAmount: statement.adjustmentAmount,
+                netSalesAmount: statement.netSalesAmount,
+                shippingCostAmount: statement.shippingCostAmount,
+            };
+
+            const statementData = {
+                statementId: statement.id,
+                channel: Channel.TIKTOK,
+                statementTime: statement.statementTime ?? 0,
+                settlementAmount: statement.settlementAmount,
+                currency: statement.currency,
+                channelData: JSON.stringify(channelData),
+                paymentStatus: statement.paymentStatus,
+                paymentId: statement.paymentId,
+                shopId: shopObjectId,
+            };
+
+            if (existingStatementIds.has(statement.id)) {
+                updateStatements.push(statementData);
+            } else {
+                newStatements.push(statementData);
+            }
+        }
+
+        if (newStatements.length > 0) {
+            await prisma.statement.createMany({
+                data: newStatements
+            });
+            syncedCount += newStatements.length;
+        }
+
+        if (updateStatements.length > 0) {
+            await Promise.all(
+                updateStatements.map(s =>
+                    prisma.statement.update({
+                        where: { statementId: s.statementId },
+                        data: s
+                    })
+                )
+            );
+            syncedCount += updateStatements.length;
+        }
 
     } catch (error) {
         console.error(`Error processing statement batch for shop ${shopObjectId}:`, error);
@@ -380,93 +370,84 @@ async function syncTransactionsToDatabase(transactions: (Finance202501GetTransac
     return totalSynced;
 }
 
-async function processTransactionBatch(transactions: (Finance202501GetTransactionsbyStatementResponseDataTransactions & { statementId: string, currency: string, createdTime: number })[], shopId: string) {
+async function processTransactionBatch(
+    transactions: (Finance202501GetTransactionsbyStatementResponseDataTransactions & { statementId: string, currency: string, createdTime: number })[],
+    shopId: string
+) {
     let syncedCount = 0;
 
     try {
-        await prisma.$transaction(async (tx) => {
-            // Get existing transaction IDs
-            const transactionIds = transactions.map(t => t.id).filter((id): id is string => typeof id === 'string');
-            const existingTransactions = await tx.tikTokTransaction.findMany({
-                where: { transactionId: { in: transactionIds } },
-                select: { id: true, transactionId: true }
-            });
+        // Removed prisma.$transaction for MongoDB compatibility (non-atomic now)
+        const transactionIds = transactions
+            .map(t => t.id)
+            .filter((id): id is string => typeof id === 'string');
 
-            const existingTransactionMap = new Map(existingTransactions.map(t => [t.transactionId, t.id]));
-
-            // Separate new transactions from updates
-            const newTransactions = [];
-            const updateTransactions = [];
-
-            for (const transaction of transactions) {
-                if (!transaction.id) continue;
-
-                const transactionData = {
-                    transactionId: transaction.id,
-                    shopId: shopId,
-                    statementId: transaction.statementId, // From the extended type
-                    type: transaction.type || '',
-                    currency: transaction.currency || 'GBP', // Get from response or default
-                    // Individual amounts from API response
-                    settlementAmount: transaction.settlementAmount ? parseFloat(transaction.settlementAmount) : null,
-                    adjustmentAmount: transaction.adjustmentAmount ? parseFloat(transaction.adjustmentAmount) : null,
-                    revenueAmount: transaction.revenueAmount ? parseFloat(transaction.revenueAmount) : null,
-                    shippingCostAmount: transaction.shippingCostAmount ? parseFloat(transaction.shippingCostAmount) : null,
-                    feeTaxAmount: transaction.feeTaxAmount ? parseFloat(transaction.feeTaxAmount) : null,
-                    reserveAmount: transaction.reserveAmount ? parseFloat(transaction.reserveAmount) : null,
-                    createdTime: transaction.createdTime ? new Date(transaction.createdTime * 1000) : null, 
-                    // Order information - map from API response
-                    orderId: transaction.orderId || null,
-                    orderCreateTime: transaction.orderCreateTime ? new Date(transaction.orderCreateTime * 1000) : null,
-                    adjustmentId: transaction.adjustmentId || null,
-                    adjustmentOrderId: transaction.adjustmentOrderId || null,
-                    associatedOrderId: transaction.associatedOrderId || null,
-
-                    // Reserve info
-                    reserveId: transaction.reserveId || null,
-                    reserveStatus: transaction.reserveStatus || null,
-                    estimatedReleaseTime: transaction.estimatedReleaseTime ? new Date(parseInt(transaction.estimatedReleaseTime) * 1000) : null,
-
-                    // Breakdown fields (convert to JSON properly)
-                    revenueBreakdown: transaction.revenueBreakdown ? JSON.parse(JSON.stringify(transaction.revenueBreakdown)) : null,
-                    shippingCostBreakdown: transaction.shippingCostBreakdown ? JSON.parse(JSON.stringify(transaction.shippingCostBreakdown)) : null,
-                    feeTaxBreakdown: transaction.feeTaxBreakdown ? JSON.parse(JSON.stringify(transaction.feeTaxBreakdown)) : null,
-                    supplementaryComponent: transaction.supplementaryComponent ? JSON.parse(JSON.stringify(transaction.supplementaryComponent)) : null,
-                };
-
-                const existingId = existingTransactionMap.get(transaction.id);
-                if (existingId) {
-                    updateTransactions.push({ ...transactionData, id: existingId });
-                } else {
-                    newTransactions.push(transactionData);
-                }
-            }
-
-            // Batch create new transactions
-            if (newTransactions.length > 0) {
-                await tx.tikTokTransaction.createMany({
-                    data: newTransactions,
-                });
-                syncedCount += newTransactions.length;
-            }
-
-            // Batch update existing transactions
-            if (updateTransactions.length > 0) {
-                const updatePromises = updateTransactions.map(transaction => {
-                    const { id, ...updateData } = transaction;
-                    return tx.tikTokTransaction.update({
-                        where: { id },
-                        data: updateData,
-                    });
-                });
-                await Promise.all(updatePromises);
-                syncedCount += updateTransactions.length;
-            }
-
-        }, {
-            maxWait: 30000,
-            timeout: 60000,
+        const existingTransactions = await prisma.tikTokTransaction.findMany({
+            where: { transactionId: { in: transactionIds } },
+            select: { id: true, transactionId: true }
         });
+
+        const existingTransactionMap = new Map(existingTransactions.map(t => [t.transactionId, t.id]));
+        const newTransactions: any[] = [];
+        const updateTransactions: any[] = [];
+
+        for (const transaction of transactions) {
+            if (!transaction.id) continue;
+
+            const transactionData = {
+                transactionId: transaction.id,
+                shopId,
+                statementId: transaction.statementId,
+                type: transaction.type || '',
+                currency: transaction.currency || 'GBP',
+                settlementAmount: transaction.settlementAmount ? parseFloat(transaction.settlementAmount) : null,
+                adjustmentAmount: transaction.adjustmentAmount ? parseFloat(transaction.adjustmentAmount) : null,
+                revenueAmount: transaction.revenueAmount ? parseFloat(transaction.revenueAmount) : null,
+                shippingCostAmount: transaction.shippingCostAmount ? parseFloat(transaction.shippingCostAmount) : null,
+                feeTaxAmount: transaction.feeTaxAmount ? parseFloat(transaction.feeTaxAmount) : null,
+                reserveAmount: transaction.reserveAmount ? parseFloat(transaction.reserveAmount) : null,
+                createdTime: transaction.createdTime ? new Date(transaction.createdTime * 1000) : null,
+                orderId: transaction.orderId || null,
+                orderCreateTime: transaction.orderCreateTime ? new Date(transaction.orderCreateTime * 1000) : null,
+                adjustmentId: transaction.adjustmentId || null,
+                adjustmentOrderId: transaction.adjustmentOrderId || null,
+                associatedOrderId: transaction.associatedOrderId || null,
+                reserveId: transaction.reserveId || null,
+                reserveStatus: transaction.reserveStatus || null,
+                estimatedReleaseTime: transaction.estimatedReleaseTime ? new Date(parseInt(transaction.estimatedReleaseTime) * 1000) : null,
+                revenueBreakdown: transaction.revenueBreakdown ? JSON.parse(JSON.stringify(transaction.revenueBreakdown)) : null,
+                shippingCostBreakdown: transaction.shippingCostBreakdown ? JSON.parse(JSON.stringify(transaction.shippingCostBreakdown)) : null,
+                feeTaxBreakdown: transaction.feeTaxBreakdown ? JSON.parse(JSON.stringify(transaction.feeTaxBreakdown)) : null,
+                supplementaryComponent: transaction.supplementaryComponent ? JSON.parse(JSON.stringify(transaction.supplementaryComponent)) : null,
+            };
+
+            const existingId = existingTransactionMap.get(transaction.id);
+            if (existingId) {
+                updateTransactions.push({ ...transactionData, id: existingId });
+            } else {
+                newTransactions.push(transactionData);
+            }
+        }
+
+        if (newTransactions.length > 0) {
+            await prisma.tikTokTransaction.createMany({
+                data: newTransactions
+            });
+            syncedCount += newTransactions.length;
+        }
+
+        if (updateTransactions.length > 0) {
+            await Promise.all(
+                updateTransactions.map(t => {
+                    const { id, ...data } = t;
+                    return prisma.tikTokTransaction.update({
+                        where: { id },
+                        data
+                    });
+                })
+            );
+            syncedCount += updateTransactions.length;
+        }
 
     } catch (error) {
         console.error(`Error processing transaction batch for shop ${shopId}:`, error);

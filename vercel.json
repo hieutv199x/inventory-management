@@ -4,6 +4,13 @@
         "sin1"
     ],
     "functions": {
+        "src/app/api/tiktok/Orders/get-order-list/route.ts": { "maxDuration": 60, "memory": 1024 },
+        "src/app/api/tiktok/Products/search-product/route.ts": { "maxDuration": 60, "memory": 1024 },
+        "src/app/api/tiktok/Finance/sync-get-payments/route.ts": { "maxDuration": 60, "memory": 1024 },
+        "src/app/api/tiktok/Finance/SyncGetStatements/route.ts": { "maxDuration": 60, "memory": 1024 },
+        "src/app/api/tiktok/CustomerService/sync-conversations/route.ts": { "maxDuration": 60, "memory": 1024 },
+        "src/app/api/tiktok/webhook/route.ts": { "maxDuration": 60, "memory": 1024 },
+        "src/app/api/tiktok/Orders/sync-recent-orders/route.ts": { "maxDuration": 60, "memory": 1024 },
         "src/app/api/**/*.ts": {
             "maxDuration": 30
         }

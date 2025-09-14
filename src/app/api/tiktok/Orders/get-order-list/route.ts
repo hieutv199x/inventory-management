@@ -185,293 +185,254 @@ async function syncOrdersToDatabase(orders: any[], shopId: string) {
 
 async function processBatch(orders: any[], shopId: string) {
     try {
-        await prisma.$transaction(async (tx) => {
-            // Collect existing order IDs to determine which are new vs updates
-            const orderIds = orders.map(o => o.id);
-            const existingOrders = await tx.order.findMany({ // Use unified Order model
-                where: { orderId: { in: orderIds } },
-                select: { id: true, orderId: true }
-            });
-            
-            const existingOrderMap = new Map(existingOrders.map(o => [o.orderId, o.id]));
-            const newOrders = [];
-            const updateOrders = [];
-
-            // Separate new orders from updates
-            for (const order of orders) {
-                const createTime = order.createTime || Math.floor(Date.now() / 1000);
-                
-                // Prepare TikTok-specific data for channelData
-                const channelData = {
-                    cancelOrderSlaTime: order.cancelOrderSlaTime,
-                    collectionTime: order.collectionTime,
-                    commercePlatform: order.commercePlatform,
-                    deliveryOptionId: order.deliveryOptionId,
-                    deliveryOptionName: order.deliveryOptionName,
-                    deliveryType: order.deliveryType,
-                    fulfillmentType: order.fulfillmentType,
-                    hasUpdatedRecipientAddress: order.hasUpdatedRecipientAddress || false,
-                    isCod: order.isCod || false,
-                    isOnHoldOrder: order.isOnHoldOrder || false,
-                    isReplacementOrder: order.isReplacementOrder || false,
-                    isSampleOrder: order.isSampleOrder || false,
-                    orderType: order.orderType,
-                    paymentMethodName: order.paymentMethodName,
-                    shippingProvider: order.shippingProvider,
-                    shippingProviderId: order.shippingProviderId,
-                    shippingType: order.shippingType,
-                    trackingNumber: order.trackingNumber,
-                    rtsSlaTime: order.rtsSlaTime,
-                    rtsTime: order.rtsTime,
-                    ttsSlaTime: order.ttsSlaTime,
-                    userId: order.userId,
-                    warehouseId: order.warehouseId
-                };
-
-                const orderData = {
-                    orderId: order.id,
-                    channel: 'TIKTOK' as any, // Add channel field and cast to 'any' or 'Channel'
-                    buyerEmail: order.buyerEmail || "",
-                    buyerMessage: order.buyerMessage || "",
-                    createTime: createTime,
-                    updateTime: order.updateTime,
-                    status: order.status || "UNKNOWN",
-                    totalAmount: order.payment?.totalAmount || null,
-                    currency: order.payment?.currency || null,
-                    paidTime: order.paidTime,
-                    deliveryTime: order.deliveryTime,
-                    channelData: JSON.stringify(channelData), // Store TikTok-specific fields
-                    shopId: shopId, // This should be the ObjectId from ShopAuthorization
-                };
-
-                if (existingOrderMap.has(order.id)) {
-                    updateOrders.push({
-                        ...orderData,
-                        dbId: existingOrderMap.get(order.id)
-                    });
-                } else {
-                    newOrders.push(orderData);
-                }
-            }
-
-            // Batch create new orders
-            if (newOrders.length > 0) {
-                await tx.order.createMany({ // Use unified Order model
-                    data: newOrders
-                });
-            }
-
-            // Batch update existing orders
-            if (updateOrders.length > 0) {
-                const updatePromises = updateOrders.map(order => 
-                    tx.order.update({ // Use unified Order model
-                        where: { id: order.dbId },
-                        data: {
-                            status: order.status,
-                            updateTime: order.updateTime,
-                            deliveryTime: order.deliveryTime,
-                            paidTime: order.paidTime,
-                            totalAmount: order.totalAmount,
-                            currency: order.currency,
-                            buyerMessage: order.buyerMessage,
-                            channelData: order.channelData,
-                        }
-                    })
-                );
-                await Promise.all(updatePromises);
-            }
-
-            // Get all order IDs after insert/update
-            const allOrders = await tx.order.findMany({ // Use unified Order model
-                where: { orderId: { in: orderIds } },
-                select: { id: true, orderId: true }
-            });
-            const orderIdMap = new Map(allOrders.map(o => [o.orderId, o.id]));
-
-            // Process line items, payments, addresses, and packages using unified models
-            const allLineItems = [];
-            const allPayments = [];
-            const allAddresses = [];
-            const allPackages = [];
-
-            for (const order of orders) {
-                const dbOrderId = orderIdMap.get(order.id);
-                if (!dbOrderId) continue;
-
-                // Collect line items for unified OrderLineItem model
-                if (order.lineItems) {
-                    for (const item of order.lineItems) {
-                        const itemChannelData = {
-                            skuType: item.skuType,
-                            skuImage: item.skuImage,
-                            sellerDiscount: item.sellerDiscount,
-                            platformDiscount: item.platformDiscount,
-                            displayStatus: item.displayStatus,
-                            isGift: item.isGift || false,
-                            packageId: item.packageId,
-                            packageStatus: item.packageStatus,
-                            shippingProviderId: item.shippingProviderId,
-                            shippingProviderName: item.shippingProviderName,
-                            trackingNumber: item.trackingNumber,
-                            rtsTime: item.rtsTime
-                        };
-
-                        allLineItems.push({
-                            lineItemId: item.id,
-                            productId: item.productId,
-                            productName: item.productName,
-                            skuId: item.skuId,
-                            skuName: item.skuName || "",
-                            sellerSku: item.sellerSku || "",
-                            currency: item.currency,
-                            originalPrice: item.originalPrice,
-                            salePrice: item.salePrice,
-                            channelData: JSON.stringify(itemChannelData),
-                            orderId: dbOrderId,
-                        });
-                    }
-                }
-
-                // Collect payments for unified OrderPayment model
-                if (order.payment) {
-                    const paymentChannelData = {
-                        originalTotalProductPrice: order.payment.originalTotalProductPrice,
-                        originalShippingFee: order.payment.originalShippingFee,
-                        sellerDiscount: order.payment.sellerDiscount,
-                        platformDiscount: order.payment.platformDiscount,
-                        shippingFee: order.payment.shippingFee,
-                        shippingFeeCofundedDiscount: order.payment.shippingFeeCofundedDiscount,
-                        shippingFeePlatformDiscount: order.payment.shippingFeePlatformDiscount,
-                        shippingFeeSellerDiscount: order.payment.shippingFeeSellerDiscount,
-                    };
-
-                    allPayments.push({
-                        orderId: dbOrderId,
-                        currency: order.payment.currency,
-                        totalAmount: order.payment.totalAmount,
-                        subTotal: order.payment.subTotal,
-                        tax: order.payment.tax,
-                        channelData: JSON.stringify(paymentChannelData),
-                    });
-                }
-
-                // Collect addresses for unified OrderRecipientAddress model
-                if (order.recipientAddress) {
-                    const addressChannelData = {
-                        addressDetail: order.recipientAddress.addressDetail,
-                        addressLine1: order.recipientAddress.addressLine1,
-                        addressLine2: order.recipientAddress.addressLine2 || "",
-                        addressLine3: order.recipientAddress.addressLine3 || "",
-                        addressLine4: order.recipientAddress.addressLine4 || "",
-                        firstName: order.recipientAddress.firstName || "",
-                        firstNameLocalScript: order.recipientAddress.firstNameLocalScript || "",
-                        lastName: order.recipientAddress.lastName || "",
-                        lastNameLocalScript: order.recipientAddress.lastNameLocalScript || "",
-                        regionCode: order.recipientAddress.regionCode,
-                        districtInfo: order.recipientAddress.districtInfo || []
-                    };
-
-                    allAddresses.push({
-                        orderId: dbOrderId,
-                        fullAddress: order.recipientAddress.fullAddress,
-                        name: order.recipientAddress.name,
-                        phoneNumber: order.recipientAddress.phoneNumber,
-                        postalCode: order.recipientAddress.postalCode || "",
-                        channelData: JSON.stringify(addressChannelData),
-                    });
-                }
-
-                // Collect packages for unified OrderPackage model
-                if (order.packages) {
-                    for (const pkg of order.packages) {
-                        allPackages.push({
-                            orderId: dbOrderId,
-                            packageId: pkg.id,
-                            channelData: JSON.stringify({}), // Can store package-specific data if needed
-                        });
-                    }
-                }
-            }
-
-            // Batch upsert using unified models
-            if (allLineItems.length > 0) {
-                await tx.orderLineItem.deleteMany({ // Use unified model
-                    where: { orderId: { in: Array.from(orderIdMap.values()) } }
-                });
-                await tx.orderLineItem.createMany({ // Use unified model
-                    data: allLineItems
-                });
-            }
-
-            if (allPayments.length > 0) {
-                await tx.orderPayment.deleteMany({ // Use unified model
-                    where: { orderId: { in: Array.from(orderIdMap.values()) } }
-                });
-                await tx.orderPayment.createMany({ // Use unified model
-                    data: allPayments
-                });
-            }
-
-            if (allAddresses.length > 0) {
-                await tx.orderRecipientAddress.deleteMany({ // Use unified model
-                    where: { orderId: { in: Array.from(orderIdMap.values()) } }
-                });
-
-                const addressInserts = allAddresses.map(({ channelData, ...address }) => ({
-                    ...address,
-                    channelData
-                }));
-                await tx.orderRecipientAddress.createMany({ // Use unified model
-                    data: addressInserts
-                });
-
-                // Handle district info for unified AddressDistrict model
-                const newAddresses = await tx.orderRecipientAddress.findMany({ // Use unified model
-                    where: { orderId: { in: Array.from(orderIdMap.values()) } },
-                    select: { id: true, orderId: true, channelData: true }
-                });
-
-                const allDistricts = [];
-                for (const address of newAddresses) {
-                    try {
-                        const channelData = JSON.parse(address.channelData || '{}');
-                        const districtInfo = channelData.districtInfo || [];
-                        
-                        for (const district of districtInfo) {
-                            allDistricts.push({
-                                addressLevel: district.addressLevel,
-                                addressLevelName: district.addressLevelName,
-                                addressName: district.addressName,
-                                recipientAddressId: address.id,
-                            });
-                        }
-                    } catch (error) {
-                        console.warn('Failed to parse address channelData:', error);
-                    }
-                }
-
-                if (allDistricts.length > 0) {
-                    await tx.addressDistrict.createMany({ // Use unified model
-                        data: allDistricts
-                    });
-                }
-            }
-
-            if (allPackages.length > 0) {
-                await tx.orderPackage.deleteMany({ // Use unified model
-                    where: { orderId: { in: Array.from(orderIdMap.values()) } }
-                });
-                await tx.orderPackage.createMany({ // Use unified model
-                    data: allPackages
-                });
-            }
-        }, {
-            maxWait: 30000,
-            timeout: 60000,
+        // Removed prisma.$transaction (MongoDB setup - no relational transactions)
+        // 1. Determine existing vs new orders
+        const orderIds = orders.map(o => o.id);
+        const existingOrders = await prisma.order.findMany({
+            where: { orderId: { in: orderIds } },
+            select: { id: true, orderId: true }
         });
 
+        const existingOrderMap = new Map(existingOrders.map(o => [o.orderId, o.id]));
+        const newOrders: any[] = [];
+        const updateOrders: any[] = [];
+
+        for (const order of orders) {
+            const createTime = order.createTime || Math.floor(Date.now() / 1000);
+            const channelData = {
+                cancelOrderSlaTime: order.cancelOrderSlaTime,
+                collectionTime: order.collectionTime,
+                commercePlatform: order.commercePlatform,
+                deliveryOptionId: order.deliveryOptionId,
+                deliveryOptionName: order.deliveryOptionName,
+                deliveryType: order.deliveryType,
+                fulfillmentType: order.fulfillmentType,
+                hasUpdatedRecipientAddress: order.hasUpdatedRecipientAddress || false,
+                isCod: order.isCod || false,
+                isOnHoldOrder: order.isOnHoldOrder || false,
+                isReplacementOrder: order.isReplacementOrder || false,
+                isSampleOrder: order.isSampleOrder || false,
+                orderType: order.orderType,
+                paymentMethodName: order.paymentMethodName,
+                shippingProvider: order.shippingProvider,
+                shippingProviderId: order.shippingProviderId,
+                shippingType: order.shippingType,
+                trackingNumber: order.trackingNumber,
+                rtsSlaTime: order.rtsSlaTime,
+                rtsTime: order.rtsTime,
+                ttsSlaTime: order.ttsSlaTime,
+                userId: order.userId,
+                warehouseId: order.warehouseId
+            };
+
+            const orderData = {
+                orderId: order.id,
+                channel: 'TIKTOK' as any,
+                buyerEmail: order.buyerEmail || "",
+                buyerMessage: order.buyerMessage || "",
+                createTime,
+                updateTime: order.updateTime,
+                status: order.status || "UNKNOWN",
+                totalAmount: order.payment?.totalAmount || null,
+                currency: order.payment?.currency || null,
+                paidTime: order.paidTime,
+                deliveryTime: order.deliveryTime,
+                channelData: JSON.stringify(channelData),
+                shopId: shopId
+            };
+
+            if (existingOrderMap.has(order.id)) {
+                updateOrders.push({ ...orderData, dbId: existingOrderMap.get(order.id) });
+            } else {
+                newOrders.push(orderData);
+            }
+        }
+
+        // 2. Insert new orders
+        if (newOrders.length > 0) {
+            await prisma.order.createMany({
+                data: newOrders
+            });
+        }
+
+        // 3. Update existing orders
+        if (updateOrders.length > 0) {
+            await Promise.all(
+                updateOrders.map(o =>
+                    prisma.order.update({
+                        where: { id: o.dbId },
+                        data: {
+                            status: o.status,
+                            updateTime: o.updateTime,
+                            deliveryTime: o.deliveryTime,
+                            paidTime: o.paidTime,
+                            totalAmount: o.totalAmount,
+                            currency: o.currency,
+                            buyerMessage: o.buyerMessage,
+                            channelData: o.channelData
+                        }
+                    })
+                )
+            );
+        }
+
+        // 4. Refetch DB order IDs
+        const allOrders = await prisma.order.findMany({
+            where: { orderId: { in: orderIds } },
+            select: { id: true, orderId: true }
+        });
+        const orderIdMap = new Map(allOrders.map(o => [o.orderId, o.id]));
+
+        // 5. Collect related entities
+        const allLineItems: any[] = [];
+        const allPayments: any[] = [];
+        const allAddresses: any[] = [];
+        const allPackages: any[] = [];
+
+        for (const order of orders) {
+            const dbOrderId = orderIdMap.get(order.id);
+            if (!dbOrderId) continue;
+
+            if (order.lineItems) {
+                for (const item of order.lineItems) {
+                    const itemChannelData = {
+                        skuType: item.skuType,
+                        skuImage: item.skuImage,
+                        sellerDiscount: item.sellerDiscount,
+                        platformDiscount: item.platformDiscount,
+                        displayStatus: item.displayStatus,
+                        isGift: item.isGift || false,
+                        packageId: item.packageId,
+                        packageStatus: item.packageStatus,
+                        shippingProviderId: item.shippingProviderId,
+                        shippingProviderName: item.shippingProviderName,
+                        trackingNumber: item.trackingNumber,
+                        rtsTime: item.rtsTime
+                    };
+                    allLineItems.push({
+                        lineItemId: item.id,
+                        productId: item.productId,
+                        productName: item.productName,
+                        skuId: item.skuId,
+                        skuName: item.skuName || "",
+                        sellerSku: item.sellerSku || "",
+                        currency: item.currency,
+                        originalPrice: item.originalPrice,
+                        salePrice: item.salePrice,
+                        channelData: JSON.stringify(itemChannelData),
+                        orderId: dbOrderId
+                    });
+                }
+            }
+
+            if (order.payment) {
+                const paymentChannelData = {
+                    originalTotalProductPrice: order.payment.originalTotalProductPrice,
+                    originalShippingFee: order.payment.originalShippingFee,
+                    sellerDiscount: order.payment.sellerDiscount,
+                    platformDiscount: order.payment.platformDiscount,
+                    shippingFee: order.payment.shippingFee,
+                    shippingFeeCofundedDiscount: order.payment.shippingFeeCofundedDiscount,
+                    shippingFeePlatformDiscount: order.payment.shippingFeePlatformDiscount,
+                    shippingFeeSellerDiscount: order.payment.shippingFeeSellerDiscount
+                };
+                allPayments.push({
+                    orderId: dbOrderId,
+                    currency: order.payment.currency,
+                    totalAmount: order.payment.totalAmount,
+                    subTotal: order.payment.subTotal,
+                    tax: order.payment.tax,
+                    channelData: JSON.stringify(paymentChannelData)
+                });
+            }
+
+            if (order.recipientAddress) {
+                const addressChannelData = {
+                    addressDetail: order.recipientAddress.addressDetail,
+                    addressLine1: order.recipientAddress.addressLine1,
+                    addressLine2: order.recipientAddress.addressLine2 || "",
+                    addressLine3: order.recipientAddress.addressLine3 || "",
+                    addressLine4: order.recipientAddress.addressLine4 || "",
+                    firstName: order.recipientAddress.firstName || "",
+                    firstNameLocalScript: order.recipientAddress.firstNameLocalScript || "",
+                    lastName: order.recipientAddress.lastName || "",
+                    lastNameLocalScript: order.recipientAddress.lastNameLocalScript || "",
+                    regionCode: order.recipientAddress.regionCode,
+                    districtInfo: order.recipientAddress.districtInfo || []
+                };
+                allAddresses.push({
+                    orderId: dbOrderId,
+                    fullAddress: order.recipientAddress.fullAddress,
+                    name: order.recipientAddress.name,
+                    phoneNumber: order.recipientAddress.phoneNumber,
+                    postalCode: order.recipientAddress.postalCode || "",
+                    channelData: JSON.stringify(addressChannelData)
+                });
+            }
+
+            if (order.packages) {
+                for (const pkg of order.packages) {
+                    allPackages.push({
+                        orderId: dbOrderId,
+                        packageId: pkg.id,
+                        channelData: JSON.stringify({})
+                    });
+                }
+            }
+        }
+
+        const orderDbIds = Array.from(orderIdMap.values());
+
+        // 6. Replace related entities (delete + recreate for batch consistency)
+        if (allLineItems.length > 0) {
+            await prisma.orderLineItem.deleteMany({ where: { orderId: { in: orderDbIds } } });
+            await prisma.orderLineItem.createMany({ data: allLineItems });
+        }
+
+        if (allPayments.length > 0) {
+            await prisma.orderPayment.deleteMany({ where: { orderId: { in: orderDbIds } } });
+            await prisma.orderPayment.createMany({ data: allPayments });
+        }
+
+        if (allAddresses.length > 0) {
+            await prisma.orderRecipientAddress.deleteMany({ where: { orderId: { in: orderDbIds } } });
+            await prisma.orderRecipientAddress.createMany({ data: allAddresses });
+
+            const newAddresses = await prisma.orderRecipientAddress.findMany({
+                where: { orderId: { in: orderDbIds } },
+                select: { id: true, channelData: true }
+            });
+
+            const allDistricts: any[] = [];
+            for (const addr of newAddresses) {
+                try {
+                    const channelData = JSON.parse(addr.channelData || '{}');
+                    const districtInfo = channelData.districtInfo || [];
+                    for (const d of districtInfo) {
+                        allDistricts.push({
+                            addressLevel: d.addressLevel,
+                            addressLevelName: d.addressLevelName,
+                            addressName: d.addressName,
+                            recipientAddressId: addr.id
+                        });
+                    }
+                } catch (e) {
+                    console.warn('Failed to parse address channelData:', e);
+                }
+            }
+            if (allDistricts.length > 0) {
+                // Optionally could delete existing districts for these addresses first if duplicates appear
+                await prisma.addressDistrict.createMany({ data: allDistricts });
+            }
+        }
+
+        if (allPackages.length > 0) {
+            await prisma.orderPackage.deleteMany({ where: { orderId: { in: orderDbIds } } });
+            await prisma.orderPackage.createMany({ data: allPackages });
+        }
+
     } catch (error) {
-        console.error('Error processing batch:', error);
+        console.error('Error processing batch (non-transactional):', error);
         throw error;
     }
 }

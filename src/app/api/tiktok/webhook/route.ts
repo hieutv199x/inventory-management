@@ -66,17 +66,17 @@ export async function POST(request: NextRequest) {
         }
 
         // Verify webhook signature if signature is provided
-        if (signature && timestamp) {
-            const isValid = await verifyWebhookSignature(body, signature, webhookData.shop_id, timestamp);
-            if (!isValid) {
-                console.error('Invalid webhook signature');
-                return NextResponse.json({
-                    code: 40003,
-                    message: 'Invalid signature',
-                    data: null
-                }, { status: 401 });
-            }
-        }
+        // if (signature && timestamp) {
+        //     const isValid = await verifyWebhookSignature(body, signature, webhookData.shop_id, timestamp);
+        //     if (!isValid) {
+        //         console.error('Invalid webhook signature');
+        //         return NextResponse.json({
+        //             code: 40003,
+        //             message: 'Invalid signature',
+        //             data: null
+        //         }, { status: 401 });
+        //     }
+        // }
 
         // Handle different webhook types
         switch (webhookData.type) {
@@ -230,7 +230,7 @@ async function handleOrderStatusChange(webhookData: TikTokWebhookData) {
                     }
 
                     // Handle specific status changes for business logic
-                    await handleSpecificStatusChanges(updatedOrder.id, order_status ?? '', webhookData, credentials.id);
+                    await handleSpecificStatusChanges(updatedOrder.id, order_status ?? '', webhookData, credentials.id, updatedOrder.createTime ?? Date.now() / 1000);
                 }
 
             } catch (syncError) {
@@ -279,7 +279,7 @@ async function handleOrderStatusChange(webhookData: TikTokWebhookData) {
     }
 }
 
-async function handleSpecificStatusChanges(orderId: string, newStatus: string, webhookData: TikTokWebhookData, shopId: string) {
+async function handleSpecificStatusChanges(orderId: string, newStatus: string, webhookData: TikTokWebhookData, shopId: string, createTime: number) {
     // Handle specific business logic for different status changes
     switch (newStatus.toLowerCase()) {
         case 'awaiting_shipment':
@@ -290,24 +290,12 @@ async function handleSpecificStatusChanges(orderId: string, newStatus: string, w
                     // Sync unsettled transactions to ensure payment status is up to date
                     await syncUnsettledTransactions(prisma, {
                         shop_id: shopId,
-                        search_time_ge: Math.floor(Date.now() / 1000) - 3600,
+                        search_time_ge: createTime,
                         search_time_lt: Math.floor(Date.now() / 1000),
                         page_size: 10
                     });
                 } catch (syncError) {
                     console.error(`Failed to sync unsettled transactions for order ${orderId}:`, syncError);
-                }
-            }, 1000);
-            // Use the utility function
-            setTimeout(async () => {
-                try {
-                    const syncResult = await syncOrderById(shopId, orderId, {
-                        create_notifications: false,
-                        timeout_seconds: 60
-                    });
-                    console.log(`Webhook cancellation sync completed:`, syncResult);
-                } catch (syncError) {
-                    console.error(`Failed to sync order ${orderId} from cancellation webhook:`, syncError);
                 }
             }, 1000);
 

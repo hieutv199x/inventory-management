@@ -193,12 +193,11 @@ async function processProductBatch(products: any[], shopObjectId: string, client
                 const productId = productDetail.id;
                 console.log(`\n🔄 Creating product ${productId}...`);
 
-                // Create product in smaller transaction
-                const productCreated = await prisma.$transaction(async (tx) => {
-                    // Handle brand
-                    let brandRecord = null;
-                    if (productDetail.brand?.id) {
-                        brandRecord = await tx.brand.upsert({
+                // Removed prisma.$transaction (MongoDB setup) — operations below are non-atomic
+                let brandRecord = null;
+                if (productDetail.brand?.id) {
+                    try {
+                        brandRecord = await prisma.brand.upsert({
                             where: { brandId: productDetail.brand.id },
                             create: {
                                 brandId: productDetail.brand.id,
@@ -208,12 +207,15 @@ async function processProductBatch(products: any[], shopObjectId: string, client
                                 name: productDetail.brand.name,
                             },
                         });
+                    } catch (e) {
+                        console.warn(`⚠️ Brand upsert failed for ${productDetail.brand.id}`, e);
                     }
+                }
 
-                    // Handle audit
-                    let auditRecord = null;
-                    if (productDetail.audit) {
-                        auditRecord = await tx.audit.create({
+                let auditRecord = null;
+                if (productDetail.audit) {
+                    try {
+                        auditRecord = await prisma.audit.create({
                             data: {
                                 status: productDetail.audit.status!,
                                 preApprovedReasons: productDetail.audit.preApprovedReasons ?? [],
@@ -221,49 +223,48 @@ async function processProductBatch(products: any[], shopObjectId: string, client
                                 suggestions: productDetail.audit.suggestions ?? [],
                             },
                         });
+                    } catch (e) {
+                        console.warn(`⚠️ Audit create failed`, e);
                     }
+                }
 
-                    // Create main product with updated schema
-                    const productRecord = await tx.product.create({
-                        data: {
-                            productId,
-                            channel: 'TIKTOK', // Add required channel field
-                            shopId: shopObjectId, // Use ShopAuthorization ObjectID
-                            title: productDetail.title ?? "",
-                            description: productDetail.description ?? "",
-                            status: productDetail.status ?? "",
-                            price: productDetail.skus?.[0]?.price?.salePrice, // Extract price from first SKU
-                            currency: productDetail.skus?.[0]?.price?.currency, // Extract currency from first SKU
-                            createTime: productDetail.createTime ?? 0,
-                            updateTime: productDetail.updateTime ?? 0,
-                            // Move TikTok-specific fields to channelData JSON
-                            channelData: JSON.stringify({
-                                isNotForSale: productDetail.isNotForSale ?? false,
-                                isCodAllowed: productDetail.isCodAllowed ?? false,
-                                isPreOwned: productDetail.isPreOwned ?? false,
-                                shippingInsuranceRequirement: productDetail.shippingInsuranceRequirement ?? "",
-                                originalShopId: credentials.shopId
-                            }),
-                            brandId: brandRecord?.id ?? null,
-                            auditId: auditRecord?.id ?? null,
-                        }
-                    });
+                // Final existence check to avoid duplicate create in race conditions
+                const already = await prisma.product.findUnique({ where: { productId } });
+                if (already) {
+                    console.log(`➡️ Product ${productId} already exists (skipped create)`);
+                    continue;
+                }
 
-                    return productRecord;
-                }, {
-                    maxWait: 15000,
-                    timeout: 30000,
+                const productCreated = await prisma.product.create({
+                    data: {
+                        productId,
+                        channel: 'TIKTOK',
+                        shopId: shopObjectId,
+                        title: productDetail.title ?? "",
+                        description: productDetail.description ?? "",
+                        status: productDetail.status ?? "",
+                        price: productDetail.skus?.[0]?.price?.salePrice,
+                        currency: productDetail.skus?.[0]?.price?.currency,
+                        createTime: productDetail.createTime ?? 0,
+                        updateTime: productDetail.updateTime ?? 0,
+                        channelData: JSON.stringify({
+                            isNotForSale: productDetail.isNotForSale ?? false,
+                            isCodAllowed: productDetail.isCodAllowed ?? false,
+                            isPreOwned: productDetail.isPreOwned ?? false,
+                            shippingInsuranceRequirement: productDetail.shippingInsuranceRequirement ?? "",
+                            originalShopId: credentials.shopId
+                        }),
+                        brandId: brandRecord?.id ?? null,
+                        auditId: auditRecord?.id ?? null,
+                    }
                 });
 
                 if (productCreated) {
-                    // Handle related data in separate operations to avoid large transactions
                     await handleProductRelatedData(productDetail, productCreated.id);
                     createdCount++;
                 }
-
             } catch (error) {
                 console.error(`❌ Error creating product ${productDetail.id}:`, error);
-                // Continue with next product instead of failing the entire batch
             }
         }
     } catch (error) {
