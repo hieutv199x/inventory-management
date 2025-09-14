@@ -840,8 +840,8 @@ export class TikTokOrderSync {
                         if (packageDetail.deliveryOptionName !== undefined) apiFields.deliveryOptionName = packageDetail.deliveryOptionName;
                         if (packageDetail.deliveryOptionId !== undefined) apiFields.deliveryOptionId = packageDetail.deliveryOptionId;
                         if (packageDetail.lastMileTrackingNumber !== undefined) apiFields.lastMileTrackingNumber = packageDetail.lastMileTrackingNumber;
-                        if ((packageDetail as any).pickupSlot.startTime !== undefined) apiFields.pickupSlotStartTime = (packageDetail as any).pickupSlot.startTime;
-                        if ((packageDetail as any).pickupSlot.endTime !== undefined) apiFields.pickupSlotEndTime = (packageDetail as any).pickupSlot.endTime;
+                        if ((packageDetail as any).pickupSlot?.startTime !== undefined) apiFields.pickupSlotStartTime = (packageDetail as any).pickupSlot.startTime;
+                        if ((packageDetail as any).pickupSlot?.endTime !== undefined) apiFields.pickupSlotEndTime = (packageDetail as any).pickupSlot.endTime;
                         if (packageDetail.handoverMethod !== undefined) apiFields.handoverMethod = packageDetail.handoverMethod;
                         
                         packageData = {

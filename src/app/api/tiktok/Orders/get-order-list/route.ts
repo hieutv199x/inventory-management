@@ -417,8 +417,8 @@ async function processBatch(orders: any[], shopId: string, client: any, credenti
                             if (packageDetail.deliveryOptionName !== undefined) apiFields.deliveryOptionName = packageDetail.deliveryOptionName;
                             if (packageDetail.deliveryOptionId !== undefined) apiFields.deliveryOptionId = packageDetail.deliveryOptionId;
                             if (packageDetail.lastMileTrackingNumber !== undefined) apiFields.lastMileTrackingNumber = packageDetail.lastMileTrackingNumber;
-                            if (packageDetail.pickupSlot.startTime !== undefined) apiFields.pickupSlotStartTime = packageDetail.pickupSlot.startTime;
-                            if (packageDetail.pickupSlot.endTime !== undefined) apiFields.pickupSlotEndTime = packageDetail.pickupSlot.endTime;
+                            if (packageDetail.pickupSlot?.startTime !== undefined) apiFields.pickupSlotStartTime = packageDetail.pickupSlot.startTime;
+                            if (packageDetail.pickupSlot?.endTime !== undefined) apiFields.pickupSlotEndTime = packageDetail.pickupSlot.endTime;
                             if (packageDetail.handoverMethod !== undefined) apiFields.handoverMethod = packageDetail.handoverMethod;
                             
                             packageData = {
