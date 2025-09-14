@@ -145,7 +145,7 @@ export async function POST(req: NextRequest) {
             }
 
             console.log(`Total orders to sync: ${allOrders.length}`);
-            await syncOrdersToDatabase(allOrders, credentials.id); // Use credentials.id (ObjectId) instead of shop_id
+            await syncOrdersToDatabase(allOrders, credentials.id, client, credentials, shopCipher); // Pass additional parameters
             
             // Return modified result with total count information
             return NextResponse.json({
@@ -169,21 +169,21 @@ export async function POST(req: NextRequest) {
     }
 }
 
-async function syncOrdersToDatabase(orders: any[], shopId: string) {
+async function syncOrdersToDatabase(orders: any[], shopId: string, client: any, credentials: any, shopCipher: string | undefined) {
     const BATCH_SIZE = 50;
     console.log(`Starting sync of ${orders.length} orders in batches of ${BATCH_SIZE}`);
 
     // Process orders in batches
     for (let i = 0; i < orders.length; i += BATCH_SIZE) {
         const batch = orders.slice(i, i + BATCH_SIZE);
-        await processBatch(batch, shopId);
+        await processBatch(batch, shopId, client, credentials, shopCipher);
         console.log(`Processed ${Math.min(i + BATCH_SIZE, orders.length)} of ${orders.length} orders`);
     }
 
     console.log('Sync completed');
 }
 
-async function processBatch(orders: any[], shopId: string) {
+async function processBatch(orders: any[], shopId: string, client: any, credentials: any, shopCipher: string | undefined) {
     try {
         // Removed prisma.$transaction (MongoDB setup - no relational transactions)
         // 1. Determine existing vs new orders
@@ -372,11 +372,96 @@ async function processBatch(orders: any[], shopId: string) {
 
             if (order.packages) {
                 for (const pkg of order.packages) {
-                    allPackages.push({
-                        orderId: dbOrderId,
-                        packageId: pkg.id,
-                        channelData: JSON.stringify({})
-                    });
+                    try {
+                        // Get package detail from TikTok API
+                        const packageDetailResult = await client.api.FulfillmentV202309Api.PackagesPackageIdGet(
+                            pkg.id,
+                            credentials.accessToken,
+                            "application/json",
+                            shopCipher
+                        );
+
+                        let packageData: any = {
+                            orderId: dbOrderId,
+                            packageId: pkg.id
+                        };
+
+                        let packageChannelData: any = {
+                            originalPackageData: pkg, // Store original package data from order
+                            fetchedAt: Date.now()
+                        };
+
+                        if (packageDetailResult?.body?.data) {
+                            const packageDetail = packageDetailResult.body.data;
+                            
+                            // Map API response to model fields - only include non-undefined values
+                            const apiFields: any = {};
+                            
+                            // Core TikTok package fields
+                            if (packageDetail.packageStatus !== undefined) apiFields.status = packageDetail.packageStatus;
+                            if (packageDetail.trackingNumber !== undefined) apiFields.trackingNumber = packageDetail.trackingNumber;
+                            if (packageDetail.shippingProviderId !== undefined) apiFields.shippingProviderId = packageDetail.shippingProviderId;
+                            if (packageDetail.shippingProviderName !== undefined) apiFields.shippingProviderName = packageDetail.shippingProviderName;
+                            
+                            // API response data
+                            if (packageDetail.orderLineItemIds !== undefined) apiFields.orderLineItemIds = packageDetail.orderLineItemIds || [];
+                            if (packageDetail.orders !== undefined) apiFields.ordersData = JSON.stringify(packageDetail.orders);
+                            
+                            // Extended fields from new schema
+                            if (packageDetail.shippingType !== undefined) apiFields.shippingType = packageDetail.shippingType;
+                            if (packageDetail.createTime !== undefined) apiFields.createTime = packageDetail.createTime;
+                            if (packageDetail.updateTime !== undefined) apiFields.updateTime = packageDetail.updateTime;
+                            if (packageDetail.splitAndCombineTag !== undefined) apiFields.splitAndCombineTag = packageDetail.splitAndCombineTag;
+                            if (packageDetail.hasMultiSkus !== undefined) apiFields.hasMultiSkus = packageDetail.hasMultiSkus;
+                            if (packageDetail.noteTag !== undefined) apiFields.noteTag = packageDetail.noteTag;
+                            if (packageDetail.deliveryOptionName !== undefined) apiFields.deliveryOptionName = packageDetail.deliveryOptionName;
+                            if (packageDetail.deliveryOptionId !== undefined) apiFields.deliveryOptionId = packageDetail.deliveryOptionId;
+                            if (packageDetail.lastMileTrackingNumber !== undefined) apiFields.lastMileTrackingNumber = packageDetail.lastMileTrackingNumber;
+                            if (packageDetail.pickupSlot.startTime !== undefined) apiFields.pickupSlotStartTime = packageDetail.pickupSlot.startTime;
+                            if (packageDetail.pickupSlot.endTime !== undefined) apiFields.pickupSlotEndTime = packageDetail.pickupSlot.endTime;
+                            if (packageDetail.handoverMethod !== undefined) apiFields.handoverMethod = packageDetail.handoverMethod;
+                            
+                            packageData = {
+                                ...packageData,
+                                ...apiFields
+                            };
+
+                            // Store full API response in channelData for future reference
+                            packageChannelData = {
+                                ...packageChannelData,
+                                packageDetailApi: packageDetail,
+                                apiVersion: '202309',
+                                fetchSuccess: true
+                            };
+                        } else {
+                            packageChannelData = {
+                                ...packageChannelData,
+                                fetchSuccess: false,
+                                fetchError: 'No data returned from API'
+                            };
+                        }
+
+                        packageData.channelData = JSON.stringify(packageChannelData);
+                        allPackages.push(packageData);
+
+                        // Add small delay to avoid rate limiting
+                        await new Promise(resolve => setTimeout(resolve, 100));
+                        
+                    } catch (packageError) {
+                        console.warn(`Failed to fetch package detail for ${pkg.id}:`, packageError);
+                        
+                        // Still add the package with basic info if API call fails
+                        allPackages.push({
+                            orderId: dbOrderId,
+                            packageId: pkg.id,
+                            channelData: JSON.stringify({
+                                originalPackageData: pkg,
+                                fetchError: packageError instanceof Error ? packageError.message : String(packageError),
+                                fetchedAt: Date.now(),
+                                fetchSuccess: false
+                            })
+                        });
+                    }
                 }
             }
         }

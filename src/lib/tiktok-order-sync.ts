@@ -790,6 +790,113 @@ export class TikTokOrderSync {
                 console.warn(`Failed to create shipping address for order ${order.id}:`, addrError);
             }
         }
+
+        // Create packages with detailed information
+        if (order.packages && Array.isArray(order.packages)) {
+            for (const pkg of order.packages) {
+                try {
+                    // Get package detail from TikTok API
+                    console.log(`Fetching package detail for package ${pkg.id}`);
+                    const packageDetailResult = await this.client.api.FulfillmentV202309Api.PackagesPackageIdGet(
+                        pkg.id,
+                        this.credentials.accessToken,
+                        "application/json",
+                        this.shopCipher
+                    );
+
+                    let packageData: any = {
+                        orderId: persistedOrder.id,
+                        packageId: pkg.id
+                    };
+
+                    let packageChannelData: any = {
+                        originalPackageData: pkg,
+                        fetchedAt: Date.now()
+                    };
+
+                    if (packageDetailResult?.body?.data) {
+                        const packageDetail = packageDetailResult.body.data;
+                        
+                        // Map API response to model fields - only include non-undefined values
+                        const apiFields: any = {};
+                        
+                        // Core TikTok package fields
+                        if (packageDetail.packageStatus !== undefined) apiFields.status = packageDetail.packageStatus;
+                        if (packageDetail.trackingNumber !== undefined) apiFields.trackingNumber = packageDetail.trackingNumber;
+                        if (packageDetail.shippingProviderId !== undefined) apiFields.shippingProviderId = packageDetail.shippingProviderId;
+                        if (packageDetail.shippingProviderName !== undefined) apiFields.shippingProviderName = packageDetail.shippingProviderName;
+                        
+                        // API response data
+                        if (packageDetail.orderLineItemIds !== undefined) apiFields.orderLineItemIds = packageDetail.orderLineItemIds || [];
+                        if (packageDetail.orders !== undefined) apiFields.ordersData = JSON.stringify(packageDetail.orders);
+                        
+                        // Extended fields from new schema
+                        if (packageDetail.shippingType !== undefined) apiFields.shippingType = packageDetail.shippingType;
+                        if (packageDetail.createTime !== undefined) apiFields.createTime = packageDetail.createTime;
+                        if (packageDetail.updateTime !== undefined) apiFields.updateTime = packageDetail.updateTime;
+                        if (packageDetail.splitAndCombineTag !== undefined) apiFields.splitAndCombineTag = packageDetail.splitAndCombineTag;
+                        if (packageDetail.hasMultiSkus !== undefined) apiFields.hasMultiSkus = packageDetail.hasMultiSkus;
+                        if (packageDetail.noteTag !== undefined) apiFields.noteTag = packageDetail.noteTag;
+                        if (packageDetail.deliveryOptionName !== undefined) apiFields.deliveryOptionName = packageDetail.deliveryOptionName;
+                        if (packageDetail.deliveryOptionId !== undefined) apiFields.deliveryOptionId = packageDetail.deliveryOptionId;
+                        if (packageDetail.lastMileTrackingNumber !== undefined) apiFields.lastMileTrackingNumber = packageDetail.lastMileTrackingNumber;
+                        if ((packageDetail as any).pickupSlot.startTime !== undefined) apiFields.pickupSlotStartTime = (packageDetail as any).pickupSlot.startTime;
+                        if ((packageDetail as any).pickupSlot.endTime !== undefined) apiFields.pickupSlotEndTime = (packageDetail as any).pickupSlot.endTime;
+                        if (packageDetail.handoverMethod !== undefined) apiFields.handoverMethod = packageDetail.handoverMethod;
+                        
+                        packageData = {
+                            ...packageData,
+                            ...apiFields
+                        };
+
+                        packageChannelData = {
+                            ...packageChannelData,
+                            packageDetailApi: packageDetail,
+                            apiVersion: '202309',
+                            fetchSuccess: true
+                        };
+                    } else {
+                        packageChannelData = {
+                            ...packageChannelData,
+                            fetchSuccess: false,
+                            fetchError: 'No data returned from API'
+                        };
+                    }
+
+                    packageData.channelData = JSON.stringify(packageChannelData);
+                    
+                    await prisma.orderPackage.create({
+                        data: packageData
+                    });
+
+                    console.log(`Created package ${pkg.id} for order ${order.id}`);
+
+                    // Add small delay to avoid rate limiting
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                    
+                } catch (packageError) {
+                    console.warn(`Failed to create package ${pkg.id} for order ${order.id}:`, packageError);
+                    
+                    // Still create package with basic info if API call fails
+                    try {
+                        await prisma.orderPackage.create({
+                            data: {
+                                orderId: persistedOrder.id,
+                                packageId: pkg.id,
+                                channelData: JSON.stringify({
+                                    originalPackageData: pkg,
+                                    fetchError: packageError instanceof Error ? packageError.message : String(packageError),
+                                    fetchedAt: Date.now(),
+                                    fetchSuccess: false
+                                })
+                            }
+                        });
+                    } catch (fallbackError) {
+                        console.error(`Failed to create fallback package ${pkg.id}:`, fallbackError);
+                    }
+                }
+            }
+        }
     }
 }
 

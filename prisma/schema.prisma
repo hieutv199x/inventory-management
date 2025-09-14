@@ -652,16 +652,17 @@ model OrderPackage {
 
   // Extended lifecycle / logistics metadata (some may not appear in this specific endpoint but kept for enrichment)
   shippingType          String?        // STANDARD / EXPEDITED etc.
-  collectionTime        Int?           // collection_time
-  rtsTime               Int?           // ready-to-ship time (if provided elsewhere)
   createTime            Int?           // API: create_time
   updateTime            Int?           // API: update_time (new explicit field)
-  updateTimeRaw         Int?           // (Deprecated) kept for backward compatibility; use updateTime instead
-  rtsSlaTime            Int?
-  ttsSlaTime            Int?
-  deliverSlaTime        Int?
-  deliveredTime         Int?
-  inTransitTime         Int?
+  splitAndCombineTag    String? 
+  hasMultiSkus          Boolean?
+  noteTag               String?
+  deliveryOptionName    String?
+  deliveryOptionId    String?
+  lastMileTrackingNumber    String?
+  pickupSlotStartTime    Int?
+  pickupSlotEndTime    Int?
+  handoverMethod   String?
 
   // Full raw payload / future fields
   channelData           String?
