@@ -66,17 +66,17 @@ export async function POST(request: NextRequest) {
         }
 
         // Verify webhook signature if signature is provided
-        // if (signature && timestamp) {
-        //     const isValid = await verifyWebhookSignature(body, signature, webhookData.shop_id, timestamp);
-        //     if (!isValid) {
-        //         console.error('Invalid webhook signature');
-        //         return NextResponse.json({
-        //             code: 40003,
-        //             message: 'Invalid signature',
-        //             data: null
-        //         }, { status: 401 });
-        //     }
-        // }
+        if (signature && timestamp) {
+            const isValid = await verifyWebhookSignature(body, signature, webhookData.shop_id, timestamp);
+            if (!isValid) {
+                console.error('Invalid webhook signature');
+                return NextResponse.json({
+                    code: 40003,
+                    message: 'Invalid signature',
+                    data: null
+                }, { status: 401 });
+            }
+        }
 
         // Handle different webhook types
         switch (webhookData.type) {
@@ -213,7 +213,7 @@ async function handleOrderStatusChange(webhookData: TikTokWebhookData) {
 
                 if (updatedOrder) {
                     // Create notification for order status change (only if status actually changed)
-                    if (previousStatus !== order_status && credentials.id) {
+                    if (credentials.id) {
                         await NotificationService.createOrderNotification(
                             NotificationType.ORDER_STATUS_CHANGE,
                             updatedOrder,
