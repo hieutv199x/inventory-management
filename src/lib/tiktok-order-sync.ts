@@ -674,31 +674,60 @@ export class TikTokOrderSync {
             })
         };
 
-        // Create the order
-        const createdOrder = await prisma.order.create({
-            data: {
-                orderId: order.id,
-                channel: Channel.TIKTOK,
-                buyerEmail: order.buyerEmail || "",
-                buyerMessage: order.buyerMessage || "",
-                createTime: order.createTime || Math.floor(Date.now() / 1000),
-                updateTime: order.updateTime || Math.floor(Date.now() / 1000),
-                status: order.status || "UNKNOWN",
-                totalAmount: order.payment?.totalAmount || null,
-                currency: order.payment?.currency || null,
-                paidTime: order.paidTime,
-                deliveryTime: order.deliveryTime,
-                channelData: JSON.stringify(channelData),
-                shopId: shopId,
-            }
+        // Check if order already exists (by unique orderId)
+        const existing = await prisma.order.findUnique({
+            where: { orderId: order.id }
         });
+
+        let persistedOrder;
+        if (existing) {
+            // Update existing order
+            persistedOrder = await prisma.order.update({
+                where: { id: existing.id },
+                data: {
+                    status: order.status || existing.status,
+                    buyerEmail: order.buyerEmail || existing.buyerEmail,
+                    buyerMessage: order.buyerMessage || existing.buyerMessage,
+                    updateTime: order.updateTime || Math.floor(Date.now() / 1000),
+                    deliveryTime: order.deliveryTime,
+                    paidTime: order.paidTime,
+                    totalAmount: order.payment?.totalAmount || existing.totalAmount,
+                    currency: order.payment?.currency || existing.currency,
+                    channelData: JSON.stringify(channelData)
+                }
+            });
+
+            // Replace associations to reflect latest data
+            await prisma.orderLineItem.deleteMany({ where: { orderId: persistedOrder.id } });
+            await prisma.orderPayment.deleteMany({ where: { orderId: persistedOrder.id } });
+            await prisma.orderRecipientAddress.deleteMany({ where: { orderId: persistedOrder.id } });
+        } else {
+            // Create new order
+            persistedOrder = await prisma.order.create({
+                data: {
+                    orderId: order.id,
+                    channel: Channel.TIKTOK,
+                    buyerEmail: order.buyerEmail || "",
+                    buyerMessage: order.buyerMessage || "",
+                    createTime: order.createTime || Math.floor(Date.now() / 1000),
+                    updateTime: order.updateTime || Math.floor(Date.now() / 1000),
+                    status: order.status || "UNKNOWN",
+                    totalAmount: order.payment?.totalAmount || null,
+                    currency: order.payment?.currency || null,
+                    paidTime: order.paidTime,
+                    deliveryTime: order.deliveryTime,
+                    channelData: JSON.stringify(channelData),
+                    shopId: shopId,
+                }
+            });
+        }
 
         // Create payment record if payment exists
         if (order.payment) {
-            await this.createOrderPayment(createdOrder.id, order.payment, priceDetails);
+            await this.createOrderPayment(persistedOrder.id, order.payment, priceDetails);
         }
 
-        // Create order items
+        // Line items
         if (order.lineItems && Array.isArray(order.lineItems)) {
             for (const item of order.lineItems) {
                 try {
@@ -719,7 +748,7 @@ export class TikTokOrderSync {
 
                     await prisma.orderLineItem.create({
                         data: {
-                            orderId: createdOrder.id,
+                            orderId: persistedOrder.id,
                             lineItemId: item.id,
                             productId: item.productId,
                             productName: item.productName,
@@ -738,7 +767,7 @@ export class TikTokOrderSync {
             }
         }
 
-        // Create shipping address
+        // Address
         if (order.recipientAddress) {
             try {
                 const addressChannelData = {
@@ -757,7 +786,7 @@ export class TikTokOrderSync {
 
                 await prisma.orderRecipientAddress.create({
                     data: {
-                        orderId: createdOrder.id,
+                        orderId: persistedOrder.id,
                         fullAddress: order.recipientAddress.fullAddress,
                         name: order.recipientAddress.name,
                         phoneNumber: order.recipientAddress.phoneNumber,
