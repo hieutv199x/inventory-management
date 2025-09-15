@@ -70,10 +70,10 @@ export class TikTokOrderSync {
                 console.warn('Failed to parse channelData, using legacy shopCipher');
             }
         }
-
+        const baseUrl = credentials.app?.BaseUrl ?? process.env.TIKTOK_BASE_URL;
         const client = new TikTokShopNodeApiClient({
             config: {
-                basePath: process.env.TIKTOK_BASE_URL,
+                basePath: baseUrl,
                 app_key: credentials.app.appKey,
                 app_secret: credentials.app.appSecret,
             },

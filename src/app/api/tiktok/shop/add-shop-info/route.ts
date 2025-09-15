@@ -59,6 +59,7 @@ export async function POST(request: NextRequest) {
         appId: serviceId, // Using serviceId as appId
         appKey,
         appSecret,
+        BaseUrl: 'https://open-api.tiktokglobalshop.com', 
         isActive: true,
         config: JSON.stringify({ 
           country,

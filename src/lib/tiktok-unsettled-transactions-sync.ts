@@ -65,7 +65,7 @@ export class TikTokUnsettledTransactionSync {
             // Initialize TikTok client
             const client = new TikTokShopNodeApiClient({
                 config: {
-                    basePath: process.env.TIKTOK_BASE_URL,
+                    basePath: shop.app.BaseUrl ?? process.env.TIKTOK_BASE_URL,
                     app_key: shop.app.appKey,
                     app_secret: shop.app.appSecret,
                 },

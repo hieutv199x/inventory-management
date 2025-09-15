@@ -39,10 +39,10 @@ export async function POST(req: NextRequest) {
         if (!credentials) {
             return NextResponse.json({ error: "Shop not found or inactive" }, { status: 404 });
         }
-
+        let basePath = credentials?.app?.BaseUrl ?? process.env.TIKTOK_BASE_URL;
         const client = new TikTokShopNodeApiClient({
             config: {
-                basePath: process.env.TIKTOK_BASE_URL,
+                basePath: basePath,
                 app_key: credentials.app?.appKey,
                 app_secret: credentials.app?.appSecret,
             },

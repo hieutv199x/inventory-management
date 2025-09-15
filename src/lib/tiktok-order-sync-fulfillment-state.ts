@@ -43,10 +43,12 @@ export class TikTokOrderAttributesSync {
                 throw new Error(`Shop ${options.shop_id} is missing access token or shop cipher`);
             }
 
+            const baseUrl = shop.app.BaseUrl ?? process.env.TIKTOK_BASE_URL;
+
             // Initialize TikTok client
             const client = new TikTokShopNodeApiClient({
                 config: {
-                    basePath: process.env.TIKTOK_BASE_URL,
+                    basePath: baseUrl,
                     app_key: shop.app.appKey,
                     app_secret: shop.app.appSecret,
                 },

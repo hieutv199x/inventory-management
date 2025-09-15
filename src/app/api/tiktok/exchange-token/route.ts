@@ -41,8 +41,10 @@ export async function POST(req: NextRequest) {
         const { access_token, refresh_token, access_token_expire_in, granted_scopes } = tokenData;
 
         //shopAuthen
-        const baseUrl = process.env.TIKTOK_BASE_URL;
-
+        let baseUrl = process.env.TIKTOK_BASE_URL;
+        if (credential.BaseUrl) {
+            baseUrl = credential.BaseUrl;
+        }
         const client = new TikTokShopNodeApiClient({
             config: {
                 basePath: baseUrl,

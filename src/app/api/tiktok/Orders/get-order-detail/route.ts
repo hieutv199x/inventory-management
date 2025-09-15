@@ -40,7 +40,7 @@ export async function GET(req: NextRequest) {
         
         const app_key = credentials.app.appKey;
         const app_secret = credentials.app.appSecret;
-        const baseUrl = process.env.TIKTOK_BASE_URL;
+        const baseUrl = credentials.app.BaseUrl ?? process.env.TIKTOK_BASE_URL;
 
         // Extract shopCipher from channelData
         let shopCipher: string | undefined = credentials.shopCipher ?? undefined; // Legacy field

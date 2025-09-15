@@ -87,7 +87,7 @@ export async function processShop(shop_id: string, day_to_sync: number, page_siz
     }
     const app_key = shop?.app?.appKey;
     const app_secret = shop?.app?.appSecret;
-    const baseUrl = process.env.TIKTOK_BASE_URL;
+    const baseUrl = shop?.app?.BaseUrl ?? process.env.TIKTOK_BASE_URL;
     // Khởi tạo client
     const client = new TikTokShopNodeApiClient({
         config: {

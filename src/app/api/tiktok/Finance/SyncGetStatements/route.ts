@@ -74,6 +74,7 @@ export async function GET(request: NextRequest) {
                     app: {
                         appKey: shop.app.appKey,
                         appSecret: shop.app.appSecret,
+                        BaseUrl: shop.app.BaseUrl,
                     },
                 };
 
@@ -81,10 +82,13 @@ export async function GET(request: NextRequest) {
                     console.error(`Missing credentials for shop ${shop.shopId}`);
                     continue;
                 }
-
+                let basePath = process.env.TIKTOK_BASE_URL;
+                if (credentials.app?.BaseUrl) {
+                    basePath = credentials.app.BaseUrl;
+                }
                 const client = new TikTokShopNodeApiClient({
                     config: {
-                        basePath: process.env.TIKTOK_BASE_URL,
+                        basePath: basePath,
                         app_key: credentials.app.appKey,
                         app_secret: credentials.app.appSecret,
                     },

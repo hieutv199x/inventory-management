@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
         }
         const app_key = credentials.app.appKey;
         const app_secret = credentials.app.appSecret;
-        const baseUrl = process.env.TIKTOK_BASE_URL;
+        const baseUrl =  credentials.app.BaseUrl ?? process.env.TIKTOK_BASE_URL;
 
         const searchBody = new Product202502SearchProductsRequestBody();
         searchBody.status = body.status;
