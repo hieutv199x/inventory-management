@@ -138,102 +138,85 @@ export default function OrdersPage() {
         setCurrentPage(1);
     };
 
-    // Add search function
+    const fetchOrders = useCallback(
+        async (options?: {
+            keyword?: string;
+            page?: number;
+            pageSize?: number;
+            loadingMessage?: string;
+            isSearch?: boolean;
+        }) => {
+            const {
+                keyword,
+                page,
+                pageSize: overridePageSize,
+                loadingMessage = 'Loading orders...',
+                isSearch = false
+            } = options || {};
+
+            const effectivePage = page ?? currentPage;
+            const effectivePageSize = overridePageSize ?? pageSize;
+            const effectiveKeyword = keyword !== undefined ? keyword : filters.keyword;
+
+            if (isSearch) setIsSearching(true);
+            showLoading(loadingMessage);
+
+            try {
+                const params = new URLSearchParams();
+                params.append('page', effectivePage.toString());
+                params.append('pageSize', effectivePageSize.toString());
+
+                if (filters.shopId) params.append('shopId', filters.shopId);
+                if (filters.status) params.append('status', filters.status);
+                if (filters.customStatus) params.append('customStatus', filters.customStatus);
+                if (effectiveKeyword) params.append('keyword', effectiveKeyword);
+                if (filters.dateFrom) {
+                    params.append('createTimeGe', Math.floor(new Date(filters.dateFrom).getTime() / 1000).toString());
+                }
+                if (filters.dateTo) {
+                    params.append('createTimeLt', Math.floor(new Date(filters.dateTo).getTime() / 1000).toString());
+                }
+
+                const response = await httpClient.get(`/orders?${params.toString()}`);
+                setOrders(response.orders || []);
+                setPagination(response.pagination || {
+                    currentPage: effectivePage,
+                    pageSize: effectivePageSize,
+                    totalItems: 0,
+                    totalPages: 0,
+                    hasNextPage: false,
+                    hasPreviousPage: false
+                });
+            } catch (error) {
+                console.error('Error fetching orders:', error);
+                if (options?.isSearch) setOrders([]);
+            } finally {
+                hideLoading();
+                if (isSearch) setIsSearching(false);
+            }
+        },
+        [filters, currentPage, pageSize, showLoading, hideLoading]
+    );
+
+    // Updated handleSearch to delegate to fetchOrders
     const handleSearch = async (e: React.FormEvent) => {
         e.preventDefault();
-        setIsSearching(true);
-        
-        // Update filters and trigger fetch
-        const newFilters = { ...filters, keyword: searchKeyword };
-        setFilters(newFilters);
+        // Update state first
+        setFilters(prev => ({ ...prev, keyword: searchKeyword }));
         setCurrentPage(1);
-        
-        // Manually trigger search with new keyword
-        try {
-            showLoading('Searching orders...');
-            
-            const params = new URLSearchParams();
-            params.append('page', '1');
-            params.append('pageSize', pageSize.toString());
-            
-            // Add filter params with new keyword
-            if (newFilters.shopId) params.append('shopId', newFilters.shopId);
-            if (newFilters.status) params.append('status', newFilters.status);
-            if (newFilters.customStatus) params.append('customStatus', newFilters.customStatus);
-            if (newFilters.keyword) params.append('keyword', newFilters.keyword);
-            
-            // Add date filters
-            if (newFilters.dateFrom) {
-                const startTime = Math.floor(new Date(newFilters.dateFrom).getTime() / 1000);
-                params.append('createTimeGe', startTime.toString());
-            }
-            if (newFilters.dateTo) {
-                const endTime = Math.floor(new Date(newFilters.dateTo).getTime() / 1000);
-                params.append('createTimeLt', endTime.toString());
-            }
-
-            const response = await httpClient.get(`/orders?${params.toString()}`);
-            setOrders(response.orders || []);
-            setPagination(response.pagination || {
-                currentPage: 1,
-                pageSize: pageSize,
-                totalItems: 0,
-                totalPages: 0,
-                hasNextPage: false,
-                hasPreviousPage: false,
-            });
-        } catch (error) {
-            console.error('Error searching orders:', error);
-            setOrders([]);
-        } finally {
-            hideLoading();
-            setIsSearching(false);
-        }
+        // Call unified fetch
+        await fetchOrders({
+            keyword: searchKeyword,
+            page: 1,
+            pageSize,
+            loadingMessage: 'Searching orders...',
+            isSearch: true
+        });
     };
 
-    const fetchOrders = useCallback(async () => {
-        showLoading('Loading orders...');
-
-        try {
-            const params = new URLSearchParams();
-
-            // Add pagination params
-            params.append('page', currentPage.toString());
-            params.append('pageSize', pageSize.toString());
-
-            // Add filter params
-            if (filters.shopId) params.append('shopId', filters.shopId);
-            if (filters.status) params.append('status', filters.status);
-            if (filters.customStatus) params.append('customStatus', filters.customStatus);
-            if (filters.keyword) params.append('keyword', filters.keyword);
-            if (filters.dateFrom) {
-                params.append('createTimeGe', Math.floor(new Date(filters.dateFrom).getTime() / 1000).toString());
-            }
-            if (filters.dateTo) {
-                params.append('createTimeLt', Math.floor(new Date(filters.dateTo).getTime() / 1000).toString());
-            }
-
-            const response = await httpClient.get(`/orders?${params.toString()}`);
-
-            setOrders(response.data || []);
-            setPagination(response.pagination || {
-                currentPage: 1,
-                pageSize: 10,
-                totalItems: 0,
-                totalPages: 0,
-                hasNextPage: false,
-                hasPreviousPage: false
-            });
-        } catch (error) {
-            console.error('Error fetching orders:', error);
-        } finally {
-            hideLoading();
-        }
-    }, [filters, currentPage, pageSize, showLoading, hideLoading]);
-
     useEffect(() => {
-        fetchOrders();
-    }, []);
+        fetchOrders(); // initial load
+    }, []); // intentionally empty (fetchOrders uses latest refs internally)
 
     // Consolidate all fetchOrders triggers into a single useEffect
     useEffect(() => {
@@ -241,7 +224,7 @@ export default function OrdersPage() {
             fetchOrders();
             setNeedSearch(false);
         }
-    }, [currentPage, needSearch]); // This will trigger when any of these change
+    }, [currentPage, needSearch, fetchOrders]); // This will trigger when any of these change
 
     const handlePageChange = (newPage: number) => {
         if (newPage >= 1 && newPage <= pagination.totalPages) {

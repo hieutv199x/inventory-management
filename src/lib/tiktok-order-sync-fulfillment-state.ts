@@ -54,8 +54,6 @@ export class TikTokOrderAttributesSync {
                 },
             });
 
-            console.log(`Starting sync of order attributes for shop ${options.shop_id}`);
-
             try {
                 const response = await client.api.FulfillmentV202309Api.OrdersSplitAttributesGet(
                     options.order_ids,
@@ -95,8 +93,6 @@ export class TikTokOrderAttributesSync {
             } catch (apiError: any) {
                 errors.push(`API call failed: ${apiError.message}`);
             }
-
-            console.log(`Sync tiktok shop order ${options.order_id} attributes completed. Processed: ${processedCount}, Success: ${successCount}, Errors: ${errors.length}`);
 
         } catch (error: any) {
             errors.push(error.message);

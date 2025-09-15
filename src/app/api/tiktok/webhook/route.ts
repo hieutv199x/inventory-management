@@ -286,31 +286,27 @@ async function handleSpecificStatusChanges(orderId: string, newStatus: string, w
         case 'awaiting_shipment':
             console.log(`Order ${webhookData.data.order_id} is awaiting shipment`);
 
-            setTimeout(async () => {
-                try {
-                    // Sync unsettled transactions to ensure payment status is up to date
-                    await syncUnsettledTransactions(prisma, {
-                        shop_id: shopId,
-                        search_time_ge: createTime,
-                        search_time_lt: Math.floor(Date.now() / 1000),
-                        page_size: 10
-                    });
-                } catch (syncError) {
-                    console.error(`Failed to sync unsettled transactions for order ${orderId}:`, syncError);
-                }
-            }, 2000);
+            try {
+                // Sync unsettled transactions to ensure payment status is up to date
+                await syncUnsettledTransactions(prisma, {
+                    shop_id: shopId,
+                    search_time_ge: createTime,
+                    search_time_lt: Math.floor(Date.now() / 1000),
+                    page_size: 10
+                });
+            } catch (syncError) {
+                console.error(`Failed to sync unsettled transactions for order ${orderId}:`, syncError);
+            }
 
-            setTimeout(async () => {
-                try {
-                    // Sync order attributes
-                    await syncOrderCanSplitOrNot(prisma, {
-                        shop_id: shopId,
-                        order_ids: [orderId]
-                    });
-                } catch (syncError) {
-                    console.error(`Failed to sync order attributes for order ${orderId}:`, syncError);
-                }
-            }, 3000);
+            try {
+                // Sync order attributes
+                await syncOrderCanSplitOrNot(prisma, {
+                    shop_id: shopId,
+                    order_ids: [orderId]
+                });
+            } catch (attributeError) {
+                console.error(`Failed to sync order attributes for order ${orderId}:`, attributeError);
+            }
 
             // Create specific notification for awaiting shipment
             await NotificationService.createNotification({
@@ -492,18 +488,15 @@ async function handleCancellationStatusChange(webhookData: TikTokWebhookData) {
             });
 
             // Use the utility function
-            setTimeout(async () => {
-                try {
-                    const syncResult = await syncOrderById(shop_id, order_id, {
-                        create_notifications: false,
-                        timeout_seconds: 60
-                    });
-                    console.log(`Webhook cancellation sync completed:`, syncResult);
-                } catch (syncError) {
-                    console.error(`Failed to sync order ${order_id} from cancellation webhook:`, syncError);
-                }
-            }, 1000);
-
+            try {
+                const syncResult = await syncOrderById(shop_id, order_id, {
+                    create_notifications: false,
+                    timeout_seconds: 60
+                });
+                console.log(`Webhook cancellation sync completed:`, syncResult);
+            } catch (syncError) {
+                console.error(`Failed to sync order ${order_id} from cancellation webhook:`, syncError);
+            }
             return;
         }
 

@@ -778,6 +778,7 @@ export class TikTokOrderSync {
         shopId: string,
         priceDetails: any = null
     ) {
+        // Enhanced channel data with price details
         const channelData = {
             orderType: order.orderType,
             fulfillmentType: order.fulfillmentType,
@@ -838,13 +839,28 @@ export class TikTokOrderSync {
             }
         });
 
-        // If updating, clear old associations to reinsert fresh data
+        // If updating, clear old associations to reinsert fresh data (safe transactional cleanup)
         if (existing?.id) {
-            await Promise.all([
-                prisma.orderLineItem.deleteMany({ where: { orderId: persistedOrder.id } }),
-                prisma.orderPayment.deleteMany({ where: { orderId: persistedOrder.id } }),
-                prisma.orderRecipientAddress.deleteMany({ where: { orderId: persistedOrder.id } })
-            ]);
+            try {
+                console.log(`Cleaning previous associations for order ${order.id} (${persistedOrder.id})`);
+                await prisma.$transaction([
+                    prisma.orderLineItem.deleteMany({ where: { orderId: persistedOrder.id } }),
+                    prisma.orderPayment.deleteMany({ where: { orderId: persistedOrder.id } }),
+                    prisma.orderRecipientAddress.deleteMany({ where: { orderId: persistedOrder.id } }),
+                    prisma.orderPackage.deleteMany({ where: { orderId: persistedOrder.id } }) // ensure old packages removed too
+                ]);
+            } catch (cleanupErr) {
+                console.warn(`Transactional cleanup failed for order ${order.id}, attempting fallback:`, cleanupErr);
+                // Fallback: sequential deletes (avoids parallel transaction conflicts)
+                try {
+                    await prisma.orderLineItem.deleteMany({ where: { orderId: persistedOrder.id } });
+                    await prisma.orderPayment.deleteMany({ where: { orderId: persistedOrder.id } });
+                    await prisma.orderRecipientAddress.deleteMany({ where: { orderId: persistedOrder.id } });
+                    await prisma.orderPackage.deleteMany({ where: { orderId: persistedOrder.id } });
+                } catch (fallbackErr) {
+                    console.error(`Fallback cleanup failed for order ${order.id}:`, fallbackErr);
+                }
+            }
         }
 
         if (order.payment) {
