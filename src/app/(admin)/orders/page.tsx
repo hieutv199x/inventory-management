@@ -13,6 +13,7 @@ import { formatTikTokTimestamp } from '@/utils/datetime';
 import TimezoneInfo from '@/components/ui/TimezoneInfo';
 import AddTrackingModal from '@/components/Orders/AddTrackingModal';
 import SyncOrderModal from '@/components/Orders/SyncOrderModal';
+import SplitOrderModal from '@/components/Orders/SplitOrderModal';
 import toast from 'react-hot-toast';
 
 interface Order {
@@ -41,6 +42,8 @@ interface Order {
     };
     shopId: string;
     lineItemsCount?: number;
+    canSplitPackages?: boolean; // Added canSplitPackages field
+    mustSplitPackages?: boolean; // Added mustSplitPackages field
 }
 
 interface LineItem {
@@ -92,6 +95,7 @@ export default function OrdersPage() {
     const [syncing, setSyncing] = useState(false);
     const [needSearch, setNeedSearch] = useState(false);
     const [showSyncModal, setShowSyncModal] = useState(false);
+    const [showSplitModal, setShowSplitModal] = useState(false);
 
     // Helper function to get date with timezone offset
     const getDateWithTimezone = (date: Date) => {
@@ -132,6 +136,7 @@ export default function OrdersPage() {
     const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
     const [showTrackingModal, setShowTrackingModal] = useState(false);
     const [selectedOrderForTracking, setSelectedOrderForTracking] = useState<Order | null>(null);
+    const [selectedOrderForSplit, setSelectedOrderForSplit] = useState<Order | null>(null);
 
     const handleFilterChange = (field: keyof typeof filters, value: string) => {
         setFilters(prev => ({ ...prev, [field]: value }));
@@ -436,6 +441,36 @@ export default function OrdersPage() {
     const closeTrackingModal = () => {
         setShowTrackingModal(false);
         setSelectedOrderForTracking(null);
+    };
+
+    const openSplitModal = (order: Order) => {
+        setSelectedOrderForSplit(order);
+        setShowSplitModal(true);
+    };
+
+    const closeSplitModal = () => {
+        setShowSplitModal(false);
+        setSelectedOrderForSplit(null);
+    };
+
+    const handleSplitSubmit = async (data: { splittable_groups: { id: string; order_line_item_ids: string[] }[] }) => {
+        if (!selectedOrderForSplit) return;
+        showLoading('Splitting order...');
+        try {
+            await httpClient.post('/tiktok/Fulfillment/split-order1', {
+                orderId: selectedOrderForSplit.orderId,
+                shopId: selectedOrderForSplit.shopId,
+                groups: data.splittable_groups
+            });
+            toast.success('Order split successfully');
+            closeSplitModal();
+            fetchOrders();
+        } catch (err) {
+            console.error('Failed to split order', err);
+            toast.error('Failed to split order');
+        } finally {
+            hideLoading();
+        }
     };
 
     return (
@@ -874,7 +909,7 @@ export default function OrdersPage() {
                                                         </div>
                                                     )}
 
-                                                    {!parseChannelData(order?.channelData ?? "").trackingNumber && (
+                                                    {(!parseChannelData(order?.channelData ?? "").trackingNumber && !order.mustSplitPackages)  && (
                                                         <div className="flex flex-col gap-1">
                                                             <button
                                                                 onClick={() => handleAddTracking(order)}
@@ -884,6 +919,20 @@ export default function OrdersPage() {
                                                             >
                                                                 <Plus className="h-3 w-3 mr-1" />
                                                                 Add tracking
+                                                            </button>
+                                                        </div>
+                                                    )}
+
+                                                    {(!parseChannelData(order?.channelData ?? "").trackingNumber && (order.mustSplitPackages || order.canSplitPackages))  && (
+                                                        <div className="flex flex-col gap-1">
+                                                            <button
+                                                                onClick={() => openSplitModal(order)}
+                                                                disabled={updatingStatus === order.orderId}
+                                                                className="inline-flex items-center px-2 py-1 text-xs font-medium text-green-600 hover:text-green-900 border border-green-300 rounded hover:bg-green-50 dark:border-green-800 dark:bg-green-900 dark:text-green-400 dark:hover:bg-green-700 disabled:opacity-50"
+                                                                title="Split order into multiple packages"
+                                                            >
+                                                                <Plus className="h-3 w-3 mr-1" />
+                                                                Split orders
                                                             </button>
                                                         </div>
                                                     )}
@@ -981,6 +1030,14 @@ export default function OrdersPage() {
                 isOpen={showSyncModal}
                 onClose={() => setShowSyncModal(false)}
                 onSync={syncOrders}
+            />
+
+            {/* Split Order Modal */}
+            <SplitOrderModal
+                isOpen={showSplitModal}
+                order={selectedOrderForSplit}
+                onClose={closeSplitModal}
+                onSubmit={handleSplitSubmit}
             />
         </div>
     );
