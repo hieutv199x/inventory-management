@@ -528,6 +528,13 @@ model Order {
   // Add relation to unsettled transactions
   unsettledTransactions TiktokUnsettledTransaction[]
   
+  // NEW: TikTok split attributes (from split_attributes API)
+  canSplitPackages        Boolean?          @default(false)  // maps can_split
+  splitNotAllowedReason   String?                         // maps reason when can_split = false
+  mustSplitPackages       Boolean?          @default(false) // maps must_split
+  mustSplitReasons        String?                          // JSON string array of objects: [{type, category_id, max_count}]
+  splitAttributesRaw      String?                          // Raw JSON for full split_attributes entry
+
   @@map("orders")
 }
 

@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { PrismaClient, NotificationType } from "@prisma/client";
+import { PrismaClient, NotificationType, Prisma } from "@prisma/client";
 import crypto from 'crypto';
 import { NotificationService } from "@/lib/notification-service";
 import { syncOrderById } from "@/lib/tiktok-order-sync";
 import { syncUnsettledTransactions } from "@/lib/tiktok-unsettled-transactions-sync";
-import { set } from "zod";
+import { DefaultArgs } from "@prisma/client/runtime/library";
+import { syncOrderCanSplitOrNot } from "@/lib/tiktok-order-sync-fulfillment-state";
 
 const prisma = new PrismaClient();
 
@@ -297,7 +298,19 @@ async function handleSpecificStatusChanges(orderId: string, newStatus: string, w
                 } catch (syncError) {
                     console.error(`Failed to sync unsettled transactions for order ${orderId}:`, syncError);
                 }
-            }, 1000);
+            }, 2000);
+
+            setTimeout(async () => {
+                try {
+                    // Sync order attributes
+                    await syncOrderCanSplitOrNot(prisma, {
+                        shop_id: shopId,
+                        order_ids: [orderId]
+                    });
+                } catch (syncError) {
+                    console.error(`Failed to sync order attributes for order ${orderId}:`, syncError);
+                }
+            }, 3000);
 
             // Create specific notification for awaiting shipment
             await NotificationService.createNotification({
@@ -727,5 +740,9 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json({ error: 'Invalid verification' }, { status: 403 });
+}
+
+function syncOrderAttributes(prisma: PrismaClient<Prisma.PrismaClientOptions, never, DefaultArgs>, arg1: { shop_id: string; order_id: string; }) {
+    throw new Error("Function not implemented.");
 }
 

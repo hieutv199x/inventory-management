@@ -47,6 +47,23 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({ order, isOpen, onCl
     const paymentChannelData = parseChannelData(order.payment?.channelData);
     const addressChannelData = parseChannelData(order.recipientAddress?.channelData);
 
+    // Split attributes parsing (from Order fields)
+    const splitAttributes = {
+        canSplit: order.canSplitPackages,
+        mustSplit: order.mustSplitPackages,
+        hasSplit: order.hasSplitPackages,
+        reason: order.splitNotAllowedReason,
+        rawReasons: (() => {
+            try {
+                if (!order.mustSplitReasons) return [];
+                const parsed = JSON.parse(order.mustSplitReasons);
+                return Array.isArray(parsed) ? parsed : [];
+            } catch {
+                return [];
+            }
+        })(),
+    };
+
     // NEW: build merged package -> items structure
     const safeParse = (raw: string | undefined) => {
         try { return raw ? JSON.parse(raw) : {}; } catch { return {}; }
@@ -389,6 +406,72 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({ order, isOpen, onCl
                                     <dd className="mt-2 text-sm text-gray-900 dark:text-white">
                                         {orderChannelData.collectionTime ? formatTimestamp(orderChannelData.collectionTime) : 'N/A'}
                                     </dd>
+                                </div>
+                                <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg md:col-span-2">
+                                    <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">Split Package Capability</dt>
+                                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm">
+                                        <div>
+                                            <p className="text-gray-500 dark:text-gray-400">Can Split</p>
+                                            <p className={`mt-1 inline-flex px-2 py-0.5 rounded-full text-xs font-semibold ${
+                                                splitAttributes.canSplit
+                                                    ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-400'
+                                                    : 'bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300'
+                                            }`}>
+                                                {splitAttributes.canSplit ? 'YES' : 'NO'}
+                                            </p>
+                                        </div>
+                                        <div>
+                                            <p className="text-gray-500 dark:text-gray-400">Must Split</p>
+                                            <p className={`mt-1 inline-flex px-2 py-0.5 rounded-full text-xs font-semibold ${
+                                                splitAttributes.mustSplit
+                                                    ? 'bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-400'
+                                                    : 'bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300'
+                                            }`}>
+                                                {splitAttributes.mustSplit ? 'YES' : 'NO'}
+                                            </p>
+                                        </div>
+                                        <div>
+                                            <p className="text-gray-500 dark:text-gray-400">Has Split Packages</p>
+                                            <p className={`mt-1 inline-flex px-2 py-0.5 rounded-full text-xs font-semibold ${
+                                                splitAttributes.hasSplit
+                                                    ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'
+                                                    : 'bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300'
+                                            }`}>
+                                                {splitAttributes.hasSplit ? 'YES' : 'NO'}
+                                            </p>
+                                        </div>
+                                        <div>
+                                            <p className="text-gray-500 dark:text-gray-400">Reason (If Cannot)</p>
+                                            <p className="mt-1 text-xs text-gray-700 dark:text-gray-300 break-words">
+                                                {(!splitAttributes.canSplit && splitAttributes.reason) ? splitAttributes.reason : '—'}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    {splitAttributes.rawReasons.length > 0 && (
+                                        <div className="mt-4">
+                                            <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Must Split Reasons</p>
+                                            <div className="space-y-1">
+                                                {splitAttributes.rawReasons.map((r: any, idx: number) => (
+                                                    <div
+                                                        key={idx}
+                                                        className="text-xs px-2 py-1 rounded bg-white/60 dark:bg-gray-900/40 border border-gray-200 dark:border-gray-700 flex flex-wrap gap-x-4 gap-y-1"
+                                                    >
+                                                        <span className="font-semibold text-gray-700 dark:text-gray-200">{r.type}</span>
+                                                        {r.category_id && (
+                                                            <span className="text-gray-600 dark:text-gray-300">
+                                                                Category: {r.category_id}
+                                                            </span>
+                                                        )}
+                                                        {r.max_count && (
+                                                            <span className="text-gray-600 dark:text-gray-300">
+                                                                Max Count: {r.max_count}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         </div>

@@ -5,6 +5,7 @@ import {
     TikTokShopNodeApiClient,
 } from "@/nodejs_sdk";
 import { getUserWithShopAccess } from "@/lib/auth";
+import { syncOrderCanSplitOrNot } from "@/lib/tiktok-order-sync-fulfillment-state";
 
 const prisma = new PrismaClient();
 
@@ -246,6 +247,21 @@ async function processBatch(orders: any[], shopId: string, client: any, credenti
             } else {
                 newOrders.push(orderData);
             }
+
+
+            // Sync order attributes like can_split, must_split
+            setTimeout(async () => {
+                try {
+                    // Sync order attributes
+                    await syncOrderCanSplitOrNot(prisma, {
+                        shop_id: shopId,
+                        order_ids: [order.id] // Pass as array for future extensibility
+                    });
+                } catch (syncError) {
+                    console.error(`Failed to sync order attributes for order ${order.id}:`, syncError);
+                }
+            }, 1000);
+
         }
 
         // 2. Insert new orders
