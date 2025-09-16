@@ -1273,3 +1273,12 @@ export async function syncOrderById(
         ...options
     });
 }
+
+export async function syncPackageById(
+    shop_id: string,
+    order_id: string,
+    pkg: { id: string }
+): Promise<void> {
+    const sync = await TikTokOrderSync.create(shop_id);
+    await sync.upsertOrderPackage(order_id, pkg.id);
+}

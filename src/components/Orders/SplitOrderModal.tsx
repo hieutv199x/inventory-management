@@ -15,6 +15,7 @@ interface OrderLineItem {
     originalPrice?: string;
     currency: string;
     channelData?: string;
+    lineItemId?: string;
 }
 
 interface Order {
@@ -41,12 +42,24 @@ const SplitOrderModal: React.FC<SplitOrderModalProps> = ({ isOpen, order, onClos
     const [touched, setTouched] = useState(false);
     const [submitting, setSubmitting] = useState(false);
 
+    // Helper: generate next incremental numeric id as string (TikTok API expects simple numeric IDs, not UUID)
+    const getNextGroupId = (current: Group[]) => {
+        const nums = current
+            .map(g => parseInt(g.id, 10))
+            .filter(n => !isNaN(n));
+        const next = nums.length ? Math.max(...nums) + 1 : 1;
+        return String(next);
+    };
+
+    // Helper to get canonical line item key (TikTok uses lineItemId)
+    const getItemKey = (item: OrderLineItem) => item.lineItemId || item.id;
+
     useEffect(() => {
         if (isOpen && order) {
-            // Initialize with two empty groups for convenience
+            // Initialize with two numeric groups instead of UUIDs
             setGroups([
-                { id: crypto.randomUUID(), name: 'Package 1', itemIds: [] },
-                { id: crypto.randomUUID(), name: 'Package 2', itemIds: [] }
+                { id: '1', name: 'Package 1', itemIds: [] },
+                { id: '2', name: 'Package 2', itemIds: [] }
             ]);
             setTouched(false);
         }
@@ -56,23 +69,28 @@ const SplitOrderModal: React.FC<SplitOrderModalProps> = ({ isOpen, order, onClos
         try { return JSON.parse(data || '{}'); } catch { return {}; }
     };
 
-    const allItemIds = useMemo(() => order?.lineItems.map(i => i.id) || [], [order]);
+    // CHANGED: include fallback to id (if lineItemId absent)
+    const allItemIds = useMemo(
+        () => order?.lineItems.map(i => getItemKey(i)) || [],
+        [order]
+    );
 
     const assignedItemIds = useMemo(
         () => groups.flatMap(g => g.itemIds),
         [groups]
     );
 
+    // CHANGED: filter using canonical key
     const unassignedItems = useMemo(
-        () => (order?.lineItems || []).filter(i => !assignedItemIds.includes(i.id)),
+        () => (order?.lineItems || []).filter(i => !assignedItemIds.includes(getItemKey(i))),
         [order, assignedItemIds]
     );
 
     const addGroup = () => {
-        setGroups(prev => [
-            ...prev,
-            { id: crypto.randomUUID(), name: `Package ${prev.length + 1}`, itemIds: [] }
-        ]);
+        setGroups(prev => {
+            const newId = getNextGroupId(prev);
+            return [...prev, { id: newId, name: `Package ${prev.length + 1}`, itemIds: [] }];
+        });
     };
 
     const removeGroup = (id: string) => {
@@ -87,35 +105,32 @@ const SplitOrderModal: React.FC<SplitOrderModalProps> = ({ isOpen, order, onClos
         setGroups(prev => prev.map(g => g.id === id ? { ...g, name } : g));
     };
 
-    const assignItem = (itemId: string, groupId: string) => {
+    const assignItem = (itemKey: string, groupId: string) => {
         setGroups(prev => {
-            // remove from any existing group first
-            const cleared = prev.map(g => ({
-                ...g,
-                itemIds: g.itemIds.filter(id => id !== itemId)
-            }));
-            return cleared.map(g => g.id === groupId ? { ...g, itemIds: [...g.itemIds, itemId] } : g);
+            const cleared = prev.map(g => ({ ...g, itemIds: g.itemIds.filter(id => id !== itemKey) }));
+            return cleared.map(g => g.id === groupId ? { ...g, itemIds: [...g.itemIds, itemKey] } : g);
         });
         setTouched(true);
     };
 
-    const unassignItem = (itemId: string) => {
-        setGroups(prev => prev.map(g => ({ ...g, itemIds: g.itemIds.filter(id => id !== itemId) })));
+    const unassignItem = (itemKey: string) => {
+        setGroups(prev => prev.map(g => ({ ...g, itemIds: g.itemIds.filter(id => id !== itemKey) })));
         setTouched(true);
     };
 
-    const moveItem = (itemId: string, direction: 'left' | 'right') => {
-        const idx = groups.findIndex(g => g.itemIds.includes(itemId));
+    const moveItem = (itemKey: string, direction: 'left' | 'right') => {
+        const idx = groups.findIndex(g => g.itemIds.includes(itemKey));
         if (idx === -1) return;
         const targetIdx = direction === 'left' ? idx - 1 : idx + 1;
         if (targetIdx < 0 || targetIdx >= groups.length) return;
         setGroups(prev => prev.map((g, i) => {
-            if (i === idx) return { ...g, itemIds: g.itemIds.filter(id => id !== itemId) };
-            if (i === targetIdx) return { ...g, itemIds: [...g.itemIds, itemId] };
+            if (i === idx) return { ...g, itemIds: g.itemIds.filter(id => id !== itemKey) };
+            if (i === targetIdx) return { ...g, itemIds: [...g.itemIds, itemKey] };
             return g;
         }));
     };
 
+    // CHANGED: distribute with canonical keys
     const autoDistribute = () => {
         if (!order) return;
         const items = [...order.lineItems];
@@ -123,7 +138,7 @@ const SplitOrderModal: React.FC<SplitOrderModalProps> = ({ isOpen, order, onClos
         const newGroups = groups.map(g => ({ ...g, itemIds: [] as string[] }));
         items.forEach((item, idx) => {
             const gIndex = idx % activeGroups;
-            newGroups[gIndex].itemIds.push(item.id);
+            newGroups[gIndex].itemIds.push(getItemKey(item));
         });
         setGroups(newGroups);
         setTouched(true);
@@ -144,8 +159,8 @@ const SplitOrderModal: React.FC<SplitOrderModalProps> = ({ isOpen, order, onClos
         try {
             const payload = {
                 splittable_groups: groups.map(g => ({
-                    id: g.id,
-                    order_line_item_ids: g.itemIds
+                    id: /^\d+$/.test(g.id) ? g.id : String(groups.indexOf(g) + 1),
+                    order_line_item_ids: g.itemIds // already canonical keys
                 }))
             };
             await onSubmit(payload);
@@ -212,9 +227,10 @@ const SplitOrderModal: React.FC<SplitOrderModalProps> = ({ isOpen, order, onClos
                             )}
                             {unassignedItems.map(item => {
                                 const cd = parseChannelData(item.channelData);
+                                const key = getItemKey(item);
                                 return (
                                     <div
-                                        key={item.id}
+                                        key={key}
                                         className="flex items-center gap-3 p-2 rounded border dark:border-gray-700 bg-gray-50 dark:bg-gray-800"
                                     >
                                         <div className="w-12 h-12 flex-shrink-0 bg-white dark:bg-gray-900 rounded overflow-hidden border dark:border-gray-700 flex items-center justify-center">
@@ -241,7 +257,7 @@ const SplitOrderModal: React.FC<SplitOrderModalProps> = ({ isOpen, order, onClos
                                         </div>
                                         <select
                                             className="text-sm border rounded px-1 py-1 dark:bg-gray-900 dark:border-gray-600 dark:text-gray-200"
-                                            onChange={(e) => assignItem(item.id, e.target.value)}
+                                            onChange={(e) => assignItem(key, e.target.value)}
                                             defaultValue=""
                                         >
                                             <option value="" disabled>Assign</option>
@@ -264,12 +280,13 @@ const SplitOrderModal: React.FC<SplitOrderModalProps> = ({ isOpen, order, onClos
                         )}
                         <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
                             {groups.map((group, idx) => {
-                                const items = (order?.lineItems || []).filter(i => group.itemIds.includes(i.id));
+                                // CHANGED: match by canonical key
+                                const items = (order?.lineItems || []).filter(i =>
+                                    group.itemIds.includes(getItemKey(i))
+                                );
                                 return (
-                                    <div
-                                        key={group.id}
-                                        className="border dark:border-gray-700 rounded-lg flex flex-col bg-white dark:bg-gray-800"
-                                    >
+                                    <div key={group.id} className="border dark:border-gray-700 rounded-lg flex flex-col bg-white dark:bg-gray-800">
+                                        {/* ...existing group header... */}
                                         <div className="px-3 py-2 flex items-center justify-between border-b dark:border-gray-700">
                                             <input
                                                 value={group.name}
@@ -299,11 +316,13 @@ const SplitOrderModal: React.FC<SplitOrderModalProps> = ({ isOpen, order, onClos
                                             )}
                                             {items.map(item => {
                                                 const cd = parseChannelData(item.channelData);
+                                                const key = getItemKey(item);
                                                 return (
                                                     <div
-                                                        key={item.id}
+                                                        key={key}
                                                         className="group flex items-center gap-3 p-2 rounded border dark:border-gray-600 bg-gray-50 dark:bg-gray-900"
                                                     >
+                                                        {/* ...existing item display... */}
                                                         <div className="w-10 h-10 flex-shrink-0 rounded overflow-hidden bg-white dark:bg-gray-800 border dark:border-gray-700 flex items-center justify-center">
                                                             {cd.skuImage ? (
                                                                 <Image
@@ -328,7 +347,7 @@ const SplitOrderModal: React.FC<SplitOrderModalProps> = ({ isOpen, order, onClos
                                                         </div>
                                                         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">
                                                             <button
-                                                                onClick={() => moveItem(item.id, 'left')}
+                                                                onClick={() => moveItem(key, 'left')}
                                                                 className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700"
                                                                 disabled={idx === 0}
                                                                 title="Move to previous group"
@@ -336,7 +355,7 @@ const SplitOrderModal: React.FC<SplitOrderModalProps> = ({ isOpen, order, onClos
                                                                 <ArrowLeft className="h-3.5 w-3.5" />
                                                             </button>
                                                             <button
-                                                                onClick={() => moveItem(item.id, 'right')}
+                                                                onClick={() => moveItem(key, 'right')}
                                                                 className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700"
                                                                 disabled={idx === groups.length - 1}
                                                                 title="Move to next group"
@@ -344,7 +363,7 @@ const SplitOrderModal: React.FC<SplitOrderModalProps> = ({ isOpen, order, onClos
                                                                 <ArrowRight className="h-3.5 w-3.5" />
                                                             </button>
                                                             <button
-                                                                onClick={() => unassignItem(item.id)}
+                                                                onClick={() => unassignItem(key)}
                                                                 className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700"
                                                                 title="Unassign"
                                                             >

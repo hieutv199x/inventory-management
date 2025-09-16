@@ -97,6 +97,7 @@ export default function OrdersPage() {
     const [needSearch, setNeedSearch] = useState(false);
     const [showSyncModal, setShowSyncModal] = useState(false);
     const [showSplitModal, setShowSplitModal] = useState(false);
+    const [syncingDetail, setSyncingDetail] = useState<string | null>(null);
 
     // Helper function to get date with timezone offset
     const getDateWithTimezone = (date: Date) => {
@@ -472,6 +473,24 @@ export default function OrdersPage() {
             toast.error('Failed to split order');
         } finally {
             hideLoading();
+        }
+    };
+
+    const syncOrderDetail = async (order: Order) => {
+        try {
+            setSyncingDetail(order.orderId);
+            await httpClient.post('/tiktok/Orders/sync-order-detail', {
+                order_ids: [order.orderId],
+                shop_id: order.shop.shopId
+            });
+            toast.success(`Synced detail for ${order.orderId}`);
+            // refresh current page silently
+            fetchOrders({ page: pagination.currentPage, pageSize, loadingMessage: 'Refreshing...', isSearch: false });
+        } catch (e) {
+            console.error('Failed to sync order detail', e);
+            toast.error('Sync detail failed');
+        } finally {
+            setSyncingDetail(null);
         }
     };
 
@@ -902,6 +921,19 @@ export default function OrdersPage() {
                                                     >
                                                         <Eye className="h-3 w-3 mr-1" />
                                                         Xem
+                                                    </button>
+                                                    <button
+                                                        onClick={() => syncOrderDetail(order)}
+                                                        disabled={syncingDetail === order.orderId || syncing}
+                                                        className="inline-flex items-center px-2 py-1 text-xs font-medium text-indigo-600 hover:text-indigo-900 border border-indigo-300 rounded hover:bg-indigo-50 dark:border-indigo-800 dark:bg-indigo-900 dark:text-indigo-400 dark:hover:bg-indigo-700 disabled:opacity-50"
+                                                        title="Sync latest order detail"
+                                                    >
+                                                        {syncingDetail === order.orderId ? (
+                                                            <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                                                        ) : (
+                                                            <RefreshCw className="h-3 w-3 mr-1" />
+                                                        )}
+                                                        Sync Detail
                                                     </button>
 
                                                     {/* Custom Status Action Buttons */}

@@ -2,21 +2,22 @@
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 import { Fulfillment202309SplitOrdersRequestBody, Fulfillment202309SplitOrdersRequestBodySplittableGroups, TikTokShopNodeApiClient } from '@/nodejs_sdk';
+import { syncPackageById } from '@/lib/tiktok-order-sync';
 
 const prisma = new PrismaClient();
 
 export async function POST(request: Request) {
     try {
-        const { shop_id, order_id, splittable_groups } = await request.json();
+        const { shopId, orderId, groups } = await request.json();
 
-        if (!shop_id || !order_id || !Array.isArray(splittable_groups) || splittable_groups.length === 0) {
+        if (!shopId || !orderId || !Array.isArray(groups) || groups.length === 0) {
             return NextResponse.json({ error: 'Invalid parameters' }, { status: 400 });
         }
 
         // Get shop and app info using unified schema
         const credentials = await prisma.shopAuthorization.findUnique({
             where: {
-                id: shop_id,
+                id: shopId,
             },
             include: {
                 app: true,
@@ -57,14 +58,14 @@ export async function POST(request: Request) {
 
         const fulfillment202309SplitOrdersRequestBody = new Fulfillment202309SplitOrdersRequestBody();
 
-        for (const group of splittable_groups) {
+        for (const group of groups) {
             const groupObj = new Fulfillment202309SplitOrdersRequestBodySplittableGroups();
             groupObj.id = group.id;
             groupObj.orderLineItemIds = group.order_line_item_ids;
             fulfillment202309SplitOrdersRequestBody.splittableGroups = fulfillment202309SplitOrdersRequestBody.splittableGroups || [];
             fulfillment202309SplitOrdersRequestBody.splittableGroups.push(groupObj);
         }
-        const response = await client.api.FulfillmentV202309Api.OrdersOrderIdSplitPost(order_id, credentials.accessToken, "application/json", shopCipher, fulfillment202309SplitOrdersRequestBody);
+        const response = await client.api.FulfillmentV202309Api.OrdersOrderIdSplitPost(orderId, credentials.accessToken, "application/json", shopCipher, fulfillment202309SplitOrdersRequestBody);
 
         const { body } = response;
 
@@ -73,12 +74,17 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'TikTok API error', details: body.message }, { status: 500 });
         }
 
+        for (const packageInfo of body.data?.packages || []) {
+            if (!packageInfo.id) continue;
+            await syncPackageById(shopId, orderId, { id: packageInfo.id });
+        }
+        
         // Update order customStatus to SPLITTED
         let updated = null;
         try {
             updated = await prisma.order.updateMany({
                 where: {
-                    orderId: order_id,
+                    orderId: orderId,
                     shopId: credentials.id
                 },
                 data: {
