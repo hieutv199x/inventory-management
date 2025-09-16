@@ -457,7 +457,7 @@ export default function OrdersPage() {
         if (!selectedOrderForSplit) return;
         showLoading('Splitting order...');
         try {
-            await httpClient.post('/tiktok/Fulfillment/split-order1', {
+            await httpClient.post('/tiktok/Fulfillment/split-order', {
                 orderId: selectedOrderForSplit.orderId,
                 shopId: selectedOrderForSplit.shopId,
                 groups: data.splittable_groups
@@ -858,6 +858,11 @@ export default function OrdersPage() {
                                                             Track: {parseChannelData(order?.channelData ?? "").trackingNumber} - {parseChannelData(order?.channelData ?? "").shippingProvider}
                                                         </div>
                                                     )}
+                                                    {((order?.mustSplitPackages || order?.canSplitPackages) && order?.customStatus !== 'SPLITTED') && (
+                                                        <div className="text-xs font-mono text-orange-600 truncate max-w-50">
+                                                            Đã split order
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </td>
 
@@ -923,7 +928,7 @@ export default function OrdersPage() {
                                                         </div>
                                                     )}
 
-                                                    {(!parseChannelData(order?.channelData ?? "").trackingNumber && (order.mustSplitPackages || order.canSplitPackages))  && (
+                                                    {(!parseChannelData(order?.channelData ?? "").trackingNumber && (order.mustSplitPackages || order.canSplitPackages) && order.customStatus !== 'SPLITTED')  && (
                                                         <div className="flex flex-col gap-1">
                                                             <button
                                                                 onClick={() => openSplitModal(order)}

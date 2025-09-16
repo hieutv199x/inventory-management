@@ -73,7 +73,28 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'TikTok API error', details: body.message }, { status: 500 });
         }
 
-        return NextResponse.json({ success: true, data: body.data });
+        // Update order customStatus to SPLITTED
+        let updated = null;
+        try {
+            updated = await prisma.order.updateMany({
+                where: {
+                    orderId: order_id,
+                    shopId: credentials.id
+                },
+                data: {
+                    customStatus: 'SPLITTED',
+                    updateTime: Math.floor(Date.now() / 1000)
+                }
+            });
+        } catch (statusErr) {
+            console.warn('Failed to update customStatus to SPLITTED:', statusErr);
+        }
+
+        return NextResponse.json({
+            success: true,
+            data: body.data,
+            customStatusUpdated: updated?.count || 0
+        });
     } catch (error: any) {
         console.error('Error in split order:', error);
         return NextResponse.json({ error: 'Internal server error', details: error.message }, { status: 500 });
