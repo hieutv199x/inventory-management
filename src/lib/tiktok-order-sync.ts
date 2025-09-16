@@ -36,6 +36,9 @@ export class TikTokOrderSync {
     public credentials: any;
     public shopCipher: string | undefined;
 
+    private MAX_RETRIES = 2;
+    private RETRY_BASE_DELAY_MS = 300;
+
     constructor(client: TikTokShopNodeApiClient, credentials: any, shopCipher?: string) {
         this.client = client;
         this.credentials = credentials;
@@ -82,6 +85,38 @@ export class TikTokOrderSync {
         return new TikTokOrderSync(client, credentials, shopCipher);
     }
 
+    // Generic API request wrapper with retry + 401 detection
+    private async apiCallWithRetry<T>(fn: () => Promise<T>, context: string): Promise<T> {
+        for (let attempt = 0; attempt <= this.MAX_RETRIES; attempt++) {
+            try {
+                return await fn();
+            } catch (err: any) {
+                    const status = err?.statusCode || err?.response?.statusCode;
+                    const finalAttempt = attempt === this.MAX_RETRIES;
+
+                    console.error(`[TikTok API] ${context} failed (attempt ${attempt + 1}/${this.MAX_RETRIES + 1})`, {
+                        status,
+                        message: err?.message
+                    });
+
+                    // Authentication failure - abort immediately and surface
+                    if (status === 401) {
+                        throw Object.assign(new Error('UNAUTHORIZED_TIKTOK_API'), {
+                            code: 'UNAUTHORIZED_TIKTOK_API',
+                            original: err
+                        });
+                    }
+
+                    if (finalAttempt) throw err;
+
+                    // Backoff
+                    await new Promise(r => setTimeout(r, this.RETRY_BASE_DELAY_MS * (attempt + 1)));
+            }
+        }
+        // Should never reach here
+        throw new Error(`Failed to execute ${context}`);
+    }
+
     async syncOrders(options: OrderSyncOptions): Promise<OrderSyncResult> {
         const startTime = Date.now();
         let syncResults: OrderSyncResult = {
@@ -96,13 +131,14 @@ export class TikTokOrderSync {
             executionTimeMs: 0
         };
 
+        let authFailed = false;
         try {
             // Validate input
             if (!options.sync_all && (!options.order_ids || options.order_ids.length === 0)) {
                 throw new Error("Either provide order_ids or set sync_all=true with time filters");
             }
 
-            let allOrders = [];
+            let allOrders: any[] = [];
 
             if (options.sync_all) {
                 // Sync orders within time range
@@ -151,8 +187,13 @@ export class TikTokOrderSync {
                 });
             }
 
-        } catch (error) {
-            console.error("Error syncing orders:", error);
+        } catch (error: any) {
+            if (error?.code === 'UNAUTHORIZED_TIKTOK_API') {
+                authFailed = true;
+                console.error('TikTok API unauthorized: access token likely expired');
+            } else {
+                console.error("Error syncing orders:", error);
+            }
             syncResults.error = error instanceof Error ? error.message : String(error);
 
             // Create error notification
@@ -174,6 +215,25 @@ export class TikTokOrderSync {
                     console.error('Failed to create error notification:', notificationError);
                 }
             }
+            // Additional auth failure notification
+            if (authFailed && options.create_notifications !== false) {
+                try {
+                    await NotificationService.createNotification({
+                        type: NotificationType.WEBHOOK_ERROR,
+                        title: 'TikTok Reauthorization Needed',
+                        message: `Shop ${this.credentials.shopName || options.shop_id} TikTok authorization expired. Please re-connect the shop.`,
+                        userId: this.credentials.id,
+                        shopId: this.credentials.id,
+                        data: {
+                            authExpired: true,
+                            shopId: options.shop_id,
+                            hint: 'Trigger OAuth refresh / reauthorize'
+                        }
+                    });
+                } catch (nErr) {
+                    console.error('Failed to create auth failure notification', nErr);
+                }
+            }
         } finally {
             syncResults.executionTimeMs = Date.now() - startTime;
         }
@@ -188,105 +248,92 @@ export class TikTokOrderSync {
         updateTimeLt?: number,
         pageSize = 50
     ): Promise<any[]> {
-        let allOrders = [];
+        let allOrders: any[] = [];
         let nextPageToken = "";
-
         try {
             // Build request body for order search
             const requestBody = new Order202309GetOrderListRequestBody();
-
             if (createTimeGe) requestBody.createTimeGe = createTimeGe;
             if (createTimeLt) requestBody.createTimeLt = createTimeLt;
             if (updateTimeGe) requestBody.updateTimeGe = updateTimeGe;
             if (updateTimeLt) requestBody.updateTimeLt = updateTimeLt;
 
             // Get first page using 202309 API (search functionality)
-            const result = await this.client.api.OrderV202309Api.OrdersSearchPost(
-                pageSize,
-                this.credentials.accessToken,
-                "application/json",
-                "DESC", // Sort order
-                nextPageToken,
-                "update_time", // Sort field
-                this.shopCipher,
-                requestBody
+            const firstPage = await this.apiCallWithRetry(
+                () => this.client.api.OrderV202309Api.OrdersSearchPost(
+                    pageSize,
+                    this.credentials.accessToken,
+                    "application/json",
+                    "DESC",
+                    nextPageToken,
+                    "update_time",
+                    this.shopCipher,
+                    requestBody
+                ),
+                'OrdersSearchPost:firstPage'
             );
 
-            if (result?.body?.data?.orders) {
-                allOrders.push(...result.body.data.orders);
-                nextPageToken = result.body.data.nextPageToken ?? "";
+            if (firstPage?.body?.data?.orders) {
+                allOrders.push(...firstPage.body.data.orders);
+                nextPageToken = firstPage.body.data.nextPageToken ?? "";
+            }
 
-                // Continue fetching all pages
-                while (nextPageToken) {
-                    try {
-                        console.log(`Fetching next page with token: ${nextPageToken}`);
+            // Continue fetching all pages
+            while (nextPageToken) {
+                const tokenSnapshot = nextPageToken;
+                const nextPageResult = await this.apiCallWithRetry(
+                    () => this.client.api.OrderV202309Api.OrdersSearchPost(
+                        pageSize,
+                        this.credentials.accessToken,
+                        "application/json",
+                        "DESC",
+                        tokenSnapshot,
+                        "update_time",
+                        this.shopCipher,
+                        requestBody
+                    ),
+                    'OrdersSearchPost:pagination'
+                );
 
-                        const nextPageResult = await this.client.api.OrderV202309Api.OrdersSearchPost(
-                            pageSize,
-                            this.credentials.accessToken,
-                            "application/json",
-                            "DESC",
-                            nextPageToken,
-                            "update_time",
-                            this.shopCipher,
-                            requestBody
-                        );
-
-                        if (nextPageResult?.body?.data?.orders) {
-                            allOrders.push(...nextPageResult.body.data.orders);
-                            console.log(`Fetched ${nextPageResult.body.data.orders.length} more orders. Total: ${allOrders.length}`);
-                        }
-
-                        nextPageToken = nextPageResult.body?.data?.nextPageToken ?? "";
-
-                        // Add delay to avoid rate limiting
-                        await new Promise(resolve => setTimeout(resolve, 100));
-
-                    } catch (paginationError) {
-                        console.error('Error fetching next page:', paginationError);
-                        break;
-                    }
+                if (nextPageResult?.body?.data?.orders) {
+                    allOrders.push(...nextPageResult.body.data.orders);
                 }
+                nextPageToken = nextPageResult.body?.data?.nextPageToken ?? "";
+                await new Promise(r => setTimeout(r, 100));
             }
         } catch (error) {
             console.error('Error fetching orders in time range:', error);
             throw error;
         }
-
         return allOrders;
     }
 
     private async fetchSpecificOrders(orderIds: string[]): Promise<any[]> {
-        const allOrders = [];
-        const batchSize = 50; // TikTok API limit
-
+        const allOrders: any[] = [];
+        const batchSize = 50;
         try {
             // Process order IDs in batches
             for (let i = 0; i < orderIds.length; i += batchSize) {
                 const batch = orderIds.slice(i, i + batchSize);
-
                 console.log(`Fetching batch ${Math.floor(i / batchSize) + 1}: ${batch.length} orders`);
-
-                const result = await this.client.api.OrderV202309Api.OrdersGet(
-                    batch,
-                    this.credentials.accessToken,
-                    "application/json",
-                    this.shopCipher
+                const result = await this.apiCallWithRetry(
+                    () => this.client.api.OrderV202309Api.OrdersGet(
+                        batch,
+                        this.credentials.accessToken,
+                        "application/json",
+                        this.shopCipher
+                    ),
+                    'OrdersGet'
                 );
-
                 if (result?.body?.data?.orders) {
                     allOrders.push(...result.body.data.orders);
-                    console.log(`Fetched ${result.body.data.orders.length} orders from batch`);
                 }
-
-                // Add delay between batches
-                await new Promise(resolve => setTimeout(resolve, 100));
+                await new Promise(r => setTimeout(r, 100));
             }
         } catch (error) {
             console.error('Error fetching specific orders:', error);
             throw error;
         }
-
         return allOrders;
     }
 
@@ -359,24 +406,23 @@ export class TikTokOrderSync {
                     let priceDetails = null;
                     if (includePriceDetail) {
                         try {
-                            console.log(`Fetching price details for order ${order.id}`);
-                            const priceResult = await this.client.api.OrderV202407Api.OrdersOrderIdPriceDetailGet(
-                                order.id,
-                                this.credentials.accessToken,
-                                "application/json",
-                                this.shopCipher
+                            const priceResult = await this.apiCallWithRetry(
+                                () => this.client.api.OrderV202407Api.OrdersOrderIdPriceDetailGet(
+                                    order.id,
+                                    this.credentials.accessToken,
+                                    "application/json",
+                                    this.shopCipher
+                                ),
+                                'OrdersOrderIdPriceDetailGet'
                             );
                             if (priceResult?.body?.data) {
                                 priceDetails = priceResult.body.data;
                                 withPriceDetails++;
-                                console.log(`Successfully fetched price details for order ${order.id}`);
                             }
-
-                            // Add small delay between price detail requests to avoid rate limiting
-                            await new Promise(resolve => setTimeout(resolve, 50));
-                        } catch (priceError) {
-                            console.warn(`Failed to fetch price details for order ${order.id}:`, priceError);
-                            // Don't fail the entire sync if price details fail
+                            await new Promise(r => setTimeout(r, 50));
+                        } catch (priceError: any) {
+                            if (priceError?.code === 'UNAUTHORIZED_TIKTOK_API') throw priceError;
+                            console.warn(`Price details fetch failed for ${order.id}`, priceError?.message);
                         }
                     }
 
@@ -463,7 +509,12 @@ export class TikTokOrderSync {
                         created++;
                     }
 
-                } catch (orderError) {
+                } catch (orderError: any) {
+                    if (orderError?.code === 'UNAUTHORIZED_TIKTOK_API') {
+                        console.error('Aborting batch due to auth failure');
+                        errors.push({ orderId: 'AUTH', error: 'Authorization failed (401)' });
+                        break;
+                    }
                     console.error(`Error processing order ${order.id}:`, orderError);
                     errors.push({
                         orderId: order.id,
@@ -617,13 +668,15 @@ export class TikTokOrderSync {
 
     public async upsertOrderPackage(orderId: string, pkg: any) {
         try {
-            // Get package detail from TikTok API
-            console.log(`Fetching package detail for package ${pkg.id}`);
-            const packageDetailResult = await this.client.api.FulfillmentV202309Api.PackagesPackageIdGet(
-                pkg.id,
-                this.credentials.accessToken,
-                "application/json",
-                this.shopCipher
+            // Wrap API call with retry
+            const packageDetailResult = await this.apiCallWithRetry(
+                () => this.client.api.FulfillmentV202309Api.PackagesPackageIdGet(
+                    pkg.id,
+                    this.credentials.accessToken,
+                    "application/json",
+                    this.shopCipher
+                ),
+                'PackagesPackageIdGet'
             );
 
             let packageData: any = {
@@ -706,7 +759,11 @@ export class TikTokOrderSync {
             // Add small delay to avoid rate limiting
             await new Promise(resolve => setTimeout(resolve, 100));
             
-        } catch (packageError) {
+        } catch (packageError: any) {
+            if (packageError?.code === 'UNAUTHORIZED_TIKTOK_API') {
+                console.error(`Auth failed while fetching package ${pkg.id}, aborting upsert`);
+                return;
+            }
             console.warn(`Failed to upsert package ${pkg.id} for order ${orderId}:`, packageError);
             
             // Still try to upsert package with basic info if API call fails
