@@ -15,6 +15,7 @@ import AddTrackingModal from '@/components/Orders/AddTrackingModal';
 import SyncOrderModal from '@/components/Orders/SyncOrderModal';
 import SplitOrderModal from '@/components/Orders/SplitOrderModal';
 import toast from 'react-hot-toast';
+import { useLanguage } from '@/context/LanguageContext';
 
 interface Order {
     id: string;
@@ -95,6 +96,7 @@ interface PaginationInfo {
 }
 
 export default function OrdersPage() {
+    const { t } = useLanguage();
     const { showLoading, hideLoading } = useLoading();
 
     const [orders, setOrders] = useState<Order[]>([]);
@@ -162,7 +164,7 @@ export default function OrdersPage() {
                 keyword,
                 page,
                 pageSize: overridePageSize,
-                loadingMessage = 'Loading orders...',
+                loadingMessage = t('orders.loading_orders'),
                 isSearch = false
             } = options || {};
 
@@ -221,7 +223,7 @@ export default function OrdersPage() {
             keyword: searchKeyword,
             page: 1,
             pageSize,
-            loadingMessage: 'Searching orders...',
+            loadingMessage: t('orders.searching_orders'),
             isSearch: true
         });
     };
@@ -261,7 +263,7 @@ export default function OrdersPage() {
     };
 
     const syncOrders = async (shopId: string, dateFrom?: string, dateTo?: string) => {
-        showLoading('Syncing orders...');
+        showLoading(t('orders.syncing_orders'));
         setSyncing(true);
         try {
             const response = await httpClient.post('/tiktok/Orders/get-order-list', {
@@ -274,11 +276,11 @@ export default function OrdersPage() {
                 page_size: 50,
             });
 
-            toast.success('Orders synced successfully');
+            toast.success(t('orders.sync_success'));
             await fetchOrders();
         } catch (error) {
             console.error('Error syncing orders:', error);
-            toast.error('Sync failed');
+            toast.error(t('orders.sync_failed'));
         } finally {
             hideLoading();
             setSyncing(false);
@@ -287,11 +289,10 @@ export default function OrdersPage() {
 
     const syncUnsettledTransactions = async () => {
         if (!filters?.shopId) {
-            toast.error('Please select a shop to sync unsettled transactions');
+            toast.error(t('orders.select_shop_sync_unsettled'));
             return;
         }
-
-        showLoading('Syncing unsettled transactions...');
+        showLoading(t('orders.syncing_unsettled_transactions'));
         try {
             const response = await httpClient.post('/tiktok/Finance/sync-unsettled-transactions', {
                 shop_id: filters.shopId,
@@ -300,12 +301,12 @@ export default function OrdersPage() {
                 page_size: 50,
             });
 
-            alert('Unsettled transactions synced successfully');
+            alert(t('orders.unsettled_sync_success'));
             // This will trigger fetchOrders through the useEffect
             setFilters(prev => ({ ...prev })); // Force re-render to trigger useEffect
         } catch (error) {
             console.error('Error syncing unsettled transactions:', error);
-            toast.error('Sync failed');
+            toast.error(t('orders.sync_failed'));
         } finally {
             hideLoading();
         }
@@ -316,13 +317,13 @@ export default function OrdersPage() {
         setShowOrderModal(true);
 
         try {
-            showLoading('Loading order details...');
+            showLoading(t('orders.loading_order_details'));
             // Fetch detailed order information
             const detailedOrder = await fetchOrderDetail(order.orderId);
             setSelectedOrder(detailedOrder);
         } catch (error) {
             console.error('Failed to load order details:', error);
-            toast.error('Failed to load order details');
+            toast.error(t('orders.load_detail_failed'));
             closeOrderModal();
         } finally {
             hideLoading();
@@ -464,19 +465,19 @@ export default function OrdersPage() {
 
     const handleSplitSubmit = async (data: { splittable_groups: { id: string; order_line_item_ids: string[] }[] }) => {
         if (!selectedOrderForSplit) return;
-        showLoading('Splitting order...');
+        showLoading(t('orders.splitting_order'));
         try {
             await httpClient.post('/tiktok/Fulfillment/split-order', {
                 orderId: selectedOrderForSplit.orderId,
                 shopId: selectedOrderForSplit.shopId,
                 groups: data.splittable_groups
             });
-            toast.success('Order split successfully');
+            toast.success(t('orders.split_success'));
             closeSplitModal();
             fetchOrders();
         } catch (err) {
             console.error('Failed to split order', err);
-            toast.error('Failed to split order');
+            toast.error(t('orders.split_failed'));
         } finally {
             hideLoading();
         }
@@ -489,12 +490,11 @@ export default function OrdersPage() {
                 order_ids: [order.orderId],
                 shop_id: order.shop.shopId
             });
-            toast.success(`Synced detail for ${order.orderId}`);
-            // refresh current page silently
-            fetchOrders({ page: pagination.currentPage, pageSize, loadingMessage: 'Refreshing...', isSearch: false });
+            toast.success(t('orders.sync_detail_success') + ` (${order.orderId})`);
+            fetchOrders({ page: pagination.currentPage, pageSize, loadingMessage: t('orders.refreshing'), isSearch: false });
         } catch (e) {
             console.error('Failed to sync order detail', e);
-            toast.error('Sync detail failed');
+            toast.error(t('orders.sync_detail_failed'));
         } finally {
             setSyncingDetail(null);
         }
@@ -506,8 +506,8 @@ export default function OrdersPage() {
             <div className="flex flex-col gap-5 mb-6 sm:flex-row sm:justify-between">
                 <div className="w-full">
                     <div className="mb-6">
-                        <h1 className="text-2xl font-bold text-gray-900 dark:text-white/90">Orders Management</h1>
-                        <p className="text-gray-600 dark:text-gray-400">Manage and sync TikTok orders</p>
+                        <h1 className="text-2xl font-bold text-gray-900 dark:text-white/90">{t('orders.title')}</h1>
+                        <p className="text-gray-600 dark:text-gray-400">{t('orders.subtitle')}</p>
                     </div>
                 </div>
                 <div className="flex items-start w-full gap-3 sm:justify-end">
@@ -518,7 +518,7 @@ export default function OrdersPage() {
                             className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 disabled:opacity-50 flex items-center justify-center hover:shadow-lg transition duration-200"
                         >
                             {syncing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <RefreshCw className="h-4 w-4 mr-2" />}
-                            Sync Orders
+                            {t('orders.sync_orders')}
                         </button>
                         <button
                             onClick={syncUnsettledTransactions}
@@ -526,7 +526,7 @@ export default function OrdersPage() {
                             className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 disabled:opacity-50 flex items-center justify-center hover:shadow-lg transition duration-200"
                         >
                             {syncing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <RefreshCw className="h-4 w-4 mr-2" />}
-                            Sync Unsettled Transaction
+                            {t('orders.sync_unsettled_transactions')}
                         </button>
                     </div>
                 </div>
@@ -539,7 +539,7 @@ export default function OrdersPage() {
                     <div className="flex items-center">
                         <Package className="h-8 w-8 text-blue-600" />
                         <div className="ml-4">
-                            <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Orders</p>
+                            <p className="text-sm font-medium text-gray-600 dark:text-gray-400">{t('orders.total_orders')}</p>
                             <p className="text-2xl font-semibold text-gray-900 dark:text-white/90">{pagination.totalItems}</p>
                         </div>
                     </div>
@@ -548,7 +548,7 @@ export default function OrdersPage() {
                     <div className="flex items-center">
                         <Calendar className="h-8 w-8 text-green-600" />
                         <div className="ml-4">
-                            <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Completed</p>
+                            <p className="text-sm font-medium text-gray-600 dark:text-gray-400">{t('orders.completed')}</p>
                             <p className="text-2xl font-semibold text-gray-900 dark:text-white/90">
                                 {orders.filter(o => o.status.toUpperCase() === 'COMPLETED').length}
                             </p>
@@ -559,7 +559,7 @@ export default function OrdersPage() {
                     <div className="flex items-center">
                         <RefreshCw className="h-8 w-8 text-yellow-600" />
                         <div className="ml-4">
-                            <p className="text-sm font-medium text-gray-600 dark:text-gray-400">In Progress</p>
+                            <p className="text-sm font-medium text-gray-600 dark:text-gray-400">{t('orders.in_progress')}</p>
                             <p className="text-2xl font-semibold text-gray-900 dark:text-white/90">
                                 {orders.filter(o => ['AWAITING_SHIPMENT', 'PARTIALLY_SHIPPING', 'AWAITING_COLLECTION', 'IN_TRANSIT'].includes(o.status.toUpperCase())).length}
                             </p>
@@ -570,7 +570,7 @@ export default function OrdersPage() {
                     <div className="flex items-center">
                         <User className="h-8 w-8 text-red-600" />
                         <div className="ml-4">
-                            <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Cancelled</p>
+                            <p className="text-sm font-medium text-gray-600 dark:text-gray-400">{t('orders.cancelled')}</p>
                             <p className="text-2xl font-semibold text-gray-900 dark:text-white/90">
                                 {orders.filter(o => o.status.toUpperCase() === 'CANCELLED').length}
                             </p>
@@ -590,7 +590,7 @@ export default function OrdersPage() {
                             </span>
                             <input
                                 type="text"
-                                placeholder="Search orders by ID, email, recipient name, or product..."
+                                placeholder={t('orders.search_placeholder_full')}
                                 value={searchKeyword}
                                 onChange={(e) => setSearchKeyword(e.target.value)}
                                 className="h-11 w-full rounded-lg border border-gray-200 bg-transparent py-2.5 pl-12 pr-24 text-sm text-gray-800 shadow-sm placeholder:text-gray-400 focus:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 xl:w-[500px]"
@@ -606,7 +606,7 @@ export default function OrdersPage() {
                                 ) : (
                                     <Search className="h-3 w-3" />
                                 )}
-                                Search
+                                {t('common.search')}
                             </button>
                         </div>
                     </form>
@@ -615,7 +615,7 @@ export default function OrdersPage() {
                 {/* Filters Grid */}
                 <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2 dark:text-gray-400">Shop</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-2 dark:text-gray-400">{t('orders.shop')}</label>
                         <ShopSelector
                             onChange={(shopId: string | null, shop: any | null) => handleFilterChange('shopId', shopId ?? '')}
                         />
@@ -623,7 +623,7 @@ export default function OrdersPage() {
 
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2 dark:text-gray-400">
-                            Order Status
+                            {t('orders.order_status_label')}
                             <span className="ml-1 text-xs text-gray-500 cursor-help" title="TikTok Shop order status definitions">ℹ️</span>
                         </label>
                         <select
@@ -631,7 +631,7 @@ export default function OrdersPage() {
                             onChange={(e) => handleFilterChange('status', e.target.value)}
                             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white"
                         >
-                            <option value="">All Status</option>
+                            <option value="">{t('orders.all_status')}</option>
                             <optgroup label="Payment & Processing">
                                 <option value="UNPAID" title="Order placed but payment authorized">UNPAID</option>
                                 <option value="ON_HOLD" title="Payment completed, in remorse period">ON_HOLD</option>
@@ -652,7 +652,7 @@ export default function OrdersPage() {
 
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2 dark:text-gray-400">
-                            Custom Status
+                            {t('orders.custom_status')}
                             <span className="ml-1 text-xs text-gray-500 cursor-help" title="Internal delivery tracking status">📦</span>
                         </label>
                         <select
@@ -660,14 +660,14 @@ export default function OrdersPage() {
                             onChange={(e) => handleFilterChange('customStatus', e.target.value)}
                             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white"
                         >
-                            <option value="">All Custom Status</option>
-                            <option value="NOT_SET" title="Orders with no custom status set">Chưa kéo đơn</option>
-                            <option value="DELIVERED" title="Order has been delivered internally">Đã kéo đơn</option>
+                            <option value="">{t('orders.all_status')}</option>
+                            <option value="NOT_SET">Chưa kéo đơn</option>
+                            <option value="DELIVERED">Đã kéo đơn</option>
                         </select>
                     </div>
 
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2 dark:text-gray-400">From Date</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-2 dark:text-gray-400">{t('orders.from_date')}</label>
                         <input
                             type="datetime-local"
                             value={filters.dateFrom}
@@ -677,7 +677,7 @@ export default function OrdersPage() {
                     </div>
 
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2 dark:text-gray-400">To Date</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-2 dark:text-gray-400">{t('orders.to_date')}</label>
                         <input
                             type="datetime-local"
                             value={filters.dateTo}
@@ -687,7 +687,7 @@ export default function OrdersPage() {
                     </div>
 
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2 dark:text-gray-400">Page Size</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-2 dark:text-gray-400">{t('orders.page_size')}</label>
                         <select
                             value={pageSize}
                             onChange={(e) => handlePageSizeChange(parseInt(e.target.value))}
@@ -705,7 +705,7 @@ export default function OrdersPage() {
                 <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
-                            <h5 className="text-xs font-medium text-gray-600 dark:text-gray-300 mb-2">Order Status Flow:</h5>
+                            <h5 className="text-xs font-medium text-gray-600 dark:text-gray-300 mb-2">{t('orders.status_flow')}</h5>
                             <div className="flex gap-2 text-xs">
                                 <span className="inline-flex items-center px-2 py-1 rounded-full bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-400">
                                     UNPAID
@@ -749,21 +749,21 @@ export default function OrdersPage() {
                     <table className="min-w-full divide-y divide-gray-200">
                         <thead className="bg-gray-50 dark:border-gray-800 dark:bg-white/[0.03]">
                             <tr>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Account/Seller</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Items Images</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer Info</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order Info</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('common.id') || 'ID'}</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('orders.account_seller')}</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('orders.order')}</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('orders.items_images')}</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('orders.customer_info')}</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('orders.order_info')}</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('orders.price')}</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('common.actions')}</th>
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200 dark:divide-gray-700 dark:border-gray-800 dark:bg-white/[0.03]">
                             {orders.length === 0 ? (
                                 <tr>
                                     <td colSpan={8} className="px-6 py-8 text-center text-gray-500">
-                                        No orders found with the selected filters.
+                                        {t('orders.no_orders_found')}
                                     </td>
                                 </tr>
                             ) : (
@@ -789,10 +789,10 @@ export default function OrdersPage() {
                                             <td className="px-6 py-4 whitespace-nowrap">
                                                 <div className="flex flex-col">
                                                     <div className="text-sm font-medium text-gray-900 dark:text-gray-400">
-                                                        {order.shop.managedName || 'N/A'}
+                                                        {order.shop.managedName || t('common.na')}
                                                     </div>
                                                     <div className="text-xs text-gray-500 dark:text-gray-400">
-                                                        Shop ID: {order.shopId}
+                                                        {t('orders.shop_id_label')} {order.shopId}
                                                     </div>
                                                 </div>
                                             </td>
@@ -851,12 +851,12 @@ export default function OrdersPage() {
                                                 <div className="flex flex-col space-y-1">
                                                     <div className="flex items-center justify-between">
                                                         <div className="text-sm font-medium text-gray-900 dark:text-gray-400">
-                                                            {order.recipientAddress?.name || 'N/A'}
+                                                            {order.recipientAddress?.name || t('common.na')}
                                                         </div>
                                                         <button
                                                             onClick={() => copyCustomerInfo(order)}
                                                             className="ml-2 p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
-                                                            title="Copy customer information"
+                                                            title={t('orders.copy_customer_info')}
                                                         >
                                                             {copiedCustomer === order.orderId ? (
                                                                 <Check className="h-3 w-3 text-green-500" />
@@ -866,13 +866,13 @@ export default function OrdersPage() {
                                                         </button>
                                                     </div>
                                                     <div className="text-xs text-gray-500 truncate max-w-48 dark:text-gray-400">
-                                                        {order.recipientAddress?.phoneNumber || 'N/A'}
+                                                        {order.recipientAddress?.phoneNumber || t('common.na')}
                                                     </div>
                                                     <div className="text-xs text-gray-500 truncate max-w-48 dark:text-gray-400">
-                                                        {order.recipientAddress?.fullAddress || 'N/A'}
+                                                        {order.recipientAddress?.fullAddress || t('common.na')}
                                                     </div>
                                                     <div className="text-xs text-gray-500 truncate max-w-48 dark:text-gray-400">
-                                                        {order.recipientAddress?.postalCode || 'N/A'}
+                                                        {order.recipientAddress?.postalCode || t('common.na')}
                                                     </div>
                                                 </div>
                                             </td>
@@ -881,16 +881,16 @@ export default function OrdersPage() {
                                             <td className="px-6 py-4">
                                                 <div className="flex flex-col space-y-1">
                                                     <div className="text-xs text-blue-600 dark:text-blue-400">
-                                                        {order.lineItemsCount || order.lineItems?.length || 0} item(s)
+                                                        {t(`orders.items_label_${order.lineItemsCount || order.lineItems?.length || 0}`)}
                                                     </div>
                                                     {parseChannelData(order?.channelData ?? "").trackingNumber && (
                                                         <div className="text-xs font-mono text-purple-600 truncate max-w-50">
-                                                            Track: {parseChannelData(order?.channelData ?? "").trackingNumber} - {parseChannelData(order?.channelData ?? "").shippingProvider}
+                                                            {t('orders.track_label')}
                                                         </div>
                                                     )}
                                                     {((order?.mustSplitPackages || order?.canSplitPackages) && order?.customStatus === 'SPLITTED') && (
                                                         <div className="text-xs font-mono text-orange-600 truncate max-w-50">
-                                                            Đã split order
+                                                            {t('orders.splitted')}
                                                         </div>
                                                     )}
                                                 </div>
@@ -907,12 +907,12 @@ export default function OrdersPage() {
                                                     </div>
                                                     {order.payment?.subTotal && (
                                                         <div className="text-xs text-gray-500 font-mono">
-                                                            Subtotal: {formatCurrency(order.payment.subTotal, order.payment.currency)}
+                                                            {t('orders.subtotal_label')} {formatCurrency(order.payment.subTotal, order.payment.currency)}
                                                         </div>
                                                     )}
                                                     {order.unsettledTransactions && order.unsettledTransactions.length > 0 && (
                                                         <div className="text-xs text-red-500 font-mono">
-                                                            Est: {formatCurrency(order.unsettledTransactions[0]?.estSettlementAmount, order.payment?.currency || 'USD')}
+                                                            {t('orders.estimated_label')} {formatCurrency(order.unsettledTransactions[0]?.estSettlementAmount, order.payment?.currency || 'USD')}
                                                         </div>
                                                     )}
                                                 </div>
@@ -926,7 +926,7 @@ export default function OrdersPage() {
                                                         className="inline-flex items-center px-2 py-1 text-xs font-medium text-blue-600 hover:text-blue-900 border border-blue-300 rounded hover:bg-blue-50 dark:border-blue-800 dark:bg-blue-900 dark:text-blue-400 dark:hover:bg-blue-700"
                                                     >
                                                         <Eye className="h-3 w-3 mr-1" />
-                                                        Xem
+                                                        {t('orders.view')}
                                                     </button>
                                                     <button
                                                         onClick={() => syncOrderDetail(order)}
@@ -939,7 +939,7 @@ export default function OrdersPage() {
                                                         ) : (
                                                             <RefreshCw className="h-3 w-3 mr-1" />
                                                         )}
-                                                        Sync Detail
+                                                        {t('orders.sync_detail')}
                                                     </button>
 
                                                     {/* Custom Status Action Buttons */}
@@ -949,10 +949,10 @@ export default function OrdersPage() {
                                                                 onClick={() => updateCustomStatus(order.orderId, 'DELIVERED')}
                                                                 disabled={updatingStatus === order.orderId}
                                                                 className="inline-flex items-center px-2 py-1 text-xs font-medium text-green-600 hover:text-green-900 border border-green-300 rounded hover:bg-green-50 dark:border-green-800 dark:bg-green-900 dark:text-green-400 dark:hover:bg-green-700 disabled:opacity-50"
-                                                                title="Mark as DELIVERED"
+                                                                title={t('orders.mark_as_delivered_title')}
                                                             >
                                                                 <Check className="h-3 w-3 mr-1" />
-                                                                Kéo đơn
+                                                                {t('orders.mark_delivered')}
                                                             </button>
                                                         </div>
                                                     )}
@@ -963,10 +963,10 @@ export default function OrdersPage() {
                                                                 onClick={() => handleAddTracking(order)}
                                                                 disabled={updatingStatus === order.orderId}
                                                                 className="inline-flex items-center px-2 py-1 text-xs font-medium text-green-600 hover:text-green-900 border border-green-300 rounded hover:bg-green-50 dark:border-green-800 dark:bg-green-900 dark:text-green-400 dark:hover:bg-green-700 disabled:opacity-50"
-                                                                title="Add tracking information"
+                                                                title={t('orders.add_tracking_title')}
                                                             >
                                                                 <Plus className="h-3 w-3 mr-1" />
-                                                                Add tracking
+                                                                {t('orders.add_tracking')}
                                                             </button>
                                                         </div>
                                                     )}
@@ -977,10 +977,10 @@ export default function OrdersPage() {
                                                                 onClick={() => openSplitModal(order)}
                                                                 disabled={updatingStatus === order.orderId}
                                                                 className="inline-flex items-center px-2 py-1 text-xs font-medium text-green-600 hover:text-green-900 border border-green-300 rounded hover:bg-green-50 dark:border-green-800 dark:bg-green-900 dark:text-green-400 dark:hover:bg-green-700 disabled:opacity-50"
-                                                                title="Split order into multiple packages"
+                                                                title={t('orders.split_order_title')}
                                                             >
                                                                 <Plus className="h-3 w-3 mr-1" />
-                                                                Split orders
+                                                                {t('orders.split_orders')}
                                                             </button>
                                                         </div>
                                                     )}
@@ -1015,22 +1015,22 @@ export default function OrdersPage() {
                             disabled={!pagination.hasPreviousPage || syncing}
                             className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 dark:border-gray-800 dark:bg-white/[0.03] dark:text-gray-400 dark:hover:bg-gray-700"
                         >
-                            Previous
+                            {t('common.previous')}
                         </button>
                         <button
                             onClick={() => handlePageChange(pagination.currentPage + 1)}
                             disabled={!pagination.hasNextPage || syncing}
                             className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 dark:border-gray-800 dark:bg-white/[0.03] dark:text-gray-400 dark:hover:bg-gray-700"
                         >
-                            Next
+                            {t('common.next')}
                         </button>
                     </div>
                     <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
                         <div>
                             <p className="text-sm text-gray-700 dark:text-gray-400">
-                                Showing <span className="font-medium">{pagination.totalItems === 0 ? 0 : ((pagination.currentPage - 1) * pagination.pageSize) + 1}</span> to{' '}
-                                <span className="font-medium">{Math.min(pagination.currentPage * pagination.pageSize, pagination.totalItems)}</span> of{' '}
-                                <span className="font-medium">{pagination.totalItems}</span> results
+                                {t(
+                                  `Showing results ${pagination.totalItems === 0 ? 0 : ((pagination.currentPage - 1) * pagination.pageSize) + 1} - ${Math.min(pagination.currentPage * pagination.pageSize, pagination.totalItems)} of ${pagination.totalItems}`
+                                )}
                             </p>
                         </div>
                         <div>
@@ -1040,17 +1040,17 @@ export default function OrdersPage() {
                                     disabled={!pagination.hasPreviousPage || syncing}
                                     className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-800 dark:bg-white/[0.03] dark:text-gray-400 dark:hover:bg-gray-700"
                                 >
-                                    Previous
+                                    {t('common.previous')}
                                 </button>
                                 <span className="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700 dark:border-gray-800 dark:bg-white/[0.03] dark:text-gray-400">
-                                    Page {pagination.currentPage} of {pagination.totalPages}
+                                    {t(`Page ${pagination.currentPage} of ${pagination.totalPages}`)}
                                 </span>
                                 <button
                                     onClick={() => handlePageChange(pagination.currentPage + 1)}
                                     disabled={!pagination.hasNextPage || syncing}
                                     className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-800 dark:bg-white/[0.03] dark:text-gray-400 dark:hover:bg-gray-700"
                                 >
-                                    Next
+                                    {t('common.next')}
                                 </button>
                             </nav>
                         </div>

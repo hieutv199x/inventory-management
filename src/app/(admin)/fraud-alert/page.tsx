@@ -10,6 +10,7 @@ import Select from "@/components/form/Select";
 import { ChevronDownIcon } from "@/icons";
 import DatePicker from "@/components/form/date-picker";
 import { formatCurrency } from "@/utils/common/functionFormat";
+import { useLanguage } from '@/context/LanguageContext';
 
 interface FraudAlert {
     id: string;
@@ -34,6 +35,7 @@ const AlertTypeMap = {
 };
 
 export default function FraudAlertPage() {
+    const { t } = useLanguage();
     
     const [filters, setFilters] = useState({
         shopId: "",
@@ -106,8 +108,8 @@ export default function FraudAlertPage() {
                         <div className="flex items-center gap-3">
                             <AlertTriangle className="h-8 w-8 text-red-600" />
                             <div>
-                                <h1 className="text-2xl font-bold text-gray-900 dark:text-white/90">Fraud Alert</h1>
-                                <p className="text-gray-600 dark:text-gray-400">Monitor bank account mismatches and security alerts</p>
+                                <h1 className="text-2xl font-bold text-gray-900 dark:text-white/90">{t('fraud.title')}</h1>
+                                <p className="text-gray-600 dark:text-gray-400">{t('fraud.subtitle')}</p>
                             </div>
                         </div>
                     </div>
@@ -132,7 +134,7 @@ export default function FraudAlertPage() {
                     <div className="flex items-center">
                         <AlertTriangle className="h-8 w-8 text-red-600" />
                         <div className="ml-4">
-                            <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Alerts</p>
+                            <p className="text-sm font-medium text-gray-600 dark:text-gray-400">{t('fraud.total_alerts')}</p>
                             <p className="text-2xl font-semibold text-gray-900 dark:text-white/90">{totalAlerts}</p>
                         </div>
                     </div>
@@ -141,7 +143,7 @@ export default function FraudAlertPage() {
                     <div className="flex items-center">
                         <Building className="h-8 w-8 text-orange-600" />
                         <div className="ml-4">
-                            <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Bank Mismatches</p>
+                            <p className="text-sm font-medium text-gray-600 dark:text-gray-400">{t('fraud.bank_mismatches')}</p>
                             <p className="text-2xl font-semibold text-gray-900 dark:text-white/90">{mismatchAlerts}</p>
                         </div>
                     </div>
@@ -150,7 +152,7 @@ export default function FraudAlertPage() {
                     <div className="flex items-center">
                         <Shield className="h-8 w-8 text-yellow-600" />
                         <div className="ml-4">
-                            <p className="text-sm font-medium text-gray-600 dark:text-gray-400">No Bank Assigned</p>
+                            <p className="text-sm font-medium text-gray-600 dark:text-gray-400">{t('fraud.no_bank_assigned')}</p>
                             <p className="text-2xl font-semibold text-gray-900 dark:text-white/90">{noBankAlerts}</p>
                         </div>
                     </div>
@@ -166,18 +168,18 @@ export default function FraudAlertPage() {
                     <div className="col-span-1">
                         <SelectShop 
                             onChange={(val) => handleFilterChange('shopId', val)} 
-                            placeholder="All Shops" 
+                            placeholder={t('fraud.filters.shop_placeholder')}
                             enablePlaceholder={true}
                         />
                     </div>
                     <div className="col-span-1">
-                        <Label>Alert Type</Label>
+                        <Label>{t('fraud.filters.alert_type')}</Label>
                         <div className="relative">
                             <Select
                                 options={[
-                                    { label: "All Types", value: "" },
-                                    { label: "Bank Mismatches", value: "MISMATCH" },
-                                    { label: "No Bank Assigned", value: "NO_BANK_ASSIGNED" },
+                                    { label: t('fraud.filters.alert_type.all'), value: "" },
+                                    { label: t('fraud.filters.alert_type.mismatch'), value: "MISMATCH" },
+                                    { label: t('fraud.filters.alert_type.no_bank'), value: "NO_BANK_ASSIGNED" },
                                 ]}
                                 onChange={(val) => handleFilterChange('alertType', val)}
                                 enablePlaceholder={false}
@@ -191,7 +193,7 @@ export default function FraudAlertPage() {
                     <div className="col-span-1">
                         <DatePicker
                             id="start-date-picker"
-                            label="Start Date"
+                            label={t('fraud.filters.start_date')}
                             value={filters.startDate ?? undefined}
                             placeholder="dd/MM/yyyy"
                             onChange={(_, dateStr) => handleFilterChange('startDate', dateStr)}
@@ -200,7 +202,7 @@ export default function FraudAlertPage() {
                     <div className="col-span-1">
                         <DatePicker
                             id="end-date-picker"
-                            label="End Date"
+                            label={t('fraud.filters.end_date')}
                             value={filters.endDate ?? undefined}
                             placeholder="dd/MM/yyyy"
                             onChange={(_, dateStr) => handleFilterChange('endDate', dateStr)}
@@ -215,37 +217,37 @@ export default function FraudAlertPage() {
                         <TableHeader className="border-gray-100 dark:border-gray-800 border-y">
                             <TableRow>
                                 <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400">
-                                    No
+                                    {t('fraud.table.no')}
                                 </TableCell>
                                 <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400">
-                                    Ngày phát hiện
+                                    {t('fraud.table.detected_date')}
                                 </TableCell>
                                 <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400">
-                                    Seller
+                                    {t('fraud.table.seller')}
                                 </TableCell>
                                 <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400">
-                                    Trạng thái
+                                    {t('fraud.table.status')}
                                 </TableCell>
                                 <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400">
-                                    Số tiền
+                                    {t('fraud.table.amount')}
                                 </TableCell>
                                 <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400">
-                                    PaymentId
+                                    {t('fraud.table.payment_id')}
                                 </TableCell>
                                 <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400">
-                                    Ngày paid
+                                    {t('fraud.table.paid_date')}
                                 </TableCell>
                                 <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400">
-                                    Bank Accounts
+                                    {t('fraud.table.order_bank_account')}
                                 </TableCell>
                                 <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400">
-                                    Bank get
+                                    {t('fraud.table.configured_bank_account')}
                                 </TableCell>
                                 <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400">
-                                    Ngày get bank
+                                    {t('fraud.table.bank_created_date')}
                                 </TableCell>
                                 <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400">
-                                    Shop
+                                    {t('fraud.table.shop')}
                                 </TableCell>
                             </TableRow>
                         </TableHeader>
@@ -254,19 +256,19 @@ export default function FraudAlertPage() {
                             {isLoading ? (
                                 <TableRow>
                                     <TableCell colSpan={11} className="py-5 text-center text-gray-500">
-                                        Loading alerts...
+                                        {t('fraud.loading')}
                                     </TableCell>
                                 </TableRow>
                             ) : error ? (
                                 <TableRow>
                                     <TableCell colSpan={11} className="py-5 text-center text-red-500">
-                                        Error: {error}
+                                        {t('fraud.error')}{error ? `: ${error}` : ""}
                                     </TableCell>
                                 </TableRow>
                             ) : alerts.length === 0 ? (
                                 <TableRow>
                                     <TableCell colSpan={11} className="py-5 text-center text-gray-500">
-                                        No fraud alerts found with the selected filters.
+                                        {t('fraud.no_results')}
                                     </TableCell>
                                 </TableRow>
                             ) : (
@@ -293,9 +295,9 @@ export default function FraudAlertPage() {
                                                         'text-green-500'
                                                     }`} />
                                                     <Badge size="sm" color={alertInfo.color}>
-                                                        {alert.alertType === 'MISMATCH' ? 'Không khớp' : 
-                                                         alert.alertType === 'NO_BANK_ASSIGNED' ? 'Chưa gắn Bank' : 
-                                                         alertInfo.label}
+                                                        {alert.alertType === 'MISMATCH' ? t('fraud.status.mismatch') : 
+                                                         alert.alertType === 'NO_BANK_ASSIGNED' ? t('fraud.status.no_bank_assigned') : 
+                                                         t('fraud.status.matched')}
                                                     </Badge>
                                                 </div>
                                             </TableCell>

@@ -5,6 +5,7 @@ import { userShopRoleApi, userApi, shopApi } from '@/lib/api-client';
 import { Modal } from '@/components/ui/modal';
 import Button from '@/components/ui/button/Button';
 import Label from '@/components/form/Label';
+import { useLanguage } from '@/context/LanguageContext';
 
 interface UserShopRole {
   id: string;
@@ -35,6 +36,7 @@ interface Shop {
 }
 
 export default function PermissionsPage() {
+  const { t } = useLanguage();
   const [userRoles, setUserRoles] = useState<UserShopRole[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [shops, setShops] = useState<Shop[]>([]);
@@ -299,10 +301,10 @@ export default function PermissionsPage() {
           <FaUsers className="h-8 w-8 text-brand-500" />
           <div className="vietnamese-text">
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-              Phân quyền cửa hàng
+              {t('permissions.title')}
             </h1>
             <p className="text-gray-600 dark:text-gray-400">
-              Quản lý quyền và phân quyền người dùng trên tất cả các cửa hàng
+              {t('permissions.subtitle')}
             </p>
           </div>
         </div>
@@ -311,7 +313,7 @@ export default function PermissionsPage() {
           className="px-4 py-2 bg-brand-500 text-white rounded-lg hover:bg-brand-600 transition-colors flex items-center space-x-2"
         >
           <FaPlus className="h-4 w-4" />
-          <span>Thêm người dùng vào cửa hàng</span>
+          <span>{t('permissions.add_user_to_shop')}</span>
         </button>
       </div>
 
@@ -321,7 +323,7 @@ export default function PermissionsPage() {
           <FaSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
           <input
             type="text"
-            placeholder="Tìm kiếm người dùng hoặc cửa hàng..."
+            placeholder={t('permissions.search_placeholder')}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="pl-10 pr-4 py-2 w-full border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500 vietnamese-text"
@@ -337,14 +339,14 @@ export default function PermissionsPage() {
           onChange={(e) => setSelectedShop(e.target.value)}
           className="px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
         >
-          <option value="all">Tất cả cửa hàng</option>
+          <option value="all">{t('permissions.all_shops')}</option>
           {shops.map(shop => (
             <option key={shop.id} value={shop.id}>{shop.shopName}</option>
           ))}
         </select>
         {(searchTerm || selectedShop !== 'all') && (
           <div className="flex items-center text-sm text-gray-600 dark:text-gray-400">
-            Tìm thấy {pagination.total} quyền
+            {t('permissions.results_found') + `: ${pagination.total}`}
             <button
               onClick={() => {
                 setSearchTerm('');
@@ -361,7 +363,7 @@ export default function PermissionsPage() {
       {/* Pagination Controls */}
       <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
         <div className="flex items-center space-x-2">
-          <span className="text-sm text-gray-700 dark:text-gray-300">Hiển thị:</span>
+          <span className="text-sm text-gray-700 dark:text-gray-300">{t('permissions.pagination_show')}</span>
           <select
             value={pagination.limit}
             onChange={(e) => handlePageSizeChange(Number(e.target.value))}
@@ -392,8 +394,8 @@ export default function PermissionsPage() {
           <h3 className="text-lg font-medium text-gray-900 dark:text-white vietnamese-text">
 
             {(searchTerm || selectedShop !== 'all') 
-              ? `Kết quả tìm kiếm (${pagination.total})` 
-              : `Quyền truy cập của người dùng (${pagination.total})`
+              ? t('permissions.search_results')
+              : t('permissions.user_access')
             }
           </h3>
         </div>
@@ -403,19 +405,19 @@ export default function PermissionsPage() {
             <thead className="bg-gray-50 dark:bg-gray-900">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Người dùng
+                  {t('permissions.table.user')}
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Cửa hàng
+                  {t('permissions.table.shop')}
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Quyền
+                  {t('permissions.table.role')}
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Ngày phân công
+                  {t('permissions.table.assigned_date')}
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Thao tác
+                  {t('permissions.table.actions')}
                 </th>
               </tr>
             </thead>
@@ -424,8 +426,8 @@ export default function PermissionsPage() {
                 <tr>
                   <td colSpan={5} className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
                     {(searchTerm || selectedShop !== 'all')
-                      ? `Không có quyền nào khớp với tiêu chí tìm kiếm của bạn.`
-                      : 'Không tìm thấy quyền người dùng. Thêm người dùng vào cửa hàng để bắt đầu.'
+                      ? t('permissions.no_search_results')
+                      : t('permissions.no_permissions')
                     }
                   </td>
                 </tr>
@@ -466,14 +468,14 @@ export default function PermissionsPage() {
                         className="text-brand-600 hover:text-brand-900 dark:text-brand-400 dark:hover:text-brand-300 inline-flex items-center space-x-1"
                       >
                         <FaEdit className="h-3 w-3" />
-                        <span>Sửa</span>
+                        <span>{t('permissions.edit')}</span>
                       </button>
                       <button 
                         onClick={() => handleRemoveRole(userRole.id)}
                         className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300 inline-flex items-center space-x-1"
                       >
                         <FaTrash className="h-3 w-3" />
-                        <span>Xóa</span>
+                        <span>{t('permissions.delete')}</span>
                       </button>
                     </td>
                   </tr>
@@ -493,7 +495,7 @@ export default function PermissionsPage() {
               disabled={pagination.page === 1}
               className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 dark:hover:bg-gray-700"
             >
-              Trước
+              {t('permissions.previous')}
             </button>
             
             <div className="flex items-center space-x-1">
@@ -530,12 +532,12 @@ export default function PermissionsPage() {
               disabled={pagination.page === pagination.totalPages}
               className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 dark:hover:bg-gray-700"
             >
-              Tiếp theo
+              {t('permissions.next')}
             </button>
           </div>
           
           <div className="text-sm text-gray-700 dark:text-gray-300">
-            Trang {pagination.page} / {pagination.totalPages}
+            {t('permissions.page')} {pagination.page} / {pagination.totalPages}
           </div>
         </div>
       )}
@@ -545,7 +547,7 @@ export default function PermissionsPage() {
         <Modal isOpen={showAssignModal} onClose={closeModals} className="max-w-lg p-6">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white vietnamese-text">
-              Phân quyền người dùng vào cửa hàng
+              {t('permissions.assign_modal.title')}
             </h2>
             <button onClick={closeModals} className="text-gray-400 hover:text-gray-600">
               <FaTimes className="h-5 w-5" />
@@ -554,14 +556,14 @@ export default function PermissionsPage() {
 
           <form onSubmit={handleAssignRole} className="space-y-4">
             <div>
-              <Label>Người dùng</Label>
+              <Label>{t('permissions.assign_modal.user')}</Label>
               <select
                 value={formData.userId}
                 onChange={(e) => setFormData(prev => ({ ...prev, userId: e.target.value }))}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white vietnamese-text"
                 required
               >
-                <option value="">Chọn người dùng</option>
+                <option value="">{t('permissions.assign_modal.select_user')}</option>
                 {users.map(user => (
                   <option key={user.id} value={user.id}>
                     {user.name} ({user.email})
@@ -571,14 +573,14 @@ export default function PermissionsPage() {
             </div>
 
             <div>
-              <Label>Cửa hàng</Label>
+              <Label>{t('permissions.assign_modal.shop')}</Label>
               <select
                 value={formData.shopId}
                 onChange={(e) => setFormData(prev => ({ ...prev, shopId: e.target.value }))}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white vietnamese-text"
                 required
               >
-                <option value="">Chọn cửa hàng</option>
+                <option value="">{t('permissions.assign_modal.select_shop')}</option>
                 {shops.map(shop => (
                   <option key={shop.id} value={shop.id}>
                     {shop.shopName}
@@ -588,7 +590,7 @@ export default function PermissionsPage() {
             </div>
 
             <div>
-              <Label>Vai trò và quyền hạn</Label>
+              <Label>{t('permissions.assign_modal.role_permissions')}</Label>
               <div className="space-y-3">
                 {Object.entries(roleDescriptions).map(([role, info]) => (
                   <div 
@@ -610,11 +612,11 @@ export default function PermissionsPage() {
                         className="mr-3 text-brand-500 focus:ring-brand-500"
                       />
                       <span className="font-medium text-gray-900 dark:text-white vietnamese-text">
-                        {info.label}
+                        {t(`permissions.role.${role.toLowerCase()}.label`)}
                       </span>
                     </div>
                     <p className="text-sm text-gray-600 dark:text-gray-400 ml-6 vietnamese-text">
-                      {info.description}
+                      {t(`permissions.role.${role.toLowerCase()}.desc`)}
                     </p>
                   </div>
                 ))}
@@ -628,14 +630,14 @@ export default function PermissionsPage() {
                 onClick={closeModals}
                 className="flex-1"
               >
-                Hủy
+                {t('common.cancel')}
               </Button>
               <Button
                 type="submit"
                 disabled={loading}
                 className="flex-1"
               >
-                {loading ? 'Đang phân quyền...' : 'Phân quyền'}
+                {loading ? t('permissions.assigning') : t('permissions.assign')}
               </Button>
             </div>
           </form>
@@ -647,7 +649,7 @@ export default function PermissionsPage() {
         <Modal isOpen={showEditModal} onClose={closeModals} className="max-w-lg p-6">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white vietnamese-text">
-              Cập nhật quyền người dùng
+              {t('permissions.edit_modal.title')}
             </h2>
             <button onClick={closeModals} className="text-gray-400 hover:text-gray-600">
               <FaTimes className="h-5 w-5" />
@@ -670,7 +672,7 @@ export default function PermissionsPage() {
 
           <form onSubmit={handleUpdateRole} className="space-y-4">
             <div>
-              <Label>Chọn vai trò mới</Label>
+              <Label>{t('permissions.edit_modal.choose_new_role')}</Label>
               <div className="space-y-3">
                 {Object.entries(roleDescriptions).map(([role, info]) => (
                   <div 
@@ -692,14 +694,14 @@ export default function PermissionsPage() {
                         className="mr-3 text-brand-500 focus:ring-brand-500"
                       />
                       <span className="font-medium text-gray-900 dark:text-white vietnamese-text">
-                        {info.label}
+                        {t(`permissions.role.${role.toLowerCase()}.label`)}
                       </span>
                       {selectedRole.role === role && (
                         <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">(Hiện tại)</span>
                       )}
                     </div>
                     <p className="text-sm text-gray-600 dark:text-gray-400 ml-6 vietnamese-text">
-                      {info.description}
+                      {t(`permissions.role.${role.toLowerCase()}.desc`)}
                     </p>
                   </div>
                 ))}
@@ -713,14 +715,14 @@ export default function PermissionsPage() {
                 onClick={closeModals}
                 className="flex-1"
               >
-                Hủy
+                {t('common.cancel')}
               </Button>
               <Button
                 type="submit"
                 disabled={loading || formData.role === selectedRole.role}
                 className="flex-1"
               >
-                {loading ? 'Đang cập nhật...' : 'Cập nhật quyền'}
+                {loading ? t('permissions.updating') : t('permissions.update_role')}
               </Button>
             </div>
           </form>

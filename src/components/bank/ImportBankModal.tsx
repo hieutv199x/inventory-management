@@ -5,6 +5,7 @@ import Papa from 'papaparse';
 import Button from "@/components/ui/button/Button";
 import { Modal } from "../ui/modal";
 import { DownloadIcon, CloseLineIcon, ArrowUpIcon } from "@/icons";
+import { useLanguage } from '@/context/LanguageContext';
 
 interface BankAccount {
   id: string;
@@ -37,6 +38,7 @@ const ImportBankModal = ({ isOpen, onClose, onSuccess }: ImportBankModalProps) =
   const [csvData, setCsvData] = useState<BankAccountCsvRow[]>([]);
   const [fileName, setFileName] = useState('');
   const [step, setStep] = useState<'upload' | 'preview'>('upload');
+  const { t } = useLanguage();
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     const file = acceptedFiles[0];
@@ -102,22 +104,21 @@ const ImportBankModal = ({ isOpen, onClose, onSuccess }: ImportBankModalProps) =
     >
       <div>
         <h4 className="mb-6 text-lg font-medium text-gray-800 dark:text-white/90">
-          Import Bank
+          {t('bank.import.title')}
         </h4>
-
         {step === 'upload' ? (
           <>
             <div className="mb-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
               <h3 className="font-medium text-blue-900 dark:text-blue-200 mb-2">
-                Định dạng file CSV yêu cầu:
+                {t('bank.import.csv_format_title')}
               </h3>
               <div className="text-sm text-blue-800 dark:text-blue-300 space-y-1">
-                <p>• <strong>Note:</strong> Ghi chú hoặc tên chủ tài khoản</p>
-                <p>• <strong>Bank Name:</strong> Tên ngân hàng đầy đủ</p>
-                <p>• <strong>Routing Number:</strong> Số định tuyến ngân hàng</p>
-                <p>• <strong>Swift Code:</strong> Mã SWIFT quốc tế</p>
-                <p>• <strong>Account Number:</strong> Số tài khoản (đầy đủ, không rút gọn)</p>
-                <p>• <strong>Type:</strong> Loại tài khoản (Checking, Savings, Business)</p>
+                <p>• {t('bank.import.note_description')}</p>
+                <p>• {t('bank.import.bank_name_description')}</p>
+                <p>• {t('bank.import.routing_number_description')}</p>
+                <p>• {t('bank.import.swift_code_description')}</p>
+                <p>• {t('bank.import.account_number_description')}</p>
+                <p>• {t('bank.import.type_description')}</p>
               </div>
               <button
                 onClick={downloadTemplate}
@@ -126,10 +127,9 @@ const ImportBankModal = ({ isOpen, onClose, onSuccess }: ImportBankModalProps) =
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
-                Tải file mẫu CSV
+                {t('bank.import.download_template')}
               </button>
             </div>
-
             <div className="mb-4">
               <Button
                 variant="outline"
@@ -137,38 +137,36 @@ const ImportBankModal = ({ isOpen, onClose, onSuccess }: ImportBankModalProps) =
                 className="flex items-center gap-2"
               >
                 <DownloadIcon className="w-6 h-6" />
-                Tải file mẫu Excel/CSV
+                {t('bank.import.download_excel')}
               </Button>
             </div>
-
             <div
-                {...getRootProps()}
-                className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
-                    isDragActive
-                        ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/20'
-                        : 'border-gray-300 dark:border-gray-600 hover:border-brand-400'
-                }`}
+              {...getRootProps()}
+              className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
+                isDragActive
+                  ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/20'
+                  : 'border-gray-300 dark:border-gray-600 hover:border-brand-400'
+              }`}
             >
               <input {...getInputProps()} />
               <ArrowUpIcon className="w-12 h-12 mx-auto mb-4 text-gray-400" />
               <p className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-                {isDragActive ? 'Thả file vào đây...' : 'Import file'}
+                {isDragActive ? t('bank.import.drop_active') : t('bank.import.upload_file')}
               </p>
               <p className="text-sm text-gray-500 dark:text-gray-400">
-                Kéo thả file CSV vào đây hoặc nhấp để chọn file
+                {t('bank.import.drop_or_click')}
               </p>
             </div>
-
             <div className="mt-4 p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg">
               <p className="text-sm text-yellow-700 dark:text-yellow-300 font-medium mb-1">
-                ⚠️ Lưu ý quan trọng về định dạng số:
+                {t('bank.import.number_format_warning_title')}
               </p>
               <ul className="text-sm text-yellow-600 dark:text-yellow-400 list-disc list-inside space-y-1">
-                <li><strong>Account Number và Routing Number phải hiển thị đầy đủ</strong></li>
-                <li>Không được rút gọn thành dạng khoa học (VD: 1.55E+14)</li>
-                <li>Trong Excel: Format cells → Number → 0 decimal places</li>
-                <li>Hoặc thêm dấu ' trước số để Excel hiểu là text</li>
-                <li>Kiểm tra kỹ trước khi upload - sau khi xác nhận không thể sửa</li>
+                <li>{t('bank.import.number_format_warning_1')}</li>
+                <li>{t('bank.import.number_format_warning_2')}</li>
+                <li>{t('bank.import.number_format_warning_3')}</li>
+                <li>{t('bank.import.number_format_warning_4')}</li>
+                <li>{t('bank.import.number_format_warning_5')}</li>
               </ul>
             </div>
           </>
@@ -176,10 +174,11 @@ const ImportBankModal = ({ isOpen, onClose, onSuccess }: ImportBankModalProps) =
           <>
             <div className="mb-4">
               <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-                Kiểm tra thông tin trước khi import
+                {t('bank.import.review_title')}
               </h3>
               <p className="text-sm text-gray-600 dark:text-gray-400">
-                File: <strong>{fileName}</strong> ({csvData.length} tài khoản)
+                {t('bank.import.file')}:{' '}
+                <strong>{fileName}</strong> ({t('bank.import.accounts_count')})
               </p>
             </div>
 
@@ -212,10 +211,10 @@ const ImportBankModal = ({ isOpen, onClose, onSuccess }: ImportBankModalProps) =
 
             <div className="mt-6 flex gap-3">
               <Button onClick={handleConfirm} className="flex-1">
-                ✅ Xác nhận Import ({csvData.length} tài khoản)
+                {t('bank.import.confirm')}
               </Button>
               <Button variant="outline" onClick={handleReset} className="flex-1">
-                🔄 Upload lại file
+                {t('bank.import.reupload')}
               </Button>
             </div>
           </>
