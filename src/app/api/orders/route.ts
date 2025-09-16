@@ -103,6 +103,13 @@ export async function GET(req: NextRequest) {
             id: true,
             estSettlementAmount: true
           }
+        },
+        packages: {
+          select: {
+            packageId: true,
+            trackingNumber: true,
+            shippingProviderId: true,
+          }
         }
       },
       orderBy: {

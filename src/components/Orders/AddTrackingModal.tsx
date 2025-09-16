@@ -1,17 +1,20 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { X, Truck, Package } from 'lucide-react';
+import React, { useState, useEffect, use } from 'react';
+import { X, Truck, Package, ChevronDownIcon } from 'lucide-react';
 import { Modal } from '../ui/modal';
 import { httpClient } from '@/lib/http-client';
 import { useLoading } from '@/context/loadingContext';
+import Select from '../form/Select';
+import Label from '../form/Label';
 
 interface AddTrackingModalProps {
     isOpen: boolean;
     onClose: () => void;
-    onSave: (trackingNumber: string, shippingProviderId: string) => Promise<void>;
+    onSave: (trackingNumber: string, shippingProviderId: string, packageId?: string) => Promise<void>;
     orderId: string;
     loading?: boolean;
+    packages?: any[];
 }
 
 const AddTrackingModal: React.FC<AddTrackingModalProps> = ({
@@ -19,12 +22,15 @@ const AddTrackingModal: React.FC<AddTrackingModalProps> = ({
     onClose,
     onSave,
     orderId,
+    packages,
     loading = false
 }) => {
+    const [packageId, setPackageId] = useState('');
     const [trackingNumber, setTrackingNumber] = useState('');
     const [shippingProvider, setShippingProvider] = useState('');
     const [availableProviders, setAvailableProviders] = useState<any[]>([]);
     const { showLoading, hideLoading } = useLoading();
+    const [disable, setDisable] = useState(false);
 
     // Reset form when modal opens
     useEffect(() => {
@@ -32,7 +38,7 @@ const AddTrackingModal: React.FC<AddTrackingModalProps> = ({
             setTrackingNumber('');
             setShippingProvider('');
             setAvailableProviders([]);
-            
+
             // Fetch shipping providers for the order
             if (orderId) {
                 fetchShippingProviders();
@@ -40,11 +46,26 @@ const AddTrackingModal: React.FC<AddTrackingModalProps> = ({
         }
     }, [isOpen, orderId]);
 
+    useEffect(() => {
+        if (packageId) {
+            const selectedPackage = packages?.find(p => p.packageId === packageId);
+            if (selectedPackage?.shippingProviderId) {
+                setShippingProvider(selectedPackage.shippingProviderId);
+                setTrackingNumber(selectedPackage.trackingNumber || '');
+                setDisable(true);
+            } else {
+                setShippingProvider('');
+                setTrackingNumber('');
+                setDisable(false);
+            }
+        }
+    }, [packageId]);
+
     const fetchShippingProviders = async () => {
         showLoading("Loading shipping providers...");
         try {
             const response = await httpClient.get(`/tiktok/Fulfillment/shipping-provider?orderId=${orderId}`);
-            
+
             if (Array.isArray(response) && response.length > 0) {
                 // Use API providers if available
                 setAvailableProviders(response);
@@ -60,7 +81,7 @@ const AddTrackingModal: React.FC<AddTrackingModalProps> = ({
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        
+
         if (!trackingNumber.trim() || !shippingProvider.trim()) {
             alert('Please fill in both tracking number and shipping provider');
             return;
@@ -68,7 +89,7 @@ const AddTrackingModal: React.FC<AddTrackingModalProps> = ({
 
         showLoading("Saving tracking information...");
         try {
-            await onSave(trackingNumber.trim(), shippingProvider.trim());
+            await onSave(trackingNumber.trim(), shippingProvider.trim(), packageId);
             onClose();
         } catch (error) {
             console.error('Error saving tracking information:', error);
@@ -76,6 +97,10 @@ const AddTrackingModal: React.FC<AddTrackingModalProps> = ({
             hideLoading();
         }
     };
+
+    const handleChangePackage = (val: string) => {
+        setPackageId(val);
+    }
 
     if (!isOpen) return null;
 
@@ -106,6 +131,23 @@ const AddTrackingModal: React.FC<AddTrackingModalProps> = ({
                 </div>
 
                 <div className="space-y-4">
+                    {/* Package list */}
+                    {(packages && packages.length > 0) && (
+                        <div>
+                            <Label>Package</Label>
+                            <div className="relative">
+                                <Select
+                                    options={packages?.map(x => ({ value: x.packageId, label: x.packageId })) ?? []}
+                                    onChange={(val) => handleChangePackage(val)}
+                                    enablePlaceholder={false}
+                                    className="dark:bg-dark-900"
+                                />
+                                <span className="absolute text-gray-500 -translate-y-1/2 pointer-events-none right-3 top-1/2 dark:text-gray-400">
+                                    <ChevronDownIcon />
+                                </span>
+                            </div>
+                        </div>
+                    )}
                     {/* Tracking Number */}
                     <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -114,6 +156,7 @@ const AddTrackingModal: React.FC<AddTrackingModalProps> = ({
                         <div className="relative">
                             <Package className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
                             <input
+                                disabled={disable}
                                 type="text"
                                 value={trackingNumber}
                                 onChange={(e) => setTrackingNumber(e.target.value)}
@@ -134,6 +177,7 @@ const AddTrackingModal: React.FC<AddTrackingModalProps> = ({
                             onChange={(e) => setShippingProvider(e.target.value)}
                             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                             required
+                            disabled={disable}
                         >
                             <option value="">
                             </option>
@@ -141,7 +185,7 @@ const AddTrackingModal: React.FC<AddTrackingModalProps> = ({
                                 // Handle both string and object providers
                                 const providerName = typeof provider === 'string' ? provider : provider.name || provider.id;
                                 const providerDisplayName = typeof provider === 'string' ? provider : provider.displayName || provider.name || provider.id;
-                                
+
                                 return (
                                     <option key={`${providerName}-${index}`} value={provider.id}>
                                         {providerDisplayName}
@@ -149,7 +193,7 @@ const AddTrackingModal: React.FC<AddTrackingModalProps> = ({
                                 );
                             })}
                         </select>
-                        
+
                         {/* Custom provider input */}
                         {shippingProvider === 'Other' && (
                             <input
@@ -174,7 +218,7 @@ const AddTrackingModal: React.FC<AddTrackingModalProps> = ({
                     </button>
                     <button
                         type="submit"
-                        disabled={!trackingNumber.trim() || !shippingProvider.trim()}
+                        disabled={!trackingNumber.trim() || !shippingProvider.trim() || disable}
                         className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         Add Tracking

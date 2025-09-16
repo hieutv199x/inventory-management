@@ -40,6 +40,11 @@ interface Order {
         shopId: string;
         managedName?: string;
     };
+    packages?: { // Added packages field
+        packageId: string;
+        trackingNumber: string;
+        shippingProviderId?: string;
+    }[],
     shopId: string;
     lineItemsCount?: number;
     canSplitPackages?: boolean; // Added canSplitPackages field
@@ -422,14 +427,15 @@ export default function OrdersPage() {
         setShowTrackingModal(true);
     };
 
-    const handleSaveTracking = async (trackingNumber: string, shippingProviderId: string) => {
+    const handleSaveTracking = async (trackingNumber: string, shippingProviderId: string, packageId?: string) => {
         if (!selectedOrderForTracking) return;
 
         try {
             const res = await httpClient.post(`/tiktok/Fulfillment/add-tracking`, {
                 orderId: selectedOrderForTracking.orderId,
                 trackingNumber,
-                shippingProviderId
+                shippingProviderId,
+                packageId: packageId || ""
             });
 
             fetchOrders();
@@ -1065,6 +1071,7 @@ export default function OrdersPage() {
                 onClose={closeTrackingModal}
                 onSave={handleSaveTracking}
                 orderId={selectedOrderForTracking?.orderId || ''}
+                packages={selectedOrderForTracking?.packages || []}
             />
 
             {/* Sync Order Modal */}
