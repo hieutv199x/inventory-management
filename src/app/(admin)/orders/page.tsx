@@ -863,7 +863,7 @@ export default function OrdersPage() {
                                                             Track: {parseChannelData(order?.channelData ?? "").trackingNumber} - {parseChannelData(order?.channelData ?? "").shippingProvider}
                                                         </div>
                                                     )}
-                                                    {((order?.mustSplitPackages || order?.canSplitPackages) && order?.customStatus !== 'SPLITTED') && (
+                                                    {((order?.mustSplitPackages || order?.canSplitPackages) && order?.customStatus === 'SPLITTED') && (
                                                         <div className="text-xs font-mono text-orange-600 truncate max-w-50">
                                                             Đã split order
                                                         </div>

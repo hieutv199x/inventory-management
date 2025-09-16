@@ -366,6 +366,25 @@ export default function Shops() {
     setUpdatingManagedName({});
   };
 
+  // Refresh token state
+  const [refreshingToken, setRefreshingToken] = useState<{ [id: string]: boolean }>({});
+
+  const handleRefreshToken = async (shop: Shop) => {
+    setRefreshingToken(prev => ({ ...prev, [shop.id]: true }));
+    setError('');
+    setSuccess('');
+    try {
+      showLoading('Refreshing token...');
+      await httpClient.get(`/tiktok/refresh-token?shopId=${shop.shopId}`);
+      setSuccess(`Làm mới token thành công cho shop ${shop.managedName || shop.shopName || shop.shopId}`);
+    } catch (e: any) {
+      setError(e?.message || 'Không thể làm mới token');
+    } finally {
+      setRefreshingToken(prev => ({ ...prev, [shop.id]: false }));
+      hideLoading();
+    }
+  };
+
   if (loading) {
     return (
       <div className="p-6">
@@ -614,6 +633,17 @@ export default function Shops() {
                     <FaEye className="h-3 w-3" />
                     <span>Chi tiết</span>
                   </button>
+                  <LoadingButton
+                    onClick={() => handleRefreshToken(shop)}
+                    loading={!!refreshingToken[shop.id]}
+                    size="sm"
+                    variant="ghost"
+                    className="flex-1 px-3 py-1.5 text-xs font-medium text-indigo-600 hover:text-indigo-700 border border-indigo-300 dark:text-indigo-400 dark:hover:text-indigo-300 dark:border-indigo-700 rounded hover:bg-indigo-50 dark:hover:bg-indigo-900 transition-colors flex items-center justify-center space-x-1"
+                    title="Làm mới token"
+                  >
+                    <FaKey className="h-3 w-3" />
+                    <span>Token</span>
+                  </LoadingButton>
                   {canDelete && (
                     <button
                       onClick={() => {
@@ -802,6 +832,17 @@ export default function Shops() {
                             <FaEye className="h-3 w-3" />
                             <span>Chi tiết</span>
                           </button>
+                          <LoadingButton
+                            onClick={() => handleRefreshToken(shop)}
+                            loading={!!refreshingToken[shop.id]}
+                            size="sm"
+                            variant="ghost"
+                            className="inline-flex items-center space-x-1 text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300"
+                            title="Làm mới token"
+                          >
+                            <FaKey className="h-3 w-3" />
+                            <span>Làm mới</span>
+                          </LoadingButton>
                           {canDelete && (
                             <button
                               onClick={() => {

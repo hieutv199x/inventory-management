@@ -242,7 +242,7 @@ class AccessTokenTool {
     const path = auth_host + refresh_token_path;
     // 请求逻辑
     const qs = {
-      grant_type,
+      grant_type: "refresh_token",
       refresh_token,
       app_key: _app_key,
       app_secret: _app_secret,
