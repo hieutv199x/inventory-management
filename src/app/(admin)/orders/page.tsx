@@ -71,6 +71,7 @@ interface RecipientAddress {
     name?: string;
     phoneNumber?: string;
     fullAddress?: string;
+    postalCode?: string;
 }
 
 interface Shop {
@@ -378,6 +379,7 @@ export default function OrdersPage() {
             `${order.recipientAddress?.name || 'N/A'}`,
             `${order.recipientAddress?.phoneNumber || 'N/A'}`,
             `${order.recipientAddress?.fullAddress || 'N/A'}`,
+            `${order.recipientAddress?.postalCode || 'N/A'}`,
         ].join('\n');
         return customerInfo;
     };
@@ -843,6 +845,9 @@ export default function OrdersPage() {
                                                     </div>
                                                     <div className="text-xs text-gray-500 truncate max-w-48 dark:text-gray-400">
                                                         {order.recipientAddress?.fullAddress || 'N/A'}
+                                                    </div>
+                                                    <div className="text-xs text-gray-500 truncate max-w-48 dark:text-gray-400">
+                                                        {order.recipientAddress?.postalCode || 'N/A'}
                                                     </div>
                                                 </div>
                                             </td>
