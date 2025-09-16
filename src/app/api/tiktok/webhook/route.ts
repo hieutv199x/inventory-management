@@ -47,6 +47,9 @@ interface TikTokWebhookData {
     };
 }
 
+// Optional: allow a bit more time for inline sync on Vercel (adjust as needed)
+export const maxDuration = 25;
+
 export async function POST(request: NextRequest) {
     try {
         const body = await request.text();
@@ -189,70 +192,60 @@ async function handleOrderStatusChange(webhookData: TikTokWebhookData) {
         // Always sync the order to get latest data including recipient address
         console.log(`Syncing order ${order_id} to get latest data including status change`);
 
-        // Use syncOrderById to handle both create and update with full data
-        setTimeout(async () => {
-            try {
-                const syncResult = await syncOrderById(shop_id, order_id, {
-                    create_notifications: false, // We'll create specific notifications below
-                    timeout_seconds: 120
-                });
+        // Previously this used setTimeout. In Vercel serverless, setTimeout after returning
+        // is unreliable because the lambda may freeze. So we do it inline.
+        try {
+            const syncResult = await syncOrderById(shop_id, order_id, {
+                create_notifications: false,
+                timeout_seconds: 120
+            });
+            console.log(`Webhook order sync completed:`, syncResult);
 
-                console.log(`Webhook order sync completed:`, syncResult);
+            const updatedOrder = await prisma.order.findFirst({
+                where: { orderId: order_id, shopId: credentials.id },
+                include: { payment: true, shop: true, recipientAddress: true }
+            });
 
-                // After sync, get the updated order to create proper notifications
-                const updatedOrder = await prisma.order.findFirst({
-                    where: {
-                        orderId: order_id,
-                        shopId: credentials.id
-                    },
-                    include: {
-                        payment: true,
-                        shop: true,
-                        recipientAddress: true
-                    }
-                });
-
-                if (updatedOrder) {
-                    // Create notification for order status change (only if status actually changed)
-                    if (credentials.id) {
-                        await NotificationService.createOrderNotification(
-                            NotificationType.ORDER_STATUS_CHANGE,
-                            updatedOrder,
-                            credentials.id,
-                            {
-                                previousStatus: previousStatus,
-                                newStatus: order_status,
-                                webhookTimestamp: webhookData.timestamp,
-                                isOnHold: is_on_hold_order,
-                                notificationId: webhookData.tts_notification_id,
-                                syncTriggered: true
-                            }
-                        );
-                    }
-
-                    // Handle specific status changes for business logic
-                    await handleSpecificStatusChanges(updatedOrder.id, order_status ?? '', webhookData, credentials.id, updatedOrder.createTime ?? Date.now() / 1000);
+            if (updatedOrder) {
+                if (credentials.id) {
+                    await NotificationService.createOrderNotification(
+                        NotificationType.ORDER_STATUS_CHANGE,
+                        updatedOrder,
+                        credentials.id,
+                        {
+                            previousStatus,
+                            newStatus: order_status,
+                            webhookTimestamp: webhookData.timestamp,
+                            isOnHold: is_on_hold_order,
+                            notificationId: webhookData.tts_notification_id,
+                            syncTriggered: true
+                        }
+                    );
                 }
-
-            } catch (syncError) {
-                console.error(`Failed to sync order ${order_id} from webhook:`, syncError);
-
-                // Create error notification
-                await NotificationService.createNotification({
-                    type: NotificationType.WEBHOOK_ERROR,
-                    title: 'Order Sync Failed',
-                    message: `Failed to sync order ${order_id} after status change: ${syncError instanceof Error ? syncError.message : String(syncError)}`,
-                    userId: 'system',
-                    data: {
-                        webhookType: 'ORDER_STATUS_CHANGE',
-                        orderId: order_id,
-                        shopId: shop_id,
-                        error: syncError instanceof Error ? syncError.message : String(syncError),
-                        timestamp: webhookData.timestamp
-                    }
-                });
+                await handleSpecificStatusChanges(
+                    updatedOrder.id,
+                    order_status ?? '',
+                    webhookData,
+                    credentials.id,
+                    updatedOrder.createTime ?? Date.now() / 1000
+                );
             }
-        }, 1000); // Delay to ensure webhook response is sent first
+        } catch (syncError) {
+            console.error(`Failed to sync order ${order_id} from webhook:`, syncError);
+            await NotificationService.createNotification({
+                type: NotificationType.WEBHOOK_ERROR,
+                title: 'Order Sync Failed',
+                message: `Failed to sync order ${order_id} after status change: ${syncError instanceof Error ? syncError.message : String(syncError)}`,
+                userId: 'system',
+                data: {
+                    webhookType: 'ORDER_STATUS_CHANGE',
+                    orderId: order_id,
+                    shopId: shop_id,
+                    error: syncError instanceof Error ? syncError.message : String(syncError),
+                    timestamp: webhookData.timestamp
+                }
+            });
+        }
 
     } catch (error) {
         console.error('Error handling order status change:', error);
@@ -734,8 +727,3 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ error: 'Invalid verification' }, { status: 403 });
 }
-
-function syncOrderAttributes(prisma: PrismaClient<Prisma.PrismaClientOptions, never, DefaultArgs>, arg1: { shop_id: string; order_id: string; }) {
-    throw new Error("Function not implemented.");
-}
-
