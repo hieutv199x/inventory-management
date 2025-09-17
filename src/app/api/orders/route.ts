@@ -59,7 +59,7 @@ export async function GET(req: NextRequest) {
     if (customStatus && customStatus !== 'all') {
       // You can implement custom status logic here
       // For now, just use regular status
-      where.status = customStatus;
+      where.customStatus = customStatus;
     }
 
     // Date range filter - support both timestamp and date string
