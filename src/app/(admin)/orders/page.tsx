@@ -881,7 +881,7 @@ export default function OrdersPage() {
                                             <td className="px-6 py-4">
                                                 <div className="flex flex-col space-y-1">
                                                     <div className="text-xs text-blue-600 dark:text-blue-400">
-                                                        {t(`orders.items_label_${order.lineItemsCount || order.lineItems?.length || 0}`)}
+                                                        {`${order.lineItemsCount || order.lineItems?.length || 0} ${t(`orders.items_label`)}`}
                                                     </div>
                                                     {parseChannelData(order?.channelData ?? "").trackingNumber && (
                                                         <div className="text-xs font-mono text-purple-600 truncate max-w-50">
