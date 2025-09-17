@@ -1,6 +1,7 @@
 import { PrismaClient, Channel, NotificationType } from "@prisma/client";
 import { TikTokShopNodeApiClient, Order202309GetOrderListRequestBody } from "@/nodejs_sdk";
 import { NotificationService } from "@/lib/notification-service";
+import { syncOrderCanSplitOrNot } from "./tiktok-order-sync-fulfillment-state";
 
 const prisma = new PrismaClient();
 
@@ -501,6 +502,12 @@ export class TikTokOrderSync {
                                 await this.upsertOrderPackage(existingOrderMap.get(order.id)!, pkg);
                             }
                         }
+
+                        // Sync order attributes
+                        await syncOrderCanSplitOrNot(prisma, {
+                            shop_id: shopId,
+                            order_ids: [order.id]
+                        });
 
                         updated++;
                     } else {
