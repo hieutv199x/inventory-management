@@ -56,10 +56,28 @@ export async function GET(req: NextRequest) {
     }
 
     // Add customStatus filter
-    if (customStatus && customStatus === 'NOT_SET') {
-      where.customStatus = { notIn: ['DELIVERED', 'SPLITTED'] };
-    } else if (customStatus && customStatus !== 'all') {
-      where.customStatus = customStatus;
+    if (customStatus && customStatus !== 'all') {
+      (where.AND ??= []);
+
+      if (customStatus === 'NOT_SET') {
+        // Include documents where customStatus is missing, null, empty string, or any value not in ['DELIVERED','SPLITTED']
+        where.AND.push({
+          OR: [
+            { customStatus: { isSet: false } },
+            { customStatus: null },
+            { customStatus: '' },
+            { customStatus: { notIn: ['DELIVERED', 'SPLITTED'] } },
+          ],
+        });
+      } else {
+        // Support CSV values e.g. ?customStatus=SPLITTED,DELIVERED
+        const list = customStatus.split(',').map(s => s.trim()).filter(Boolean);
+        if (list.length > 1) {
+          where.AND.push({ customStatus: { in: list } });
+        } else {
+          where.AND.push({ customStatus });
+        }
+      }
     }
 
     // Date range filter - support both timestamp and date string
