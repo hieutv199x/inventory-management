@@ -905,11 +905,6 @@ export default function OrdersPage() {
                                                             'N/A'
                                                         }
                                                     </div>
-                                                    {order.payment?.subTotal && (
-                                                        <div className="text-xs text-gray-500 font-mono">
-                                                            {t('orders.subtotal_label')} {formatCurrency(order.payment.subTotal, order.payment.currency)}
-                                                        </div>
-                                                    )}
                                                     {order.unsettledTransactions && order.unsettledTransactions.length > 0 && (
                                                         <div className="text-xs text-red-500 font-mono">
                                                             {t('orders.estimated_label')} {formatCurrency(order.unsettledTransactions[0]?.estSettlementAmount, order.payment?.currency || 'USD')}
