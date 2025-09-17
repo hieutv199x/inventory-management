@@ -56,7 +56,9 @@ export async function GET(req: NextRequest) {
     }
 
     // Add customStatus filter
-    if (customStatus && customStatus !== 'all') {
+    if (customStatus && customStatus === 'NOT_SET') {
+      where.customStatus = null;
+    } else if (customStatus && customStatus !== 'all') {
       // You can implement custom status logic here
       // For now, just use regular status
       where.customStatus = customStatus;
