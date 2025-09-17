@@ -1071,3 +1071,32 @@ model SchedulerConfig {
   
   @@map("scheduler_config")
 }
+
+model TikTokWebhook {
+  id                String   @id @default(auto()) @map("_id") @db.ObjectId
+  type              Int
+  ttsNotificationId String?
+  shopId            String
+  timestamp         Int?
+  signature         String?
+  verified          Boolean  @default(false)
+
+  // Raw payload and parsed pieces
+  rawBody           String
+  data              Json?
+  headers           Json?
+
+  // Common identifiers for quick lookup
+  orderId           String?
+  orderStatus       String?
+  cancellationId    String?
+  cancellationStatus String?
+
+  // Processing
+  status            String   @default("RECEIVED") // RECEIVED | PROCESSED | FAILED
+  createdAt         DateTime @default(now())
+  processedAt       DateTime?
+
+  @@index([shopId, orderId])
+  @@index([createdAt])
+}
