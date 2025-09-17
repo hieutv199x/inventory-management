@@ -498,6 +498,11 @@ export class TikTokOrderSync {
                             await this.upsertRecipientAddress(existingOrderMap.get(order.id)!, order.recipientAddress);
                         }
                         if(order.packages && order.packages.length > 0){
+                            await prisma.orderPackage.deleteMany({
+                                where: {
+                                    orderId: existingOrderMap.get(order.id)!,
+                                }
+                            });
                             for(const pkg of order.packages){
                                 await this.upsertOrderPackage(existingOrderMap.get(order.id)!, pkg);
                             }

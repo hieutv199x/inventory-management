@@ -33,6 +33,21 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: "Not a TikTok shop" }, { status: 400 });
         }
 
+        const order = await prisma.order.findUnique({
+            where: {
+                orderId: orderId,
+                shopId: shopId
+            }
+        });
+
+        if (!order) {
+            return NextResponse.json({ error: "Order not found in this shop" }, { status: 404 });
+        }
+
+        if (order.customStatus === 'SPLITTED') {
+            return NextResponse.json({ error: "Order has already been split" }, { status: 400 });
+        }
+
         const app_key = credentials.app.appKey;
         const app_secret = credentials.app.appSecret;
         const baseUrl = credentials.app.BaseUrl ?? process.env.TIKTOK_BASE_URL;
@@ -74,9 +89,15 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'TikTok API error', details: body.message }, { status: 500 });
         }
 
+        await prisma.orderPackage.deleteMany({
+            where: {
+                orderId: order.id
+            }
+        });
+
         for (const packageInfo of body.data?.packages || []) {
             if (!packageInfo.id) continue;
-            await syncPackageById(shopId, orderId, { id: packageInfo.id });
+            await syncPackageById(credentials.shopId, orderId, { id: packageInfo.id });
         }
         
         // Update order customStatus to SPLITTED

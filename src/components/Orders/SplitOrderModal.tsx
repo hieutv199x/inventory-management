@@ -166,6 +166,7 @@ const SplitOrderModal: React.FC<SplitOrderModalProps> = ({ isOpen, order, onClos
             await onSubmit(payload);
         } finally {
             setSubmitting(false);
+            onClose();
         }
     };
 

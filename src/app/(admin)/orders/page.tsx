@@ -473,12 +473,12 @@ export default function OrdersPage() {
                 groups: data.splittable_groups
             });
             toast.success(t('orders.split_success'));
-            closeSplitModal();
             fetchOrders();
         } catch (err) {
             console.error('Failed to split order', err);
             toast.error(t('orders.split_failed'));
         } finally {
+            closeSplitModal();
             hideLoading();
         }
     };
