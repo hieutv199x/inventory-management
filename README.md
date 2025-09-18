@@ -1,173 +1,58 @@
-# TailAdmin Next.js - Free Next.js Tailwind Admin Dashboard Template
+# 9Connect — Project Overview
 
-TailAdmin is a free and open-source admin dashboard template built on **Next.js and Tailwind CSS** providing developers with everything they need to create a feature-rich and data-driven: back-end, dashboard, or admin panel solution for any sort of web project.
+9Connect is a Next.js-based operations hub to manage TikTok Shop orders, fulfillment, finance touch points, and internal workflows. It adds domain features on top of a Tailwind/Next.js admin template.
 
-![TailAdmin - Next.js Dashboard Preview](./banner.png)
+What’s included
+- Orders Management
+  - Server-driven pagination, filters (shop, status/customStatus, date range), and keyword search
+  - Status insight cards with backend counts and 1-click filtering
+  - View order details; sync latest order detail
+  - Add tracking (per package/provider), split orders into multiple packages
+  - Custom internal statuses (e.g., DELIVERED, SPLITTED)
+  - Unsettled transactions estimate display
+- Logistics Integration
+  - Shipping providers discovery via TikTok Logistics API
+  - Response caching by shopId with Vercel-friendly headers (s-maxage, SWR)
+- Bank Management
+  - CSV import, assign to shops, audit history, details modal
+  - Role-based actions (ADMIN/ACCOUNTANT) and debounced search with pagination
+- Internationalization (en/vi) via LanguageContext
+- Toast notifications, theme, loading overlay, and sidebar layout
 
-With TailAdmin Next.js, you get access to all the necessary dashboard UI components, elements, and pages required to build a high-quality and complete dashboard or admin panel. Whether you're building a dashboard or admin panel for a complex web application or a simple website. 
+Key app routes
+- Orders: src/app/(admin)/orders/page.tsx
+  - Uses httpClient to hit /orders endpoints and status-counts API
+  - Status cards are clickable to set filter by status
+- Bank: src/app/(admin)/(bank)/bank/page.tsx
+  - CSV import, assign to shop, delete and details modals
+- Layout: src/app/layout.tsx
+  - Providers: Auth, Language, Theme, Loading, Sidebar + react-hot-toast
 
-TailAdmin utilizes the powerful features of **Next.js 15** and common features of Next.js such as server-side rendering (SSR), static site generation (SSG), and seamless API route integration. Combined with the advancements of **React 19** and the robustness of **TypeScript**, TailAdmin is the perfect solution to help get your project up and running quickly.
+Important API routes
+- TikTok Fulfillment (shipping providers)
+  - src/app/api/tiktok/Fulfillment/shipping-provider/route.ts
+  - Returns providers per shop (resolved via orderId); in-memory cache by shopId + Cache-Control s-maxage/SWR for Vercel
+- Orders status counts
+  - src/app/api/orders/status-counts/route.ts (if present)
+  - Aggregates counts per TikTok status using current filters (shopId, time, keyword, customStatus)
 
-## Overview
+SDKs (auto-generated)
+- TikTok Shop SDK models: src/nodejs_sdk/...
+- Amazon SP-API modules: src/amazon_sdk/...
 
-TailAdmin provides essential UI components and layouts for building feature-rich, data-driven admin dashboards and control panels. It's built on:
+Environment variables
+- TIKTOK_BASE_URL: Optional TikTok API base URL
+- TIKTOK_SHIPPING_PROVIDER_CACHE_TTL_S: Cache TTL for shipping providers (seconds, default 300)
+- Prisma DATABASE_URL and usual Next.js envs
 
-- Next.js 15.x
-- React 19
-- TypeScript
-- Tailwind CSS V4
+Local development
+- Node 18+ (20+ recommended)
+- npm install
+- npm run dev
+- Optional seed users: npx prisma db push && ts-node prisma/seed.ts
 
-### Quick Links
-- [✨ Visit Website](https://tailadmin.com)
-- [📄 Documentation](https://tailadmin.com/docs)
-- [⬇️ Download](https://tailadmin.com/download)
-- [🖌️ Figma Design File (Community Edition)](https://www.figma.com/community/file/1463141366275764364)
-- [⚡ Get PRO Version](https://tailadmin.com/pricing)
-
-### Demos
-- [Free Version](https://nextjs-free-demo.tailadmin.com)
-- [Pro Version](https://nextjs-demo.tailadmin.com)
-
-### Other Versions
-- [HTML Version](https://github.com/TailAdmin/tailadmin-free-tailwind-dashboard-template)
-- [React Version](https://github.com/TailAdmin/free-react-tailwind-admin-dashboard)
-- [Vue.js Version](https://github.com/TailAdmin/vue-tailwind-admin-dashboard)
-
-## Installation
-
-### Prerequisites
-To get started with TailAdmin, ensure you have the following prerequisites installed and set up:
-
-- Node.js 18.x or later (recommended to use Node.js 20.x or later)
-
-### Cloning the Repository
-Clone the repository using the following command:
-
-```bash
-git clone https://github.com/TailAdmin/free-nextjs-admin-dashboard.git
-```
-
-> Windows Users: place the repository near the root of your drive if you face issues while cloning.
-
-1. Install dependencies:
-    ```bash
-    npm install
-    # or
-    yarn install
-    ```
-    > Use `--legacy-peer-deps` flag if you face peer-dependency error during installation.
-
-2. Start the development server:
-    ```bash
-    npm run dev
-    # or
-    yarn dev
-    ```
-
-## Components
-
-TailAdmin is a pre-designed starting point for building a web-based dashboard using Next.js and Tailwind CSS. The template includes:
-
-- Sophisticated and accessible sidebar
-- Data visualization components
-- Profile management and custom 404 page
-- Tables and Charts(Line and Bar)
-- Authentication forms and input elements
-- Alerts, Dropdowns, Modals, Buttons and more
-- Can't forget Dark Mode 🕶️
-
-All components are built with React and styled using Tailwind CSS for easy customization.
-
-## Feature Comparison
-
-### Free Version
-- 1 Unique Dashboard
-- 30+ dashboard components
-- 50+ UI elements
-- Basic Figma design files
-- Community support
-
-### Pro Version
-- 5 Unique Dashboards: Analytics, Ecommerce, Marketing, CRM, Stocks (more coming soon)
-- 400+ dashboard components and UI elements
-- Complete Figma design file
-- Email support
-
-To learn more about pro version features and pricing, visit our [pricing page](https://tailadmin.com/pricing).
-
-## Changelog
-
-### Version 2.0.2 - [March 25, 2025]
-
-- Upgraded to Next v15.2.3 for [CVE-2025-29927](https://nextjs.org/blog/cve-2025-29927) concerns
-- Included overrides vectormap for packages to prevent peer dependency errors during installation.
-- Migrated from react-flatpickr to flatpickr package for React 19 support
-
-### Version 2.0.1 - [February 27, 2025]
-
-#### Update Overview
-
-- Upgraded to Tailwind CSS v4 for better performance and efficiency.
-- Updated class usage to match the latest syntax and features.
-- Replaced deprecated class and optimized styles.
-
-#### Next Steps
-
-- Run npm install or yarn install to update dependencies.
-- Check for any style changes or compatibility issues.
-- Refer to the Tailwind CSS v4 [Migration Guide](https://tailwindcss.com/docs/upgrade-guide) on this release. if needed.
-- This update keeps the project up to date with the latest Tailwind improvements. 🚀
-
-### v2.0.0 (February 2025)
-A major update focused on Next.js 15 implementation and comprehensive redesign.
-
-#### Major Improvements
-- Complete redesign using Next.js 15 App Router and React Server Components
-- Enhanced user interface with Next.js-optimized components
-- Improved responsiveness and accessibility
-- New features including collapsible sidebar, chat screens, and calendar
-- Redesigned authentication using Next.js App Router and server actions
-- Updated data visualization using ApexCharts for React
-
-#### Breaking Changes
-
-- Migrated from Next.js 14 to Next.js 15
-- Chart components now use ApexCharts for React
-- Authentication flow updated to use Server Actions and middleware
-
-[Read more](https://tailadmin.com/docs/update-logs/nextjs) on this release.
-
-#### Breaking Changes
-- Migrated from Next.js 14 to Next.js 15
-- Chart components now use ApexCharts for React
-- Authentication flow updated to use Server Actions and middleware
-
-### v1.3.4 (July 01, 2024)
-- Fixed JSvectormap rendering issues
-
-### v1.3.3 (June 20, 2024)
-- Fixed build error related to Loader component
-
-### v1.3.2 (June 19, 2024)
-- Added ClickOutside component for dropdown menus
-- Refactored sidebar components
-- Updated Jsvectormap package
-
-### v1.3.1 (Feb 12, 2024)
-- Fixed layout naming consistency
-- Updated styles
-
-### v1.3.0 (Feb 05, 2024)
-- Upgraded to Next.js 14
-- Added Flatpickr integration
-- Improved form elements
-- Enhanced multiselect functionality
-- Added default layout component
-
-## License
-
-TailAdmin Next.js Free Version is released under the MIT License.
-
-## Support
-
-If you find this project helpful, please consider giving it a star on GitHub. Your support helps us continue developing and maintaining this template.
+Deployment (Vercel)
+- API responses use Cache-Control with s-maxage and stale-while-revalidate
+- For best caching of shipping providers, call with shopId:
+  - /api/tiktok/Fulfillment/shipping-provider?shopId=SHOP_ID
+- In-memory cache is per instance; consider Redis/Vercel KV for multi-region consistency
