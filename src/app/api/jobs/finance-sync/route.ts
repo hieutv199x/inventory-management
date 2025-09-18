@@ -52,7 +52,7 @@ export async function GET(req: NextRequest) {
         // Payments
         try {
           results.payments = await syncPayments(prisma, {
-            shop_id: shopId,
+            shop_id: shop.id,
             search_time_ge,
             search_time_lt,
             page_size: 50,
@@ -73,7 +73,7 @@ export async function GET(req: NextRequest) {
         // Unsettled Transactions
         try {
           results.unsettled_transactions = await syncUnsettledTransactions(prisma, {
-            shop_id: shopId,
+            shop_id: shop.id,
             search_time_ge,
             search_time_lt,
             page_size: 50,
