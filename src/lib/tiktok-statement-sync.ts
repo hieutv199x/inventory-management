@@ -90,8 +90,8 @@ export async function syncStatements(
         await upsertStatement(prisma, shop.id, statement);
         statementsSynced++;
       } catch (err: any) {
-        errors.push(`Statement ${statement.statementId}: ${err.message}`);
-        console.error(`Failed to sync statement ${statement.statementId}:`, err);
+        errors.push(`Statement ${statement.id}: ${err.message}`);
+        console.error(`Failed to sync statement ${statement.id}:`, err);
       }
     }
 
@@ -107,15 +107,15 @@ export async function syncStatements(
             credentials, 
             prisma, 
             shop.id, 
-            statement.statementId
+            statement.id
           );
           transactionsSynced++;
           
           // Rate limiting between statement transaction calls
           await new Promise(resolve => setTimeout(resolve, 200));
         } catch (transactionErr: any) {
-          errors.push(`Statement ${statement.statementId} transactions: ${transactionErr.message}`);
-          console.error(`Failed to fetch transactions for statement ${statement.statementId}:`, transactionErr);
+          errors.push(`Statement ${statement.id} transactions: ${transactionErr.message}`);
+          console.error(`Failed to fetch transactions for statement ${statement.id}:`, transactionErr);
         }
       }
       
@@ -213,7 +213,7 @@ async function fetchAllStatements(
 
 async function upsertStatement(prisma: PrismaClient, shopId: string, statement: any) {
   const statementData = {
-    statementId: statement.statementId,
+    statementId: statement.id,
     channel: Channel.TIKTOK,
     statementTime: statement.statementTime,
     settlementAmount: statement.settlementAmount,
@@ -232,11 +232,11 @@ async function upsertStatement(prisma: PrismaClient, shopId: string, statement: 
   };
 
   await prisma.statement.upsert({
-    where: { statementId: statement.statementId },
+    where: { statementId: statement.id },
     update: {
       statementTime: statementData.statementTime,
       settlementAmount: statementData.settlementAmount,
-      currency: statementData.currency,
+      currency: statementData.currency, 
       paymentStatus: statementData.paymentStatus,
       paymentId: statementData.paymentId,
       channelData: statementData.channelData,
@@ -245,7 +245,7 @@ async function upsertStatement(prisma: PrismaClient, shopId: string, statement: 
     create: statementData,
   });
 
-  console.log(`Upserted statement: ${statement.statementId}`);
+  console.log(`Upserted statement: ${statement.id}`);
 }
 
 async function fetchAndStoreStatementTransactions(
@@ -261,10 +261,12 @@ async function fetchAndStoreStatementTransactions(
     // Call StatementsStatementIdStatementTransactionsGet API
     const transactionsResult = await client.api.FinanceV202309Api.StatementsStatementIdStatementTransactionsGet(
       statementId,
+      "order_create_time", // sortField - must be "order_create_time" according to validation rule
       credentials.accessToken,
       "application/json",
-      50, // page_size
       "", // page_token (start with empty)
+      "ASC", // sortOrder
+      50, // page_size
       credentials.shopCipher
     );
 
@@ -279,10 +281,12 @@ async function fetchAndStoreStatementTransactions(
         try {
           const nextPageResult = await client.api.FinanceV202309Api.StatementsStatementIdStatementTransactionsGet(
             statementId,
+            "order_create_time", // sortField - must be "order_create_time"
             credentials.accessToken,
             "application/json",
-            50,
             nextPageToken,
+            "ASC", // sortOrder
+            50, // page_size
             credentials.shopCipher
           );
 
