@@ -5,6 +5,8 @@ import { NotificationService } from "@/lib/notification-service";
 // Adjust imports to match your existing finance APIs
 import { syncUnsettledTransactions } from "@/lib/tiktok-unsettled-transactions-sync";
 import { syncPayments } from "@/lib/tiktok-payments-sync";
+import { syncStatements } from "@/lib/tiktok-statement-sync";
+import { syncWithdrawals } from "@/lib/tiktok-withdrawals-sync";
 // If these do not exist yet, create/point them accordingly.
 
 const prisma = new PrismaClient();
@@ -92,8 +94,46 @@ export async function GET(req: NextRequest) {
         }
 
         // Statements, order statements by time
+        try {
+          results.statements = await syncStatements(prisma, {
+            shop_id: shop.id,
+            search_time_ge,
+            search_time_lt,
+            page_size: 50,
+          });
+        } catch (e) {
+          const msg = `statements:${e instanceof Error ? e.message : String(e)}`;
+          errors.push(msg);
+          await NotificationService.createNotification({
+            type: NotificationType.SYSTEM_ALERT,
+            title: "Finance Sync Error - Statements",
+            message: `Shop ${shopId} statements sync failed: ${msg}`,
+            userId: "system",
+            shopId: shop.id,
+            data: { shopId, search_time_ge, search_time_lt },
+          });
+        }
         
         // Withdrawals
+        try {
+          results.withdrawals = await syncWithdrawals(prisma, {
+            shop_id: shop.id,
+            search_time_ge,
+            search_time_lt,
+            page_size: 50,
+          });
+        } catch (e) {
+          const msg = `withdrawals:${e instanceof Error ? e.message : String(e)}`;
+          errors.push(msg);
+          await NotificationService.createNotification({
+            type: NotificationType.SYSTEM_ALERT,
+            title: "Finance Sync Error - Withdrawals",
+            message: `Shop ${shopId} withdrawals sync failed: ${msg}`,
+            userId: "system",
+            shopId: shop.id,
+            data: { shopId, search_time_ge, search_time_lt },
+          });
+        }
         
       } finally {
         summary.push({
