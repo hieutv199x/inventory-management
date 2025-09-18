@@ -127,6 +127,7 @@ export async function GET(req: NextRequest) {
             packageId: true,
             trackingNumber: true,
             shippingProviderId: true,
+            shippingProviderName: true
           }
         }
       },

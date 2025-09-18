@@ -246,7 +246,7 @@ const translations: Record<Language, TranslationMap> = {
         'orders.mark_delivered': 'Mark Delivered',
         'orders.splitted': 'Order splitted',
         'orders.items_label': 'item(s)',
-        'orders.track_label': 'Track: {tracking} - {provider}',
+        'orders.track_label': 'Track: ',
 
         // Common (missing)
         'common.previous': 'Previous',
@@ -517,7 +517,7 @@ const translations: Record<Language, TranslationMap> = {
         'orders.mark_delivered': 'Kéo đơn',
         'orders.splitted': 'Đã split order',
         'orders.items_label': ' sản phẩm',
-        'orders.track_label': 'Track: {tracking} - {provider}',
+        'orders.track_label': 'Track: ',
 
         // Common (missing)
         'common.previous': 'Trước',

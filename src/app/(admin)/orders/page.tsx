@@ -45,6 +45,7 @@ interface Order {
         packageId: string;
         trackingNumber: string;
         shippingProviderId?: string;
+        shippingProviderName?: string;
     }[],
     shopId: string;
     lineItemsCount?: number;
@@ -500,6 +501,44 @@ export default function OrdersPage() {
         }
     };
 
+    // Backend-driven status counts (exclude keyword to avoid counting non-persisted search results)
+    const STATUS_DEFS = [
+        { key: 'UNPAID', label: 'Unpaid', Icon: CreditCard, color: 'text-red-600' },
+        { key: 'ON_HOLD', label: 'On Hold', Icon: RefreshCw, color: 'text-yellow-600' },
+        { key: 'AWAITING_SHIPMENT', label: 'Awaiting Shipment', Icon: Package, color: 'text-orange-600' },
+        { key: 'PARTIALLY_SHIPPING', label: 'Partially Shipping', Icon: Package, color: 'text-blue-600' },
+        { key: 'AWAITING_COLLECTION', label: 'Awaiting Collection', Icon: Calendar, color: 'text-purple-600' },
+        { key: 'IN_TRANSIT', label: 'In Transit', Icon: Truck, color: 'text-indigo-600' },
+        { key: 'DELIVERED', label: 'Delivered', Icon: Check, color: 'text-teal-600' },
+        { key: 'COMPLETED', label: 'Completed', Icon: Check, color: 'text-green-600' },
+        { key: 'CANCELLED', label: 'Cancelled', Icon: X, color: 'text-gray-600' },
+    ] as const;
+
+    const [statusCounts, setStatusCounts] = useState<Record<string, number>>({});
+    const [loadingCounts, setLoadingCounts] = useState<boolean>(false);
+
+    const fetchStatusCounts = useCallback(async () => {
+        setLoadingCounts(true);
+        try {
+            const params = new URLSearchParams();
+            if (filters.shopId) params.append('shopId', filters.shopId);
+            if (filters.dateFrom) params.append('createTimeGe', Math.floor(new Date(filters.dateFrom).getTime() / 1000).toString());
+            if (filters.dateTo) params.append('createTimeLt', Math.floor(new Date(filters.dateTo).getTime() / 1000).toString());
+            if (filters.keyword) params.append('keyword', filters.keyword);
+            if (filters.customStatus) params.append('customStatus', filters.customStatus);
+
+            const res = await httpClient.get(`/api/orders/status-counts?${params.toString()}`);
+            setStatusCounts(res?.counts || {});
+        } finally {
+            setLoadingCounts(false);
+        }
+    }, [filters.shopId, filters.dateFrom, filters.dateTo, filters.keyword, filters.customStatus]);
+
+    useEffect(() => {
+        // Initial and whenever relevant filters change (now includes keyword/customStatus)
+        fetchStatusCounts();
+    }, [fetchStatusCounts]);
+
     return (
         <div>
             {/* Header */}
@@ -534,8 +573,19 @@ export default function OrdersPage() {
             </div>
 
             {/* Stats Cards - Update to use new status categories */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
-                <div className="bg-white p-6 rounded-lg shadow-sm border dark:border-gray-800 dark:bg-white/[0.03]">
+            <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-4 gap-6 mb-6">
+                {/* Total Orders */}
+                <button
+                    type="button"
+                    onClick={() => {
+                        handleFilterChange('status', '');
+                        setNeedSearch(true);
+                    }}
+                    aria-pressed={filters.status === ''}
+                    className={`bg-white p-6 rounded-lg shadow-sm border dark:border-gray-800 dark:bg-white/[0.03] transition hover:shadow-md cursor-pointer ${
+                        filters.status === '' ? 'ring-2 ring-blue-400 border-blue-300 dark:ring-blue-500' : ''
+                    }`}
+                >
                     <div className="flex items-center">
                         <Package className="h-8 w-8 text-blue-600" />
                         <div className="ml-4">
@@ -543,40 +593,32 @@ export default function OrdersPage() {
                             <p className="text-2xl font-semibold text-gray-900 dark:text-white/90">{pagination.totalItems}</p>
                         </div>
                     </div>
-                </div>
-                <div className="bg-white p-6 rounded-lg shadow-sm border dark:border-gray-800 dark:bg-white/[0.03]">
-                    <div className="flex items-center">
-                        <Calendar className="h-8 w-8 text-green-600" />
-                        <div className="ml-4">
-                            <p className="text-sm font-medium text-gray-600 dark:text-gray-400">{t('orders.completed')}</p>
-                            <p className="text-2xl font-semibold text-gray-900 dark:text-white/90">
-                                {orders.filter(o => o.status.toUpperCase() === 'COMPLETED').length}
-                            </p>
+                </button>
+
+                {STATUS_DEFS.map(({ key, label, Icon, color }) => (
+                    <button
+                        key={key}
+                        type="button"
+                        onClick={() => {
+                            handleFilterChange('status', key);
+                            setNeedSearch(true);
+                        }}
+                        aria-pressed={filters.status === key}
+                        className={`bg-white p-6 rounded-lg shadow-sm border dark:border-gray-800 dark:bg-white/[0.03] transition hover:shadow-md cursor-pointer ${
+                            filters.status === key ? 'ring-2 ring-blue-400 border-blue-300 dark:ring-blue-500' : ''
+                        }`}
+                    >
+                        <div className="flex items-center">
+                            <Icon className={`h-8 w-8 ${color}`} />
+                            <div className="ml-4">
+                                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">{label}</p>
+                                <p className="text-2xl font-semibold text-gray-900 dark:text-white/90">
+                                    {loadingCounts ? '...' : (statusCounts[key] ?? 0)}
+                                </p>
+                            </div>
                         </div>
-                    </div>
-                </div>
-                <div className="bg-white p-6 rounded-lg shadow-sm border dark:border-gray-800 dark:bg-white/[0.03]">
-                    <div className="flex items-center">
-                        <RefreshCw className="h-8 w-8 text-yellow-600" />
-                        <div className="ml-4">
-                            <p className="text-sm font-medium text-gray-600 dark:text-gray-400">{t('orders.in_progress')}</p>
-                            <p className="text-2xl font-semibold text-gray-900 dark:text-white/90">
-                                {orders.filter(o => ['AWAITING_SHIPMENT', 'PARTIALLY_SHIPPING', 'AWAITING_COLLECTION', 'IN_TRANSIT'].includes(o.status.toUpperCase())).length}
-                            </p>
-                        </div>
-                    </div>
-                </div>
-                <div className="bg-white p-6 rounded-lg shadow-sm border dark:border-gray-800 dark:bg-white/[0.03]">
-                    <div className="flex items-center">
-                        <User className="h-8 w-8 text-red-600" />
-                        <div className="ml-4">
-                            <p className="text-sm font-medium text-gray-600 dark:text-gray-400">{t('orders.cancelled')}</p>
-                            <p className="text-2xl font-semibold text-gray-900 dark:text-white/90">
-                                {orders.filter(o => o.status.toUpperCase() === 'CANCELLED').length}
-                            </p>
-                        </div>
-                    </div>
-                </div>
+                    </button>
+                ))}
             </div>
 
             {/* Updated Filters */}
@@ -883,9 +925,19 @@ export default function OrdersPage() {
                                                     <div className="text-xs text-blue-600 dark:text-blue-400">
                                                         {`${order.lineItemsCount || order.lineItems?.length || 0} ${t(`orders.items_label`)}`}
                                                     </div>
-                                                    {parseChannelData(order?.channelData ?? "").trackingNumber && (
-                                                        <div className="text-xs font-mono text-purple-600 truncate max-w-50">
-                                                            {t('orders.track_label')}
+                                                    {/* Show all package tracking numbers */}
+                                                    {(order.packages?.some(p => !!p.trackingNumber)) && (
+                                                        <div className="flex flex-col gap-1">
+                                                            {order.packages
+                                                                ?.filter(p => !!p.trackingNumber)
+                                                                .map((pkg) => (
+                                                                    <div
+                                                                        key={pkg.packageId}
+                                                                        className="text-xs font-mono text-purple-600"
+                                                                    >
+                                                                        {t('orders.track_label')} {pkg.trackingNumber} - {pkg.shippingProviderName}
+                                                                    </div>
+                                                                ))}
                                                         </div>
                                                     )}
                                                     {((order?.mustSplitPackages || order?.canSplitPackages) && order?.customStatus === 'SPLITTED') && (
