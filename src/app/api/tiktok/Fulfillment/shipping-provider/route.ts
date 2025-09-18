@@ -4,6 +4,26 @@ import { TikTokShopNodeApiClient } from '@/nodejs_sdk/client/client';
 
 const prisma = new PrismaClient();
 
+// In-memory per-instance cache (best effort on Vercel; improves warm invocations)
+type CacheEntry = { data: any; expiresAt: number };
+const shippingProviderCache = new Map<string, CacheEntry>();
+const CACHE_TTL_S = Number(process.env.TIKTOK_SHIPPING_PROVIDER_CACHE_TTL_S || 300); // default 5 minutes
+const CACHE_TTL_MS = CACHE_TTL_S * 1000;
+
+const getCached = (key: string) => {
+    const entry = shippingProviderCache.get(key);
+    if (!entry) return null;
+    if (entry.expiresAt < Date.now()) {
+        shippingProviderCache.delete(key);
+        return null;
+    }
+    return entry.data;
+};
+
+const setCached = (key: string, data: any) => {
+    shippingProviderCache.set(key, { data, expiresAt: Date.now() + CACHE_TTL_MS });
+};
+
 export async function GET(req: NextRequest) {
     try {
         const { searchParams } = new URL(req.url);
@@ -28,6 +48,19 @@ export async function GET(req: NextRequest) {
             return NextResponse.json({ error: 'Shop authorization not found' }, { status: 404 });
         }
         const shop = order.shop;
+
+        // Cache by shopId (no other logic changed)
+        const cacheKey = `shipping_providers:${shop.shopId}`;
+        const cached = getCached(cacheKey);
+        if (cached) {
+            return NextResponse.json(cached, {
+                headers: {
+                    'x-cache': 'HIT',
+                    'cache-control': `s-maxage=${CACHE_TTL_S}, stale-while-revalidate=${CACHE_TTL_S}`,
+                },
+            });
+        }
+
         const result: any[] = [];
         try {
             // Extract shopCipher from channelData
@@ -60,10 +93,10 @@ export async function GET(req: NextRequest) {
                 console.error(`Missing credentials for shop ${shop.shopId}`);
                 return NextResponse.json({ error: `Missing credentials for shop ${shop.shopId}` }, { status: 404 });
             }
-                let basePath = process.env.TIKTOK_BASE_URL;
-                if (credentials.app?.BaseUrl) {
-                    basePath = credentials.app.BaseUrl;
-                }
+            let basePath = process.env.TIKTOK_BASE_URL;
+            if (credentials.app?.BaseUrl) {
+                basePath = credentials.app.BaseUrl;
+            }
 
             const client = new TikTokShopNodeApiClient({
                 config: {
@@ -108,7 +141,14 @@ export async function GET(req: NextRequest) {
             return NextResponse.json({ error: `Error processing shop ${shop.shopId}` }, { status: 500 });
         }
 
-        return NextResponse.json(result);
+        // Save to cache and return (no other logic changed)
+        setCached(cacheKey, result);
+        return NextResponse.json(result, {
+            headers: {
+                'x-cache': 'MISS',
+                'cache-control': `s-maxage=${CACHE_TTL_S}, stale-while-revalidate=${CACHE_TTL_S}`,
+            },
+        });
     } catch (error) {
         return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
     }
