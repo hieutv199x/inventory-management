@@ -16,6 +16,8 @@ import SyncOrderModal from '@/components/Orders/SyncOrderModal';
 import SplitOrderModal from '@/components/Orders/SplitOrderModal';
 import toast from 'react-hot-toast';
 import { useLanguage } from '@/context/LanguageContext';
+import ImportOrdersModal from '@/components/Orders/ImportOrdersModal';
+import BulkTrackingModal from '@/components/Orders/BulkTrackingModal';
 
 interface Order {
     id: string;
@@ -384,6 +386,7 @@ export default function OrdersPage() {
         // Update state first
         setFilters(prev => ({ ...prev, keyword: searchKeyword }));
         setCurrentPage(1);
+        setSelectedOrderIds(new Set()); // Clear selected orders on new search
         // Call unified fetch
         await fetchOrders({
             keyword: searchKeyword,
@@ -1334,88 +1337,20 @@ export default function OrdersPage() {
                 onSubmit={handleSplitSubmit}
             />
 
-            {/* Import Excel Modal */}
-            {showImportModal && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                    <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md mx-4">
-                        <div className="flex justify-between items-center mb-4">
-                            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                                Import Orders from Excel
-                            </h3>
-                            <button
-                                onClick={() => {
-                                    setShowImportModal(false);
-                                    setImportFile(null);
-                                }}
-                                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-                            >
-                                <X className="h-6 w-6" />
-                            </button>
-                        </div>
-
-                        <div className="space-y-4">
-                            <div>
-                                <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-                                    Upload an Excel file with order tracking information. The file should contain columns for Order ID, SKU ID, Product name, Variations, Quantity, Shipping provider name, Tracking ID, and Receipt ID.
-                                </p>
-                                
-                                <button
-                                    onClick={downloadTemplate}
-                                    className="text-blue-600 hover:text-blue-700 text-sm underline mb-2"
-                                >
-                                    Download Excel Template
-                                </button>
-                                <br />
-                                <button
-                                    onClick={downloadSample}
-                                    className="text-green-600 hover:text-green-700 text-sm underline mb-3"
-                                >
-                                    Download Sample Data
-                                </button>
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                    Select Excel File
-                                </label>
-                                <input
-                                    type="file"
-                                    accept=".xlsx,.xls"
-                                    onChange={(e) => setImportFile(e.target.files?.[0] || null)}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
-                                />
-                            </div>
-
-                            {importFile && (
-                                <div className="text-sm text-gray-600 dark:text-gray-400">
-                                    Selected file: {importFile.name}
-                                </div>
-                            )}
-                        </div>
-
-                        <div className="flex justify-end gap-3 mt-6">
-                            <button
-                                onClick={() => {
-                                    setShowImportModal(false);
-                                    setImportFile(null);
-                                }}
-                                className="px-4 py-2 text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50 dark:text-gray-400 dark:border-gray-600 dark:hover:bg-gray-700"
-                                disabled={isImporting}
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                onClick={handleImportExcel}
-                                disabled={!importFile || isImporting}
-                                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 flex items-center"
-                            >
-                                {isImporting && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-                                {isImporting ? 'Importing...' : 'Import'}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
+            {/* Import Excel Modal (extracted) */}
+            <ImportOrdersModal
+                isOpen={showImportModal}
+                isSubmitting={isImporting}
+                file={importFile}
+                onFileChange={setImportFile}
+                onTemplateDownload={downloadTemplate}
+                onSampleDownload={downloadSample}
+                onClose={() => {
+                    setShowImportModal(false);
+                    setImportFile(null);
+                }}
+                onSubmit={handleImportExcel}
+            />
 
             {/* Floating Add Tracking Info Button */}
             {selectedOrderIds.size > 0 && (
@@ -1430,148 +1365,22 @@ export default function OrdersPage() {
                 </div>
             )}
 
-            {/* Bulk Tracking Modal */}
-            {showBulkTrackingModal && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-                    <div className="bg-white dark:bg-gray-800 rounded-lg max-w-6xl w-full max-h-[90vh] overflow-hidden">
-                        <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
-                            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-                                Add Tracking Info ({selectedOrderIds.size} orders)
-                            </h2>
-                            <button
-                                onClick={() => setShowBulkTrackingModal(false)}
-                                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-                            >
-                                <X className="h-6 w-6" />
-                            </button>
-                        </div>
-                        
-                        <div className="p-6 overflow-y-auto max-h-[calc(90vh-140px)]">
-                            <div className="overflow-x-auto">
-                                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                                    <thead className="bg-gray-50 dark:bg-gray-700">
-                                        <tr>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                                                Order ID
-                                            </th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                                                Items
-                                            </th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                                                Tracking ID
-                                            </th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                                                Shipping Provider
-                                            </th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                                                Receipt ID
-                                            </th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                                        {Array.from(selectedOrderIds).map(orderId => {
-                                            const order = orders.find(o => o.id === orderId);
-                                            if (!order) return null;
-                                            
-                                            return (
-                                                <tr key={orderId} className="hover:bg-gray-50 dark:hover:bg-gray-700">
-                                                    <td className="px-6 py-4 whitespace-nowrap">
-                                                        <div className="text-sm font-medium text-gray-900 dark:text-white">
-                                                            {order.orderId}
-                                                        </div>
-                                                    </td>
-                                                    <td className="px-6 py-4">
-                                                        <div className="flex items-center gap-2">
-                                                            <span className="text-sm font-medium text-gray-900 dark:text-white">
-                                                                {order.lineItems?.length || 0} items
-                                                            </span>
-                                                            <div className="flex -space-x-1">
-                                                                {getLineItemImages(order).slice(0, 3).map((item, idx) => (
-                                                                    <Image
-                                                                        key={idx}
-                                                                        src={item.image || '/images/placeholder.png'}
-                                                                        alt={item.productName || 'Product'}
-                                                                        width={24}
-                                                                        height={24}
-                                                                        className="w-6 h-6 rounded border border-gray-200 object-cover"
-                                                                        onError={(e) => {
-                                                                            (e.target as HTMLImageElement).src = '/images/placeholder.png';
-                                                                        }}
-                                                                    />
-                                                                ))}
-                                                                {(order.lineItems?.length || 0) > 3 && (
-                                                                    <div className="w-6 h-6 rounded border border-gray-200 bg-gray-100 dark:bg-gray-700 flex items-center justify-center">
-                                                                        <span className="text-xs font-medium text-gray-600 dark:text-gray-300">
-                                                                            +{(order.lineItems?.length || 0) - 3}
-                                                                        </span>
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                    </td>
-                                                    <td className="px-6 py-4 whitespace-nowrap">
-                                                        <input
-                                                            type="text"
-                                                            value={bulkTrackingData[orderId]?.trackingId || ''}
-                                                            onChange={(e) => handleBulkTrackingChange(orderId, 'trackingId', e.target.value)}
-                                                            placeholder="Enter tracking ID"
-                                                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 dark:bg-gray-700 dark:text-white"
-                                                        />
-                                                    </td>
-                                                    <td className="px-6 py-4 whitespace-nowrap">
-                                                        <select
-                                                            value={bulkTrackingData[orderId]?.shippingProvider || ''}
-                                                            onChange={(e) => handleBulkTrackingChange(orderId, 'shippingProvider', e.target.value)}
-                                                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 dark:bg-gray-700 dark:text-white"
-                                                        >
-                                                            <option value="">Select provider</option>
-                                                            <option value="dhl">DHL</option>
-                                                            <option value="fedex">FedEx</option>
-                                                            <option value="ups">UPS</option>
-                                                            <option value="usps">USPS</option>
-                                                            <option value="other">Other</option>
-                                                        </select>
-                                                    </td>
-                                                    <td className="px-6 py-4 whitespace-nowrap">
-                                                        <input
-                                                            type="text"
-                                                            value={bulkTrackingData[orderId]?.receiptId || ''}
-                                                            onChange={(e) => handleBulkTrackingChange(orderId, 'receiptId', e.target.value)}
-                                                            placeholder="Enter receipt ID"
-                                                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 dark:bg-gray-700 dark:text-white"
-                                                        />
-                                                    </td>
-                                                </tr>
-                                            );
-                                        })}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                        
-                        <div className="flex justify-end gap-3 p-6 border-t border-gray-200 dark:border-gray-700">
-                            <button
-                                onClick={() => setShowBulkTrackingModal(false)}
-                                className="px-4 py-2 text-gray-600 dark:text-gray-400 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                onClick={() => {
-                                    // Handle bulk tracking submit here
-                                    console.log('Bulk tracking data:', bulkTrackingData);
-                                    toast.success('Tracking info updated successfully!');
-                                    setShowBulkTrackingModal(false);
-                                    setSelectedOrderIds(new Set());
-                                }}
-                                className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700"
-                            >
-                                Save Tracking Info
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
+            {/* Bulk Tracking Modal (extracted) */}
+            <BulkTrackingModal
+                isOpen={showBulkTrackingModal}
+                onClose={() => setShowBulkTrackingModal(false)}
+                selectedOrders={orders.filter(o => selectedOrderIds.has(o.id))}
+                getLineItemImages={getLineItemImages}
+                data={bulkTrackingData}
+                onChange={handleBulkTrackingChange}
+                onSave={() => {
+                    // Handle bulk tracking submit here
+                    console.log('Bulk tracking data:', bulkTrackingData);
+                    toast.success('Tracking info updated successfully!');
+                    setShowBulkTrackingModal(false);
+                    setSelectedOrderIds(new Set());
+                }}
+            />
         </div>
     );
 }
