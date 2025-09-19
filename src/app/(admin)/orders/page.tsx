@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Loader2, Search, RefreshCw, Eye, Package, Calendar, User, X, MapPin, CreditCard, Truck, Copy, Check, Plus } from 'lucide-react';
+import { Loader2, Search, RefreshCw, Eye, Package, Calendar, User, X, MapPin, CreditCard, Truck, Copy, Check, Plus, Upload } from 'lucide-react';
 import { format } from 'date-fns';
 import Image from 'next/image';
 import { httpClient } from '@/lib/http-client';
@@ -147,6 +147,9 @@ export default function OrdersPage() {
     const [showTrackingModal, setShowTrackingModal] = useState(false);
     const [selectedOrderForTracking, setSelectedOrderForTracking] = useState<Order | null>(null);
     const [selectedOrderForSplit, setSelectedOrderForSplit] = useState<Order | null>(null);
+    const [showImportModal, setShowImportModal] = useState(false);
+    const [importFile, setImportFile] = useState<File | null>(null);
+    const [isImporting, setIsImporting] = useState(false);
 
     const handleFilterChange = (field: keyof typeof filters, value: string) => {
         setFilters(prev => ({ ...prev, [field]: value }));
@@ -212,6 +215,73 @@ export default function OrdersPage() {
         },
         [filters, currentPage, pageSize, showLoading, hideLoading]
     );
+
+    const handleImportExcel = async () => {
+        if (!importFile) {
+            toast.error('Please select an Excel file');
+            return;
+        }
+
+        setIsImporting(true);
+        try {
+            const formData = new FormData();
+            formData.append('file', importFile);
+
+            const response = await httpClient.post('/orders/import-excel', formData, {
+                headers: {
+                    'Content-Type': 'multipart/form-data',
+                }
+            });
+
+            if (response.success) {
+                const { totalRows, processed, errors, errorDetails } = response.data;
+                
+                let message = `Import completed!\n`;
+                message += `Total rows: ${totalRows}\n`;
+                message += `Successfully processed: ${processed}\n`;
+                
+                if (errors > 0) {
+                    message += `Errors: ${errors}\n`;
+                    if (errorDetails && errorDetails.length > 0) {
+                        message += `\nFirst ${Math.min(errors, 5)} errors:\n`;
+                        message += errorDetails.slice(0, 5).join('\n');
+                    }
+                    toast.error(message);
+                } else {
+                    toast.success(message);
+                }
+
+                setShowImportModal(false);
+                setImportFile(null);
+                fetchOrders(); // Refresh orders list
+            } else {
+                toast.error(response.error || 'Import failed');
+            }
+        } catch (error: any) {
+            console.error('Import error:', error);
+            toast.error(error.message || 'Import failed');
+        } finally {
+            setIsImporting(false);
+        }
+    };
+
+    const downloadTemplate = () => {
+        const link = document.createElement('a');
+        link.href = '/templates/order_import_template.xlsx';
+        link.download = 'order_import_template.xlsx';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
+    const downloadSample = () => {
+        const link = document.createElement('a');
+        link.href = '/templates/sample_order_import.xlsx';
+        link.download = 'sample_order_import.xlsx';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
 
     // Updated handleSearch to delegate to fetchOrders
     const handleSearch = async (e: React.FormEvent) => {
@@ -551,6 +621,13 @@ export default function OrdersPage() {
                 </div>
                 <div className="flex items-start w-full gap-3 sm:justify-end">
                     <div className="flex items-center gap-2">
+                        <button
+                            onClick={() => setShowImportModal(true)}
+                            className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center hover:shadow-lg transition duration-200"
+                        >
+                            <Upload className="h-4 w-4 mr-2" />
+                            Import Excel
+                        </button>
                         <button
                             onClick={() => setShowSyncModal(true)}
                             disabled={syncing}
@@ -1135,6 +1212,89 @@ export default function OrdersPage() {
                 onClose={closeSplitModal}
                 onSubmit={handleSplitSubmit}
             />
+
+            {/* Import Excel Modal */}
+            {showImportModal && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                    <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md mx-4">
+                        <div className="flex justify-between items-center mb-4">
+                            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                                Import Orders from Excel
+                            </h3>
+                            <button
+                                onClick={() => {
+                                    setShowImportModal(false);
+                                    setImportFile(null);
+                                }}
+                                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                            >
+                                <X className="h-6 w-6" />
+                            </button>
+                        </div>
+
+                        <div className="space-y-4">
+                            <div>
+                                <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                                    Upload an Excel file with order tracking information. The file should contain columns for Order ID, SKU ID, Product name, Variations, Quantity, Shipping provider name, Tracking ID, and Receipt ID.
+                                </p>
+                                
+                                <button
+                                    onClick={downloadTemplate}
+                                    className="text-blue-600 hover:text-blue-700 text-sm underline mb-2"
+                                >
+                                    Download Excel Template
+                                </button>
+                                <br />
+                                <button
+                                    onClick={downloadSample}
+                                    className="text-green-600 hover:text-green-700 text-sm underline mb-3"
+                                >
+                                    Download Sample Data
+                                </button>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                    Select Excel File
+                                </label>
+                                <input
+                                    type="file"
+                                    accept=".xlsx,.xls"
+                                    onChange={(e) => setImportFile(e.target.files?.[0] || null)}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                                />
+                            </div>
+
+                            {importFile && (
+                                <div className="text-sm text-gray-600 dark:text-gray-400">
+                                    Selected file: {importFile.name}
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="flex justify-end gap-3 mt-6">
+                            <button
+                                onClick={() => {
+                                    setShowImportModal(false);
+                                    setImportFile(null);
+                                }}
+                                className="px-4 py-2 text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50 dark:text-gray-400 dark:border-gray-600 dark:hover:bg-gray-700"
+                                disabled={isImporting}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleImportExcel}
+                                disabled={!importFile || isImporting}
+                                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 flex items-center"
+                            >
+                                {isImporting && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+                                {isImporting ? 'Importing...' : 'Import'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
