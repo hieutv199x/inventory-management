@@ -171,7 +171,7 @@ async function handleOrderStatusChange(webhookData: TikTokWebhookData) {
                     order_status ?? '',
                     webhookData,
                     credentials.id,
-                    updatedOrder.createTime ?? Date.now() / 1000
+                    updatedOrder.createTime ? new Date(updatedOrder.createTime * 1000).setHours(0, 0, 0, 0) / 1000 : Date.now() / 1000
                 );
             }
         } catch (syncError) {
