@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Loader2, Search, RefreshCw, Eye, Package, Calendar, User, X, MapPin, CreditCard, Truck, Copy, Check, Plus, Upload } from 'lucide-react';
+import { Loader2, Search, RefreshCw, Eye, Package, Calendar, User, X, MapPin, CreditCard, Truck, Copy, Check, Plus, Upload, Download } from 'lucide-react';
 import { format } from 'date-fns';
 import Image from 'next/image';
 import { httpClient } from '@/lib/http-client';
@@ -150,6 +150,53 @@ export default function OrdersPage() {
     const [showImportModal, setShowImportModal] = useState(false);
     const [importFile, setImportFile] = useState<File | null>(null);
     const [isImporting, setIsImporting] = useState(false);
+    const [isExporting, setIsExporting] = useState(false);
+
+    const handleExportExcel = async () => {
+        setIsExporting(true);
+        try {
+            // Use current filters to export matching data
+            const exportFilters = {
+                shopId: filters.shopId,
+                status: filters.status && filters.status !== 'all' ? filters.status : undefined,
+                channel: filters.customStatus && filters.customStatus !== 'all' ? filters.customStatus : undefined,
+                searchTerm: filters.keyword || undefined,
+                dateFrom: filters.dateFrom,
+                dateTo: filters.dateTo
+            };
+
+            const response = await fetch('/api/admin/export-excel', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`,
+                },
+                body: JSON.stringify({ filters: exportFilters })
+            });
+
+            if (!response.ok) {
+                throw new Error('Export failed');
+            }
+
+            // Handle file download
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `order_packages_${new Date().toISOString().split('T')[0]}.xlsx`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(url);
+
+            toast.success('Export completed successfully!');
+        } catch (error: any) {
+            console.error('Export error:', error);
+            toast.error(error.message || 'Export failed');
+        } finally {
+            setIsExporting(false);
+        }
+    };
 
     const handleFilterChange = (field: keyof typeof filters, value: string) => {
         setFilters(prev => ({ ...prev, [field]: value }));
@@ -622,26 +669,34 @@ export default function OrdersPage() {
                 <div className="flex items-start w-full gap-3 sm:justify-end">
                     <div className="flex items-center gap-2">
                         <button
-                            onClick={() => setShowImportModal(true)}
-                            className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center hover:shadow-lg transition duration-200"
+                            onClick={handleExportExcel}
+                            disabled={isExporting || orders.length === 0}
+                            className="bg-orange-600 text-white px-3 py-1.5 text-sm rounded-md hover:bg-orange-700 disabled:opacity-50 flex items-center justify-center hover:shadow-lg transition duration-200"
                         >
-                            <Upload className="h-4 w-4 mr-2" />
+                            {isExporting ? <Loader2 className="h-3 w-3 animate-spin mr-1.5" /> : <Download className="h-3 w-3 mr-1.5" />}
+                            {isExporting ? 'Exporting...' : 'Export Excel'}
+                        </button>
+                        <button
+                            onClick={() => setShowImportModal(true)}
+                            className="bg-blue-600 text-white px-3 py-1.5 text-sm rounded-md hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center hover:shadow-lg transition duration-200"
+                        >
+                            <Upload className="h-3 w-3 mr-1.5" />
                             Import Excel
                         </button>
                         <button
                             onClick={() => setShowSyncModal(true)}
                             disabled={syncing}
-                            className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 disabled:opacity-50 flex items-center justify-center hover:shadow-lg transition duration-200"
+                            className="bg-green-600 text-white px-3 py-1.5 text-sm rounded-md hover:bg-green-700 disabled:opacity-50 flex items-center justify-center hover:shadow-lg transition duration-200"
                         >
-                            {syncing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+                            {syncing ? <Loader2 className="h-3 w-3 animate-spin mr-1.5" /> : <RefreshCw className="h-3 w-3 mr-1.5" />}
                             {t('orders.sync_orders')}
                         </button>
                         <button
                             onClick={syncUnsettledTransactions}
                             disabled={syncing}
-                            className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 disabled:opacity-50 flex items-center justify-center hover:shadow-lg transition duration-200"
+                            className="bg-green-600 text-white px-3 py-1.5 text-sm rounded-md hover:bg-green-700 disabled:opacity-50 flex items-center justify-center hover:shadow-lg transition duration-200"
                         >
-                            {syncing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+                            {syncing ? <Loader2 className="h-3 w-3 animate-spin mr-1.5" /> : <RefreshCw className="h-3 w-3 mr-1.5" />}
                             {t('orders.sync_unsettled_transactions')}
                         </button>
                     </div>
