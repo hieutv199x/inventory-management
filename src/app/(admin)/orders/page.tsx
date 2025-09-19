@@ -151,6 +151,11 @@ export default function OrdersPage() {
     const [importFile, setImportFile] = useState<File | null>(null);
     const [isImporting, setIsImporting] = useState(false);
     const [isExporting, setIsExporting] = useState(false);
+    
+    // New states for bulk tracking
+    const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(new Set());
+    const [showBulkTrackingModal, setShowBulkTrackingModal] = useState(false);
+    const [bulkTrackingData, setBulkTrackingData] = useState<{[key: string]: {trackingId: string, shippingProvider: string, receiptId: string}}>({});
 
     const handleExportExcel = async () => {
         setIsExporting(true);
@@ -196,6 +201,49 @@ export default function OrdersPage() {
         } finally {
             setIsExporting(false);
         }
+    };
+
+    // Checkbox handlers
+    const handleSelectOrder = (orderId: string) => {
+        const newSelected = new Set(selectedOrderIds);
+        if (newSelected.has(orderId)) {
+            newSelected.delete(orderId);
+        } else {
+            newSelected.add(orderId);
+        }
+        setSelectedOrderIds(newSelected);
+    };
+
+    const handleSelectAll = () => {
+        if (selectedOrderIds.size === orders.length) {
+            setSelectedOrderIds(new Set());
+        } else {
+            setSelectedOrderIds(new Set(orders.map(order => order.id)));
+        }
+    };
+
+    const handleOpenBulkTrackingModal = () => {
+        // Initialize bulk tracking data for selected orders
+        const initialData: {[key: string]: {trackingId: string, shippingProvider: string, receiptId: string}} = {};
+        selectedOrderIds.forEach(orderId => {
+            initialData[orderId] = {
+                trackingId: '',
+                shippingProvider: '',
+                receiptId: ''
+            };
+        });
+        setBulkTrackingData(initialData);
+        setShowBulkTrackingModal(true);
+    };
+
+    const handleBulkTrackingChange = (orderId: string, field: 'trackingId' | 'shippingProvider' | 'receiptId', value: string) => {
+        setBulkTrackingData(prev => ({
+            ...prev,
+            [orderId]: {
+                ...prev[orderId],
+                [field]: value
+            }
+        }));
     };
 
     const handleFilterChange = (field: keyof typeof filters, value: string) => {
@@ -923,6 +971,14 @@ export default function OrdersPage() {
                     <table className="min-w-full divide-y divide-gray-200">
                         <thead className="bg-gray-50 dark:border-gray-800 dark:bg-white/[0.03]">
                             <tr>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    <input
+                                        type="checkbox"
+                                        checked={orders.length > 0 && selectedOrderIds.size === orders.length}
+                                        onChange={handleSelectAll}
+                                        className="h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300 rounded"
+                                    />
+                                </th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('common.id') || 'ID'}</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('orders.account_seller')}</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('orders.order')}</th>
@@ -936,7 +992,7 @@ export default function OrdersPage() {
                         <tbody className="bg-white divide-y divide-gray-200 dark:divide-gray-700 dark:border-gray-800 dark:bg-white/[0.03]">
                             {orders.length === 0 ? (
                                 <tr>
-                                    <td colSpan={8} className="px-6 py-8 text-center text-gray-500">
+                                    <td colSpan={9} className="px-6 py-8 text-center text-gray-500">
                                         {t('orders.no_orders_found')}
                                     </td>
                                 </tr>
@@ -952,6 +1008,16 @@ export default function OrdersPage() {
                                                 : ''
                                                 }`}
                                         >
+                                            {/* Checkbox */}
+                                            <td className="px-6 py-4 whitespace-nowrap">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={selectedOrderIds.has(order.id)}
+                                                    onChange={() => handleSelectOrder(order.id)}
+                                                    className="h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300 rounded"
+                                                />
+                                            </td>
+                                            
                                             {/* Update index calculation for server-side pagination */}
                                             <td className="px-6 py-4 whitespace-nowrap">
                                                 <div className="text-sm font-medium text-gray-900 dark:text-gray-400">
@@ -1345,6 +1411,162 @@ export default function OrdersPage() {
                             >
                                 {isImporting && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
                                 {isImporting ? 'Importing...' : 'Import'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Floating Add Tracking Info Button */}
+            {selectedOrderIds.size > 0 && (
+                <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-40">
+                    <button
+                        onClick={handleOpenBulkTrackingModal}
+                        className="bg-purple-600 text-white px-6 py-3 rounded-full shadow-lg hover:bg-purple-700 hover:shadow-xl transition-all duration-200 flex items-center justify-center gap-2"
+                    >
+                        <Truck className="h-5 w-5" />
+                        <span className="font-medium">Add Tracking Info ({selectedOrderIds.size})</span>
+                    </button>
+                </div>
+            )}
+
+            {/* Bulk Tracking Modal */}
+            {showBulkTrackingModal && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+                    <div className="bg-white dark:bg-gray-800 rounded-lg max-w-6xl w-full max-h-[90vh] overflow-hidden">
+                        <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
+                            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+                                Add Tracking Info ({selectedOrderIds.size} orders)
+                            </h2>
+                            <button
+                                onClick={() => setShowBulkTrackingModal(false)}
+                                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                            >
+                                <X className="h-6 w-6" />
+                            </button>
+                        </div>
+                        
+                        <div className="p-6 overflow-y-auto max-h-[calc(90vh-140px)]">
+                            <div className="overflow-x-auto">
+                                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                                    <thead className="bg-gray-50 dark:bg-gray-700">
+                                        <tr>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                                                Order ID
+                                            </th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                                                Items
+                                            </th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                                                Tracking ID
+                                            </th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                                                Shipping Provider
+                                            </th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                                                Receipt ID
+                                            </th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                                        {Array.from(selectedOrderIds).map(orderId => {
+                                            const order = orders.find(o => o.id === orderId);
+                                            if (!order) return null;
+                                            
+                                            return (
+                                                <tr key={orderId} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                                                    <td className="px-6 py-4 whitespace-nowrap">
+                                                        <div className="text-sm font-medium text-gray-900 dark:text-white">
+                                                            {order.orderId}
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-6 py-4">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="text-sm font-medium text-gray-900 dark:text-white">
+                                                                {order.lineItems?.length || 0} items
+                                                            </span>
+                                                            <div className="flex -space-x-1">
+                                                                {getLineItemImages(order).slice(0, 3).map((item, idx) => (
+                                                                    <Image
+                                                                        key={idx}
+                                                                        src={item.image || '/images/placeholder.png'}
+                                                                        alt={item.productName || 'Product'}
+                                                                        width={24}
+                                                                        height={24}
+                                                                        className="w-6 h-6 rounded border border-gray-200 object-cover"
+                                                                        onError={(e) => {
+                                                                            (e.target as HTMLImageElement).src = '/images/placeholder.png';
+                                                                        }}
+                                                                    />
+                                                                ))}
+                                                                {(order.lineItems?.length || 0) > 3 && (
+                                                                    <div className="w-6 h-6 rounded border border-gray-200 bg-gray-100 dark:bg-gray-700 flex items-center justify-center">
+                                                                        <span className="text-xs font-medium text-gray-600 dark:text-gray-300">
+                                                                            +{(order.lineItems?.length || 0) - 3}
+                                                                        </span>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-6 py-4 whitespace-nowrap">
+                                                        <input
+                                                            type="text"
+                                                            value={bulkTrackingData[orderId]?.trackingId || ''}
+                                                            onChange={(e) => handleBulkTrackingChange(orderId, 'trackingId', e.target.value)}
+                                                            placeholder="Enter tracking ID"
+                                                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 dark:bg-gray-700 dark:text-white"
+                                                        />
+                                                    </td>
+                                                    <td className="px-6 py-4 whitespace-nowrap">
+                                                        <select
+                                                            value={bulkTrackingData[orderId]?.shippingProvider || ''}
+                                                            onChange={(e) => handleBulkTrackingChange(orderId, 'shippingProvider', e.target.value)}
+                                                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 dark:bg-gray-700 dark:text-white"
+                                                        >
+                                                            <option value="">Select provider</option>
+                                                            <option value="dhl">DHL</option>
+                                                            <option value="fedex">FedEx</option>
+                                                            <option value="ups">UPS</option>
+                                                            <option value="usps">USPS</option>
+                                                            <option value="other">Other</option>
+                                                        </select>
+                                                    </td>
+                                                    <td className="px-6 py-4 whitespace-nowrap">
+                                                        <input
+                                                            type="text"
+                                                            value={bulkTrackingData[orderId]?.receiptId || ''}
+                                                            onChange={(e) => handleBulkTrackingChange(orderId, 'receiptId', e.target.value)}
+                                                            placeholder="Enter receipt ID"
+                                                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 dark:bg-gray-700 dark:text-white"
+                                                        />
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        
+                        <div className="flex justify-end gap-3 p-6 border-t border-gray-200 dark:border-gray-700">
+                            <button
+                                onClick={() => setShowBulkTrackingModal(false)}
+                                className="px-4 py-2 text-gray-600 dark:text-gray-400 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={() => {
+                                    // Handle bulk tracking submit here
+                                    console.log('Bulk tracking data:', bulkTrackingData);
+                                    toast.success('Tracking info updated successfully!');
+                                    setShowBulkTrackingModal(false);
+                                    setSelectedOrderIds(new Set());
+                                }}
+                                className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700"
+                            >
+                                Save Tracking Info
                             </button>
                         </div>
                     </div>
