@@ -692,7 +692,7 @@ export default function OrdersPage() {
             if (filters.keyword) params.append('keyword', filters.keyword);
             if (filters.customStatus) params.append('customStatus', filters.customStatus);
 
-            const res = await httpClient.get(`/api/orders/status-counts?${params.toString()}`);
+            const res = await httpClient.get(`/orders/status-counts?${params.toString()}`);
             setStatusCounts(res?.counts || {});
         } finally {
             setLoadingCounts(false);
