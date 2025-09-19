@@ -1,3 +1,5 @@
+"use client";
+
 import { X } from 'lucide-react';
 import Image from 'next/image';
 import React, { useState, useEffect } from 'react';
@@ -40,8 +42,6 @@ export default function BulkTrackingModal({
     onSave,
     getLineItemImages,
 }: Props) {
-    if (!isOpen) return null;
-
     const [availableProviders, setAvailableProviders] = useState<any[]>([]);
     const { showLoading, hideLoading } = useLoading();
     const [packages, setPackages] = useState<any[]>([]);
@@ -89,14 +89,12 @@ export default function BulkTrackingModal({
 
     // Load shipping providers similar to AddTrackingModal (use first selected order)
     useEffect(() => {
-        if (availableProviders.length > 0) return; // Already loaded
-        const fetchProviders = async () => {
-            if (!isOpen || !selectedOrders || selectedOrders.length === 0) return;
+        if (!isOpen || !selectedOrders || selectedOrders.length === 0 || availableProviders.length > 0) return;
+        (async () => {
             try {
                 showLoading('Loading shipping providers...');
                 const firstOrder = selectedOrders[0];
                 const res = await httpClient.get(`/tiktok/Fulfillment/shipping-provider?orderId=${firstOrder.orderId}`);
-
                 if (Array.isArray(res) && res.length > 0) {
                     const seen = new Set<string>();
                     const unique = res.filter((p: any) => {
@@ -115,10 +113,10 @@ export default function BulkTrackingModal({
             } finally {
                 hideLoading();
             }
-        };
+        })();
+    }, [isOpen, selectedOrders, availableProviders.length, showLoading, hideLoading]);
 
-        fetchProviders();
-    }, [isOpen]);
+    if (!isOpen) return null;
 
     return (
         <Modal isOpen={isOpen} onClose={onClose} className="max-w-[70vw] max-h-[95vh] overflow-hidden">
