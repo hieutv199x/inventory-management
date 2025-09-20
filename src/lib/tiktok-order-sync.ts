@@ -1292,5 +1292,5 @@ export async function syncPackageById(
     pkg: { id: string }
 ): Promise<void> {
     const sync = await TikTokOrderSync.create(shop_id);
-    await sync.upsertOrderPackage(order_id, pkg.id);
+    await sync.upsertOrderPackage(order_id, pkg);
 }

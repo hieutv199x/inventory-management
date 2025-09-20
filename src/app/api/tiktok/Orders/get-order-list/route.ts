@@ -116,7 +116,7 @@ export async function POST(req: NextRequest) {
             while (nextPageToken) {
                 try {
                     console.log(`Fetching next page with token: ${nextPageToken}`);
-                    
+
                     const nextPageResult = await client.api.OrderV202309Api.OrdersSearchPost(
                         page_size,
                         credentials.accessToken,
@@ -135,10 +135,10 @@ export async function POST(req: NextRequest) {
 
                     // Update token for next iteration
                     nextPageToken = nextPageResult.body?.data?.nextPageToken;
-                    
+
                     // Add a small delay to avoid rate limiting
                     await new Promise(resolve => setTimeout(resolve, 100));
-                    
+
                 } catch (paginationError) {
                     console.error('Error fetching next page:', paginationError);
                     break; // Stop pagination on error but continue with orders we have
@@ -147,7 +147,7 @@ export async function POST(req: NextRequest) {
 
             console.log(`Total orders to sync: ${allOrders.length}`);
             await syncOrdersToDatabase(allOrders, credentials.id, client, credentials, shopCipher); // Pass additional parameters
-            
+
             // Return modified result with total count information
             return NextResponse.json({
                 ...result.body,
@@ -248,19 +248,11 @@ async function processBatch(orders: any[], shopId: string, client: any, credenti
                 newOrders.push(orderData);
             }
 
-
             // Sync order attributes like can_split, must_split
-            setTimeout(async () => {
-                try {
-                    // Sync order attributes
-                    await syncOrderCanSplitOrNot(prisma, {
-                        shop_id: shopId,
-                        order_ids: [order.id] // Pass as array for future extensibility
-                    });
-                } catch (syncError) {
-                    console.error(`Failed to sync order attributes for order ${order.id}:`, syncError);
-                }
-            }, 1000);
+            await syncOrderCanSplitOrNot(prisma, {
+                shop_id: shopId,
+                order_ids: [order.id] // Pass as array for future extensibility
+            });
 
         }
 
@@ -409,20 +401,20 @@ async function processBatch(orders: any[], shopId: string, client: any, credenti
 
                         if (packageDetailResult?.body?.data) {
                             const packageDetail = packageDetailResult.body.data;
-                            
+
                             // Map API response to model fields - only include non-undefined values
                             const apiFields: any = {};
-                            
+
                             // Core TikTok package fields
                             if (packageDetail.packageStatus !== undefined) apiFields.status = packageDetail.packageStatus;
                             if (packageDetail.trackingNumber !== undefined) apiFields.trackingNumber = packageDetail.trackingNumber;
                             if (packageDetail.shippingProviderId !== undefined) apiFields.shippingProviderId = packageDetail.shippingProviderId;
                             if (packageDetail.shippingProviderName !== undefined) apiFields.shippingProviderName = packageDetail.shippingProviderName;
-                            
+
                             // API response data
                             if (packageDetail.orderLineItemIds !== undefined) apiFields.orderLineItemIds = packageDetail.orderLineItemIds || [];
                             if (packageDetail.orders !== undefined) apiFields.ordersData = JSON.stringify(packageDetail.orders);
-                            
+
                             // Extended fields from new schema
                             if (packageDetail.shippingType !== undefined) apiFields.shippingType = packageDetail.shippingType;
                             if (packageDetail.createTime !== undefined) apiFields.createTime = packageDetail.createTime;
@@ -436,7 +428,7 @@ async function processBatch(orders: any[], shopId: string, client: any, credenti
                             if (packageDetail.pickupSlot?.startTime !== undefined) apiFields.pickupSlotStartTime = packageDetail.pickupSlot.startTime;
                             if (packageDetail.pickupSlot?.endTime !== undefined) apiFields.pickupSlotEndTime = packageDetail.pickupSlot.endTime;
                             if (packageDetail.handoverMethod !== undefined) apiFields.handoverMethod = packageDetail.handoverMethod;
-                            
+
                             packageData = {
                                 ...packageData,
                                 ...apiFields
@@ -462,10 +454,10 @@ async function processBatch(orders: any[], shopId: string, client: any, credenti
 
                         // Add small delay to avoid rate limiting
                         await new Promise(resolve => setTimeout(resolve, 100));
-                        
+
                     } catch (packageError) {
                         console.warn(`Failed to fetch package detail for ${pkg.id}:`, packageError);
-                        
+
                         // Still add the package with basic info if API call fails
                         allPackages.push({
                             orderId: dbOrderId,

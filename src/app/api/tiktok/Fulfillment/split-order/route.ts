@@ -97,7 +97,7 @@ export async function POST(request: Request) {
 
         for (const packageInfo of body.data?.packages || []) {
             if (!packageInfo.id) continue;
-            await syncPackageById(credentials.shopId, orderId, { id: packageInfo.id });
+            await syncPackageById(credentials.shopId, order.id, { id: packageInfo.id });
         }
         
         // Update order customStatus to SPLITTED

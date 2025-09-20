@@ -1354,13 +1354,22 @@ export default function OrdersPage() {
 
             {/* Floating Add Tracking Info Button */}
             {selectedOrderIds.size > 0 && (
-                <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-40">
+                <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-40 flex items-center justify-center gap-4">
                     <button
                         onClick={handleOpenBulkTrackingModal}
                         className="bg-purple-600 text-white px-6 py-3 rounded-full shadow-lg hover:bg-purple-700 hover:shadow-xl transition-all duration-200 flex items-center justify-center gap-2"
                     >
                         <Truck className="h-5 w-5" />
                         <span className="font-medium">Add Tracking Info ({selectedOrderIds.size})</span>
+                    </button>
+                    {/* Updated Clear button style */}
+                    <button
+                        onClick={() => { setSelectedOrderIds(new Set()); }}
+                        className="px-6 py-3 rounded-full border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 shadow-sm hover:shadow transition-all duration-200 flex items-center justify-center gap-2 dark:border-gray-700 dark:text-gray-200 dark:bg-transparent dark:hover:bg-gray-800"
+                        title="Clear selected orders"
+                    >
+                        <X className="h-5 w-5" />
+                        <span className="font-medium">Clear</span>
                     </button>
                 </div>
             )}

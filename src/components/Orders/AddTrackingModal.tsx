@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, use } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Truck, Package, ChevronDownIcon } from 'lucide-react';
 import { Modal } from '../ui/modal';
 import { httpClient } from '@/lib/http-client';
@@ -102,119 +102,137 @@ const AddTrackingModal: React.FC<AddTrackingModalProps> = ({
         setPackageId(val);
     }
 
+    const handleClear = () => {
+        // Keep selected package; just clear values and allow editing
+        setTrackingNumber('');
+        setShippingProvider('');
+        setDisable(false);
+    };
+
     if (!isOpen) return null;
 
     return (
-        <Modal isOpen={isOpen} onClose={onClose} className="max-w-[30vw] max-h-[95vh] overflow-hidden">
+        <Modal
+            isOpen={isOpen}
+            onClose={onClose}
+            // Wider on desktop, almost full width on mobile; keep within viewport height
+            className="w-[96vw] sm:w-[92vw] md:w-[85vw] lg:w-[70vw] xl:w-[55vw] max-h-[95vh] overflow-hidden"
+        >
             {/* Header */}
-            <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
+            <div className="flex items-center justify-between p-4 sm:p-5 md:p-6 border-b border-gray-200 dark:border-gray-700">
                 <div className="flex items-center">
                     <Truck className="h-5 w-5 text-blue-600 mr-2" />
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                    <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">
                         Add Tracking Information
                     </h3>
                 </div>
-                <button
-                    onClick={onClose}
-                    className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-                >
-                    <X className="h-5 w-5" />
-                </button>
-            </div >
+            </div>
 
-            {/* Content */}
-            < form onSubmit={handleSubmit} className="p-6" >
-                <div className="mb-4">
-                    <div className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                        Order ID: <span className="font-mono font-medium">{orderId}</span>
+            {/* Content (scrollable) */}
+            <form onSubmit={handleSubmit} className="flex flex-col max-h-[calc(95vh-120px)]">
+                <div className="p-4 sm:p-5 md:p-6 overflow-y-auto">
+                    <div className="mb-4">
+                        <div className="text-sm text-gray-600 dark:text-gray-400">
+                            Order ID: <span className="font-mono font-medium break-all">{orderId}</span>
+                        </div>
                     </div>
-                </div>
 
-                <div className="space-y-4">
-                    {/* Package list */}
-                    {(packages && packages.length > 0) && (
+                    {/* Responsive grid: stack on mobile, two columns on md+ */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {/* Package list */}
+                        {(packages && packages.length > 0) && (
+                            <div>
+                                <Label>Package</Label>
+                                <div className="relative">
+                                    <Select
+                                        options={packages?.map(x => ({ value: x.packageId, label: x.packageId })) ?? []}
+                                        onChange={(val) => handleChangePackage(val)}
+                                        enablePlaceholder={false}
+                                        className="w-full dark:bg-dark-900"
+                                    />
+                                    <span className="absolute text-gray-500 -translate-y-1/2 pointer-events-none right-3 top-1/2 dark:text-gray-400">
+                                        <ChevronDownIcon />
+                                    </span>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Shipping Provider */}
                         <div>
-                            <Label>Package</Label>
-                            <div className="relative">
-                                <Select
-                                    options={packages?.map(x => ({ value: x.packageId, label: x.packageId })) ?? []}
-                                    onChange={(val) => handleChangePackage(val)}
-                                    enablePlaceholder={false}
-                                    className="dark:bg-dark-900"
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                Shipping Provider *
+                            </label>
+                            <select
+                                value={shippingProvider}
+                                onChange={(e) => setShippingProvider(e.target.value)}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                                required
+                                disabled={disable}
+                            >
+                                <option value=""></option>
+                                {availableProviders.map((provider, index) => {
+                                    // Handle both string and object providers
+                                    const providerName = typeof provider === 'string' ? provider : provider.name || provider.id;
+                                    const providerDisplayName = typeof provider === 'string' ? provider : provider.displayName || provider.name || provider.id;
+
+                                    return (
+                                        <option key={`${providerName}-${index}`} value={provider.id}>
+                                            {providerDisplayName}
+                                        </option>
+                                    );
+                                })}
+                            </select>
+
+                            {/* Custom provider input */}
+                            {shippingProvider === 'Other' && (
+                                <input
+                                    type="text"
+                                    placeholder="Enter custom shipping provider"
+                                    className="w-full px-3 py-2 mt-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400"
+                                    onChange={(e) => setShippingProvider(e.target.value)}
+                                    required
                                 />
-                                <span className="absolute text-gray-500 -translate-y-1/2 pointer-events-none right-3 top-1/2 dark:text-gray-400">
-                                    <ChevronDownIcon />
-                                </span>
+                            )}
+                        </div>
+
+                        {/* Tracking Number (span full row on md+) */}
+                        <div className="md:col-span-2">
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                Tracking Number *
+                            </label>
+                            <div className="relative">
+                                <Package className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                                <input
+                                    disabled={disable}
+                                    type="text"
+                                    value={trackingNumber}
+                                    onChange={(e) => setTrackingNumber(e.target.value)}
+                                    placeholder="Enter tracking number"
+                                    className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                                    required
+                                />
                             </div>
                         </div>
-                    )}
-                    {/* Tracking Number */}
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                            Tracking Number *
-                        </label>
-                        <div className="relative">
-                            <Package className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                            <input
-                                disabled={disable}
-                                type="text"
-                                value={trackingNumber}
-                                onChange={(e) => setTrackingNumber(e.target.value)}
-                                placeholder="Enter tracking number"
-                                className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400"
-                                required
-                            />
-                        </div>
-                    </div>
-
-                    {/* Shipping Provider */}
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                            Shipping Provider *
-                        </label>
-                        <select
-                            value={shippingProvider}
-                            onChange={(e) => setShippingProvider(e.target.value)}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                            required
-                            disabled={disable}
-                        >
-                            <option value="">
-                            </option>
-                            {availableProviders.map((provider, index) => {
-                                // Handle both string and object providers
-                                const providerName = typeof provider === 'string' ? provider : provider.name || provider.id;
-                                const providerDisplayName = typeof provider === 'string' ? provider : provider.displayName || provider.name || provider.id;
-
-                                return (
-                                    <option key={`${providerName}-${index}`} value={provider.id}>
-                                        {providerDisplayName}
-                                    </option>
-                                );
-                            })}
-                        </select>
-
-                        {/* Custom provider input */}
-                        {shippingProvider === 'Other' && (
-                            <input
-                                type="text"
-                                placeholder="Enter custom shipping provider"
-                                className="w-full px-3 py-2 mt-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400"
-                                onChange={(e) => setShippingProvider(e.target.value)}
-                                required
-                            />
-                        )}
                     </div>
                 </div>
 
-                {/* Actions */}
-                <div className="flex justify-end space-x-3 mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
+                {/* Actions (sticky footer) */}
+                <div className="flex justify-end gap-3 p-4 sm:p-5 md:p-6 border-t border-gray-200 dark:border-gray-700">
                     <button
                         type="button"
                         onClick={onClose}
                         className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700"
                     >
                         Cancel
+                    </button>
+                    <button
+                        type="button"
+                        onClick={handleClear}
+                        className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700"
+                        disabled={!disable && !trackingNumber && !shippingProvider}
+                        title="Clear tracking info"
+                    >
+                        Clear
                     </button>
                     <button
                         type="submit"
@@ -224,8 +242,8 @@ const AddTrackingModal: React.FC<AddTrackingModalProps> = ({
                         Add Tracking
                     </button>
                 </div>
-            </form >
-        </Modal >
+            </form>
+        </Modal>
     );
 };
 

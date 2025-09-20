@@ -173,20 +173,29 @@ const SplitOrderModal: React.FC<SplitOrderModalProps> = ({ isOpen, order, onClos
     if (!isOpen || !order) return null;
 
     return (
-        <Modal isOpen={isOpen} onClose={onClose} className="max-w-[45vw] max-h-[95vh] overflow-hidden">
+        <Modal
+            isOpen={isOpen}
+            onClose={onClose}
+            // Responsive width across screen sizes; keep within viewport height
+            className="w-[96vw] sm:w-[92vw] md:w-[85vw] lg:w-[70vw] xl:w-[55vw] max-h-[95vh] overflow-hidden"
+        >
+            {/* Overlay */}
             <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+            {/* Dialog */}
             <div className="relative w-full max-w-6xl max-h-[90vh] overflow-hidden rounded-lg bg-white dark:bg-gray-900 border dark:border-gray-700 shadow-xl flex flex-col">
-                <div className="flex items-center justify-between px-5 py-4 border-b dark:border-gray-700">
+                {/* Header */}
+                <div className="flex items-center justify-between px-4 sm:px-5 py-3 sm:py-4 border-b dark:border-gray-700">
                     <div>
-                        <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                        <h2 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-gray-100">
                             Split Order #{order.orderId}
                         </h2>
-                        <p className="text-sm text-gray-500 dark:text-gray-400">
+                        <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">
                             Assign each item to a package. All items must be assigned and each package must contain at least one item.
                         </p>
                     </div>
                 </div>
 
+                {/* Body */}
                 <div className="flex flex-col md:flex-row flex-1 overflow-hidden">
                     {/* Unassigned Items */}
                     <div className="md:w-1/3 border-r dark:border-gray-800 flex flex-col">
@@ -197,6 +206,14 @@ const SplitOrderModal: React.FC<SplitOrderModalProps> = ({ isOpen, order, onClos
                                     {unassignedItems.length}
                                 </span>
                             </h3>
+                        </div>
+                        <div className="px-4 pb-3 flex items-center justify-between">
+                            <button
+                                onClick={clearAssignments}
+                                className="text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 underline"
+                            >
+                                Clear all assignments
+                            </button>
                             <div className="flex gap-2">
                                 <button
                                     onClick={autoDistribute}
@@ -211,14 +228,6 @@ const SplitOrderModal: React.FC<SplitOrderModalProps> = ({ isOpen, order, onClos
                                     <Plus className="h-3 w-3" /> Group
                                 </button>
                             </div>
-                        </div>
-                        <div className="px-4 pb-3">
-                            <button
-                                onClick={clearAssignments}
-                                className="text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 underline"
-                            >
-                                Clear all assignments
-                            </button>
                         </div>
                         <div className="flex-1 overflow-auto px-4 pb-4 space-y-3">
                             {unassignedItems.length === 0 && (
@@ -279,7 +288,7 @@ const SplitOrderModal: React.FC<SplitOrderModalProps> = ({ isOpen, order, onClos
                                 No groups. Add one using the Group button.
                             </div>
                         )}
-                        <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
+                        <div className="grid md:grid-cols-2 xl:grid-cols-2 gap-4">
                             {groups.map((group, idx) => {
                                 // CHANGED: match by canonical key
                                 const items = (order?.lineItems || []).filter(i =>
@@ -383,7 +392,7 @@ const SplitOrderModal: React.FC<SplitOrderModalProps> = ({ isOpen, order, onClos
                 </div>
 
                 {/* Footer / Validation */}
-                <div className="border-t dark:border-gray-700 px-5 py-3 flex flex-col md:flex-row gap-3 md:items-center md:justify-between">
+                <div className="border-t dark:border-gray-700 px-4 sm:px-5 py-3 flex flex-col md:flex-row gap-3 md:items-center md:justify-between">
                     <div className="flex flex-col gap-1 text-sm">
                         {!allItemsAssigned && (
                             <div className="flex items-center gap-1 text-amber-600 dark:text-amber-400">
