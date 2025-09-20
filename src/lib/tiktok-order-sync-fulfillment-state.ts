@@ -15,10 +15,18 @@ export class TikTokOrderAttributesSync {
 
         try {
             // Get shop configuration
-            const shop = await this.prisma.shopAuthorization.findUnique({
-                where: { id: options.shop_id },
-                include: { app: true }
-            });
+            let shop
+            try {
+                shop = await this.prisma.shopAuthorization.findUnique({
+                    where: { id: options.shop_id },
+                    include: { app: true }
+                });
+            } catch (dbError) {
+                shop = await this.prisma.shopAuthorization.findUnique({
+                    where: { shopId: options.shop_id },
+                    include: { app: true }
+                });                
+            }
 
             if (!shop) {
                 throw new Error(`Shop ${options.shop_id} not found in database`);
@@ -63,7 +71,7 @@ export class TikTokOrderAttributesSync {
                 );
 
                 const { body } = response;
-                
+
                 if (body.data?.splitAttributes) {
                     for (const attribute of body.data.splitAttributes) {
                         const order = await this.prisma.order.findFirst({

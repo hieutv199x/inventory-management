@@ -34,10 +34,18 @@ export class TikTokUnsettledTransactionSync {
 
         try {
             // Get shop configuration
-            const shop = await this.prisma.shopAuthorization.findUnique({
-                where: { id: options.shop_id },
-                include: { app: true }
-            });
+            let shop;
+            try {
+                shop = await this.prisma.shopAuthorization.findUnique({
+                    where: { id: options.shop_id },
+                    include: { app: true }
+                });
+            } catch (dbError) {
+                shop = await this.prisma.shopAuthorization.findUnique({
+                    where: { shopId: options.shop_id },
+                    include: { app: true }
+                });                
+            }
 
             if (!shop) {
                 throw new Error(`Shop ${options.shop_id} not found in database`);
@@ -92,7 +100,7 @@ export class TikTokUnsettledTransactionSync {
                     );
 
                     const { body } = response;
-                    
+
                     if (body.data?.transactions) {
                         for (const transaction of body.data.transactions) {
                             try {
@@ -106,7 +114,7 @@ export class TikTokUnsettledTransactionSync {
                     }
 
                     pageToken = body.data?.nextPageToken;
-                    
+
                 } catch (apiError: any) {
                     errors.push(`API call failed: ${apiError.message}`);
                     break;
@@ -130,7 +138,7 @@ export class TikTokUnsettledTransactionSync {
         } catch (error: any) {
             const executionTime = Date.now() - startTime;
             errors.push(error.message);
-            
+
             return {
                 success: false,
                 shop_id: options.shop_id,
