@@ -227,8 +227,8 @@ async function handleSpecificStatusChanges(orderId: string, newStatus: string, w
                 // Sync unsettled transactions to ensure payment status is up to date
                 await syncUnsettledTransactions(prisma, {
                     shop_id: shopId,
-                    search_time_ge: createTime,
-                    search_time_lt: Math.floor(Date.now() / 1000),
+                    search_time_ge: new Date(createTime * 1000).setHours(0, 0, 0, 0) / 1000,
+                    search_time_lt: Math.floor(new Date().setHours(23, 59, 59, 999) / 1000),
                     page_size: 10
                 });
             } catch (syncError) {

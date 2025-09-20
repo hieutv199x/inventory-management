@@ -2,7 +2,7 @@
 
 import { X } from 'lucide-react';
 import Image from 'next/image';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Modal } from '../ui/modal';
 import { httpClient } from '@/lib/http-client';
 import { useLoading } from '@/context/loadingContext';
@@ -13,6 +13,7 @@ type OrderLite = {
     lineItems?: Array<any>;
     channelData?: string;
     packages?: Array<any>;
+    shop?: { shopId: string }; // add shopId holder
 };
 
 type BulkData = {
@@ -29,7 +30,7 @@ type Props = {
     selectedOrders: OrderLite[];
     data: BulkData;
     onChange: (orderId: string, field: 'trackingId' | 'shippingProvider' | 'receiptId', value: string) => void;
-    onSave: () => void;
+    onSave: (rows: { orderId: string; shopId: string; packageId: string; trackingId: string; providerId: string }[]) => void; // include shopId
     getLineItemImages: (order: any) => Array<{ image?: string; productName: string; id: string }>;
 };
 
@@ -45,10 +46,14 @@ export default function BulkTrackingModal({
     const [availableProviders, setAvailableProviders] = useState<any[]>([]);
     const { showLoading, hideLoading } = useLoading();
     const [packages, setPackages] = useState<any[]>([]);
-    // Track which rows were explicitly cleared to unlock inputs even if package had tracking already
     const [clearedRows, setClearedRows] = useState<Set<string>>(new Set());
+    // Local per-row input cache for snappy typing (keyed by orderId+packageId)
+    const [rowsState, setRowsState] = useState<Record<string, { trackingId: string; shippingProvider: string }>>({});
 
-    // Aggregate all packages from selectedOrders, merge line items by orderLineItemIds (or fallback), dedupe by packageId + orderId
+    // Helper to build a stable row key for a package
+    const getRowKey = (pkg: any) => `${pkg.__orderId}:${pkg.packageId || pkg.id || ''}`;
+
+    // Aggregate/merge packages + compute stable __rowKey
     useEffect(() => {
         if (!isOpen) return;
 
@@ -56,6 +61,7 @@ export default function BulkTrackingModal({
             (order?.packages ?? []).map((pkg: any) => ({
                 ...pkg,
                 __orderId: order.orderId,
+                __shopId: order.shop?.shopId || '', // tag package with shopId
             }))
         );
 
@@ -93,10 +99,31 @@ export default function BulkTrackingModal({
             if (seen.has(key)) return false;
             seen.add(key);
             return true;
-        });
+        }).map((p: any) => ({
+            ...p,
+            __rowKey: `${p.__orderId}:${p.packageId || p.id || ''}`,
+        }));
 
         setPackages(unique);
     }, [isOpen, selectedOrders]);
+
+    // Initialize local rowsState from props data/pkg defaults when packages change
+    useEffect(() => {
+        if (!isOpen || packages.length === 0) return;
+        setRowsState((prev) => {
+            const next = { ...prev };
+            for (const pkg of packages) {
+                const key = pkg.__rowKey || getRowKey(pkg);
+                if (!next[key]) {
+                    next[key] = {
+                        trackingId: (data[pkg.__orderId]?.trackingId ?? pkg?.trackingNumber ?? '') || '',
+                        shippingProvider: (data[pkg.__orderId]?.shippingProvider ?? pkg?.shippingProviderId ?? '') || '',
+                    };
+                }
+            }
+            return next;
+        });
+    }, [isOpen, packages, data]);
 
     // Load shipping providers similar to AddTrackingModal (use first selected order)
     useEffect(() => {
@@ -126,6 +153,36 @@ export default function BulkTrackingModal({
             }
         })();
     }, [isOpen, selectedOrders, availableProviders.length, showLoading, hideLoading]);
+
+    // Helper: commit a single row to parent state on blur (keeps parent in sync without lag)
+    const commitRowToParent = (pkg: any) => {
+        const key = pkg.__rowKey || getRowKey(pkg);
+        const current = rowsState[key] || { trackingId: '', shippingProvider: '' };
+        onChange(pkg.__orderId, 'trackingId', current.trackingId || '');
+        onChange(pkg.__orderId, 'shippingProvider', current.shippingProvider || '');
+    };
+
+    // Helper: build payload per package without existing trackingNumber using local rowsState
+    const buildPayload = () => {
+        const rows: { orderId: string; shopId: string; packageId: string; trackingId: string; providerId: string }[] = [];
+        for (const pkg of packages) {
+            // Skip packages that already have trackingNumber (locked rows)
+            if (pkg?.trackingNumber) continue;
+
+            const key = pkg.__rowKey || getRowKey(pkg);
+            const local = rowsState[key] || { trackingId: '', shippingProvider: '' };
+            const trackingId = (local.trackingId || '').trim();
+            const providerId = (local.shippingProvider || '').trim();
+            const packageId = String(pkg.packageId || pkg.id || '');
+            const orderId = String(pkg.__orderId || '');
+            const shopId = String(pkg.__shopId || '');
+
+            if (orderId && shopId && packageId && trackingId && providerId) {
+                rows.push({ orderId, shopId, packageId, trackingId, providerId });
+            }
+        }
+        return rows;
+    };
 
     if (!isOpen) return null;
 
@@ -169,29 +226,16 @@ export default function BulkTrackingModal({
                                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                                             Shipping Provider
                                         </th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                                            Actions
-                                        </th>
                                     </tr>
                                 </thead>
                                 <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                                    {packages.map((pkg, idx) => {
-                                        const images = getLineItemImages(pkg) || [];
-                                        const rowKey = `${pkg.__orderId}-${pkg.packageId || pkg.id || idx}`;
-                                        const hadTracking = Boolean(pkg?.trackingNumber && pkg?.shippingProviderId);
+                                    {packages.map((pkg) => {
+                                        const rowKey = pkg.__rowKey || getRowKey(pkg);
+                                        const hadTracking = Boolean(pkg?.trackingNumber);
                                         const isCleared = clearedRows.has(rowKey);
                                         const isLocked = hadTracking && !isCleared;
-                                        const trackingValue = (isCleared ? '' : (data[pkg.__orderId]?.trackingId ?? pkg?.trackingNumber ?? ''));
-                                        const providerValue = (isCleared ? '' : (data[pkg.__orderId]?.shippingProvider ?? pkg?.shippingProviderId ?? ''));
-
-                                        const handleClear = () => {
-                                            const next = new Set(clearedRows);
-                                            next.add(rowKey);
-                                            setClearedRows(next);
-                                            onChange(pkg.__orderId, 'trackingId', '');
-                                            onChange(pkg.__orderId, 'shippingProvider', '');
-                                        };
-
+                                        const local = rowsState[rowKey] || { trackingId: '', shippingProvider: '' };
+                                        const images = getLineItemImages(pkg) || [];
                                         return (
                                             <tr key={rowKey} className="hover:bg-gray-50 dark:hover:bg-gray-700">
                                                 <td className="px-6 py-4 whitespace-nowrap">
@@ -236,23 +280,27 @@ export default function BulkTrackingModal({
                                                 <td className="px-6 py-4 whitespace-nowrap">
                                                     <input
                                                         type="text"
-                                                        value={trackingValue}
+                                                        value={local.trackingId}
                                                         onChange={(e) => {
-                                                            if (isLocked) return;
-                                                            onChange(pkg.__orderId, 'trackingId', e.target.value);
+                                                            const v = e.target.value;
+                                                            setRowsState(s => ({ ...s, [rowKey]: { ...s[rowKey], trackingId: v } }));
                                                         }}
+                                                        onBlur={() => commitRowToParent(pkg)}
                                                         placeholder="Enter tracking ID"
                                                         className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 dark:bg-gray-700 dark:text-white disabled:opacity-60"
                                                         disabled={isLocked}
+                                                        autoComplete="off"
+                                                        inputMode="text"
                                                     />
                                                 </td>
                                                 <td className="px-6 py-4 whitespace-nowrap">
                                                     <select
-                                                        value={providerValue}
+                                                        value={local.shippingProvider}
                                                         onChange={(e) => {
-                                                            if (isLocked) return;
-                                                            onChange(pkg.__orderId, 'shippingProvider', e.target.value);
+                                                            const v = e.target.value;
+                                                            setRowsState(s => ({ ...s, [rowKey]: { ...s[rowKey], shippingProvider: v } }));
                                                         }}
+                                                        onBlur={() => commitRowToParent(pkg)}
                                                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-white disabled:opacity-60"
                                                         required
                                                         disabled={isLocked}
@@ -270,17 +318,6 @@ export default function BulkTrackingModal({
                                                         })}
                                                     </select>
                                                 </td>
-                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                    <button
-                                                        type="button"
-                                                        onClick={handleClear}
-                                                        className="text-xs px-3 py-1.5 rounded border border-gray-300 text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
-                                                        disabled={isCleared || (!hadTracking && !trackingValue && !providerValue)}
-                                                        title="Clear tracking info"
-                                                    >
-                                                        Clear
-                                                    </button>
-                                                </td>
                                             </tr>
                                         );
                                     })}
@@ -291,26 +328,15 @@ export default function BulkTrackingModal({
 
                     {/* Mobile view: cards */}
                     <div className="md:hidden space-y-4">
-                        {packages.map((pkg, idx) => {
-                            const images = getLineItemImages(pkg) || [];
-                            const cardKey = `${pkg.__orderId}-m-${pkg.packageId || pkg.id || idx}`;
-                            const hadTracking = Boolean(pkg?.trackingNumber && pkg?.shippingProviderId);
-                            const isCleared = clearedRows.has(`${pkg.__orderId}-${pkg.packageId || pkg.id || idx}`);
+                        {packages.map((pkg) => {
+                            const rowKey = pkg.__rowKey || getRowKey(pkg);
+                            const hadTracking = Boolean(pkg?.trackingNumber);
+                            const isCleared = clearedRows.has(rowKey);
                             const isLocked = hadTracking && !isCleared;
-                            const trackingValue = (isCleared ? '' : (data[pkg.__orderId]?.trackingId ?? pkg?.trackingNumber ?? ''));
-                            const providerValue = (isCleared ? '' : (data[pkg.__orderId]?.shippingProvider ?? pkg?.shippingProviderId ?? ''));
-
-                            const handleClear = () => {
-                                const key = `${pkg.__orderId}-${pkg.packageId || pkg.id || idx}`;
-                                const next = new Set(clearedRows);
-                                next.add(key);
-                                setClearedRows(next);
-                                onChange(pkg.__orderId, 'trackingId', '');
-                                onChange(pkg.__orderId, 'shippingProvider', '');
-                            };
-
+                            const local = rowsState[rowKey] || { trackingId: '', shippingProvider: '' };
+                            const images = getLineItemImages(pkg) || [];
                             return (
-                                <div key={cardKey} className="rounded-lg border border-gray-200 dark:border-gray-700 p-4 bg-white dark:bg-gray-800">
+                                <div key={rowKey} className="rounded-lg border border-gray-200 dark:border-gray-700 p-4 bg-white dark:bg-gray-800">
                                     <div className="flex items-center justify-between mb-3">
                                         <div className="text-sm font-semibold text-gray-900 dark:text-white break-all">
                                             {pkg.__orderId}
@@ -322,7 +348,7 @@ export default function BulkTrackingModal({
                                     <div className="flex -space-x-1 mb-3">
                                         {images.slice(0, 5).map((item, i) => (
                                             <Image
-                                                key={`${cardKey}-${i}`}
+                                                key={`${rowKey}-${i}`}
                                                 src={item.image || '/images/placeholder.png'}
                                                 alt={item.productName || 'Product'}
                                                 width={24}
@@ -341,14 +367,17 @@ export default function BulkTrackingModal({
                                             </label>
                                             <input
                                                 type="text"
-                                                value={trackingValue}
+                                                value={local.trackingId}
                                                 onChange={(e) => {
-                                                    if (isLocked) return;
-                                                    onChange(pkg.__orderId, 'trackingId', e.target.value);
+                                                    const v = e.target.value;
+                                                    setRowsState(s => ({ ...s, [rowKey]: { ...s[rowKey], trackingId: v } }));
                                                 }}
+                                                onBlur={() => commitRowToParent(pkg)}
                                                 placeholder="Enter tracking ID"
                                                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 dark:bg-gray-700 dark:text-white disabled:opacity-60"
                                                 disabled={isLocked}
+                                                autoComplete="off"
+                                                inputMode="text"
                                             />
                                         </div>
                                         <div>
@@ -356,11 +385,12 @@ export default function BulkTrackingModal({
                                                 Shipping Provider
                                             </label>
                                             <select
-                                                value={providerValue}
+                                                value={local.shippingProvider}
                                                 onChange={(e) => {
-                                                    if (isLocked) return;
-                                                    onChange(pkg.__orderId, 'shippingProvider', e.target.value);
+                                                    const v = e.target.value;
+                                                    setRowsState(s => ({ ...s, [rowKey]: { ...s[rowKey], shippingProvider: v } }));
                                                 }}
+                                                onBlur={() => commitRowToParent(pkg)}
                                                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-white disabled:opacity-60"
                                                 required
                                                 disabled={isLocked}
@@ -378,17 +408,6 @@ export default function BulkTrackingModal({
                                                 })}
                                             </select>
                                         </div>
-                                        <div className="pt-1">
-                                            <button
-                                                type="button"
-                                                onClick={handleClear}
-                                                className="w-full text-xs px-3 py-2 rounded border border-gray-300 text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
-                                                disabled={isCleared || (!hadTracking && !trackingValue && !providerValue)}
-                                                title="Clear tracking info"
-                                            >
-                                                Clear
-                                            </button>
-                                        </div>
                                     </div>
                                 </div>
                             );
@@ -405,7 +424,7 @@ export default function BulkTrackingModal({
                         Cancel
                     </button>
                     <button
-                        onClick={onSave}
+                        onClick={() => { onSave(buildPayload()); setPackages([]); setClearedRows(new Set()); }}
                         className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700"
                     >
                         Save Tracking Info

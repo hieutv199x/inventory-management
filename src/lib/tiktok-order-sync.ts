@@ -2,6 +2,7 @@ import { PrismaClient, Channel, NotificationType } from "@prisma/client";
 import { TikTokShopNodeApiClient, Order202309GetOrderListRequestBody } from "@/nodejs_sdk";
 import { NotificationService } from "@/lib/notification-service";
 import { syncOrderCanSplitOrNot } from "./tiktok-order-sync-fulfillment-state";
+import { syncUnsettledTransactions } from "./tiktok-unsettled-transactions-sync";
 
 const prisma = new PrismaClient();
 
@@ -512,6 +513,13 @@ export class TikTokOrderSync {
                         await syncOrderCanSplitOrNot(prisma, {
                             shop_id: shopId,
                             order_ids: [order.id]
+                        });
+
+                        await syncUnsettledTransactions(prisma, {
+                            shop_id: shopId,
+                            search_time_ge: new Date(order.createTime * 1000).setHours(0, 0, 0, 0) / 1000,
+                            search_time_lt: Math.floor(new Date().setHours(23, 59, 59, 999) / 1000),
+                            page_size: 10
                         });
 
                         updated++;

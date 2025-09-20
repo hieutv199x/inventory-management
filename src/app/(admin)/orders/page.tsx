@@ -722,14 +722,14 @@ export default function OrdersPage() {
                         <button
                             onClick={handleExportExcel}
                             disabled={isExporting || orders.length === 0}
-                            className="bg-orange-600 text-white px-3 py-1.5 text-sm rounded-md hover:bg-orange-700 disabled:opacity-50 flex items-center justify-center hover:shadow-lg transition duration-200"
+                            className="bg-orange-600 text-white px-3 py-1.5 text-xs rounded-md hover:bg-orange-700 disabled:opacity-50 flex items-center justify-center hover:shadow-lg transition duration-200"
                         >
                             {isExporting ? <Loader2 className="h-3 w-3 animate-spin mr-1.5" /> : <Download className="h-3 w-3 mr-1.5" />}
                             {isExporting ? 'Exporting...' : 'Export Excel'}
                         </button>
                         <button
                             onClick={() => setShowImportModal(true)}
-                            className="bg-blue-600 text-white px-3 py-1.5 text-sm rounded-md hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center hover:shadow-lg transition duration-200"
+                            className="bg-blue-600 text-white px-3 py-1.5 text-xs rounded-md hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center hover:shadow-lg transition duration-200"
                         >
                             <Upload className="h-3 w-3 mr-1.5" />
                             Import Excel
@@ -737,7 +737,7 @@ export default function OrdersPage() {
                         <button
                             onClick={() => setShowSyncModal(true)}
                             disabled={syncing}
-                            className="bg-green-600 text-white px-3 py-1.5 text-sm rounded-md hover:bg-green-700 disabled:opacity-50 flex items-center justify-center hover:shadow-lg transition duration-200"
+                            className="bg-green-600 text-white px-3 py-1.5 text-xs rounded-md hover:bg-green-700 disabled:opacity-50 flex items-center justify-center hover:shadow-lg transition duration-200"
                         >
                             {syncing ? <Loader2 className="h-3 w-3 animate-spin mr-1.5" /> : <RefreshCw className="h-3 w-3 mr-1.5" />}
                             {t('orders.sync_orders')}
@@ -745,7 +745,7 @@ export default function OrdersPage() {
                         <button
                             onClick={syncUnsettledTransactions}
                             disabled={syncing}
-                            className="bg-green-600 text-white px-3 py-1.5 text-sm rounded-md hover:bg-green-700 disabled:opacity-50 flex items-center justify-center hover:shadow-lg transition duration-200"
+                            className="bg-green-600 text-white px-3 py-1.5 text-xs rounded-md hover:bg-green-700 disabled:opacity-50 flex items-center justify-center hover:shadow-lg transition duration-200"
                         >
                             {syncing ? <Loader2 className="h-3 w-3 animate-spin mr-1.5" /> : <RefreshCw className="h-3 w-3 mr-1.5" />}
                             {t('orders.sync_unsettled_transactions')}
@@ -1382,12 +1382,43 @@ export default function OrdersPage() {
                 getLineItemImages={getLineItemImages}
                 data={bulkTrackingData}
                 onChange={handleBulkTrackingChange}
-                onSave={() => {
-                    // Handle bulk tracking submit here
-                    console.log('Bulk tracking data:', bulkTrackingData);
-                    toast.success('Tracking info updated successfully!');
-                    setShowBulkTrackingModal(false);
-                    setSelectedOrderIds(new Set());
+                onSave={async (rows) => {
+                    // rows: [{ orderId, shopId, packageId, trackingId, providerId }]
+                    if (!rows.length) {
+                        toast.error('No valid rows to submit');
+                        return;
+                    }
+                    try {
+                        showLoading('Saving tracking info...');
+                        const res = await httpClient.post('/orders/bulk-tracking', { rows });
+                        const summary = res?.summary || {};
+                        const errors = Array.isArray(res?.errors) ? res.errors : [];
+
+                        if (errors.length > 0) {
+                            const first = errors.slice(0, 5).map((e: any) => {
+                                const pkg = e?.packageId ? `pkg ${e.packageId}` : 'pkg -';
+                                const code = e?.code ? `[${e.code}]` : '';
+                                const msg = e?.message || 'Unknown error';
+                                return `${pkg} ${code} ${msg}`;
+                            }).join('\n');
+                            const submitted = summary.submitted ?? rows.length;
+                            const failed = summary.failed ?? errors.length;
+                            toast.error(`Bulk tracking failed (${failed}/${submitted}).\n${first}`);
+                            // Keep modal open so user can fix inputs
+                            return;
+                        }
+
+                        toast.success(`Saved ${summary.succeeded ?? rows.length} packages successfully.`);
+                        await fetchOrders({ page: pagination.currentPage, pageSize, loadingMessage: t('orders.refreshing') });
+                        await fetchStatusCounts();
+                        setShowBulkTrackingModal(false);
+                        setSelectedOrderIds(new Set());
+                    } catch (e: any) {
+                        console.error('Bulk tracking error', e);
+                        toast.error(e?.message || 'Failed to save tracking info');
+                    } finally {
+                        hideLoading();
+                    }
                 }}
             />
         </div>
