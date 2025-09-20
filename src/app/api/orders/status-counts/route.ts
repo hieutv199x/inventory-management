@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
-import { httpClient } from '@/lib/http-client';
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
 
 const STATUS_KEYS = [
   'UNPAID',
@@ -22,29 +24,47 @@ export async function GET(req: Request) {
     const keyword = url.searchParams.get('keyword') || '';
     const customStatus = url.searchParams.get('customStatus') || '';
 
-    const baseParams = () => {
-      const p = new URLSearchParams();
-      p.append('page', '1');
-      p.append('pageSize', '1');
-      if (shopId) p.append('shopId', shopId);
-      if (createTimeGe) p.append('createTimeGe', createTimeGe);
-      if (createTimeLt) p.append('createTimeLt', createTimeLt);
-      if (keyword) p.append('keyword', keyword);
-      if (customStatus) p.append('customStatus', customStatus);
-      return p;
-    };
+    // Build base where filter
+    const where: any = {};
 
+    if (shopId) {
+      where.shopId = shopId;
+    }
+
+    if (createTimeGe || createTimeLt) {
+      where.createTime = {};
+      if (createTimeGe) where.createTime.gte = Number(createTimeGe);
+      if (createTimeLt) where.createTime.lt = Number(createTimeLt);
+    }
+
+    if (keyword) {
+      where.OR = [
+        { orderId: { contains: keyword, mode: 'insensitive' } },
+        { buyerEmail: { contains: keyword, mode: 'insensitive' } },
+      ];
+      // You can extend with recipient fields if they exist in schema
+      // e.g., { recipientName: { contains: keyword, mode: 'insensitive' } }
+    }
+
+    if (customStatus) {
+      if (customStatus === 'NOT_SET') {
+        where.OR = [
+          ...(where.OR || []),
+          { customStatus: null },
+          { customStatus: '' },
+        ];
+      } else {
+        where.customStatus = customStatus;
+      }
+    }
+
+    // Count per status in parallel
     const results = await Promise.all(
       STATUS_KEYS.map(async (status) => {
-        const params = baseParams();
-        params.append('status', status);
-        try {
-          const res = await httpClient.get(`/orders?${params.toString()}`);
-          const total = res?.pagination?.totalItems ?? 0;
-          return { status, total };
-        } catch {
-          return { status, total: 0 };
-        }
+        const total = await prisma.order.count({
+          where: { ...where, status },
+        });
+        return { status, total };
       })
     );
 
@@ -53,15 +73,8 @@ export async function GET(req: Request) {
       counts[r.status] = r.total;
     });
 
-    // Optional: overall total (same filters, no status)
-    let total = 0;
-    try {
-      const params = baseParams();
-      const res = await httpClient.get(`/orders?${params.toString()}`);
-      total = res?.pagination?.totalItems ?? 0;
-    } catch {
-      total = 0;
-    }
+    // Overall total (same filters, no status)
+    const total = await prisma.order.count({ where });
 
     return NextResponse.json({ counts, total });
   } catch (err) {

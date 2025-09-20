@@ -395,16 +395,19 @@ export default function OrdersPage() {
             loadingMessage: t('orders.searching_orders'),
             isSearch: true
         });
+        await fetchStatusCounts();
     };
 
     useEffect(() => {
         fetchOrders(); // initial load
+        fetchStatusCounts();
     }, []); // intentionally empty (fetchOrders uses latest refs internally)
 
     // Consolidate all fetchOrders triggers into a single useEffect
     useEffect(() => {
         if (needSearch) {
             fetchOrders();
+            fetchStatusCounts();
             setNeedSearch(false);
         }
     }, [currentPage, needSearch, fetchOrders]); // This will trigger when any of these change
@@ -447,6 +450,7 @@ export default function OrdersPage() {
 
             toast.success(t('orders.sync_success'));
             await fetchOrders();
+            await fetchStatusCounts();
         } catch (error) {
             console.error('Error syncing orders:', error);
             toast.error(t('orders.sync_failed'));
@@ -609,6 +613,7 @@ export default function OrdersPage() {
             });
 
             fetchOrders();
+            fetchStatusCounts();
             toast.success(res);
         } catch (error) {
             console.error('Error adding tracking information:', error);
@@ -701,11 +706,6 @@ export default function OrdersPage() {
             setLoadingCounts(false);
         }
     }, [filters.shopId, filters.dateFrom, filters.dateTo, filters.keyword, filters.customStatus]);
-
-    useEffect(() => {
-        // Initial and whenever relevant filters change (now includes keyword/customStatus)
-        fetchStatusCounts();
-    }, [fetchStatusCounts]);
 
     return (
         <div>
