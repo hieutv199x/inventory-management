@@ -106,7 +106,7 @@ export async function syncStatements(
             client, 
             credentials, 
             prisma, 
-            shop.id, 
+            shop.shopId, 
             statement.id
           );
           transactionsSynced++;
@@ -332,11 +332,11 @@ async function upsertTikTokTransaction(
   transaction: any
 ) {
   const transactionData = {
-    transactionId: transaction.transactionId,
+    transactionId: transaction.id,
     shopId: shopId,
     statementId: statementId,
-    type: transaction.type || 'UNKNOWN',
-    currency: transaction.currency || 'USD',
+    type: transaction.type || '',
+    currency: transaction.currency || 'GBP',
     createdTime: transaction.createdTime ? new Date(transaction.createdTime * 1000) : null,
     
     // Financial amounts
@@ -357,20 +357,20 @@ async function upsertTikTokTransaction(
     // Reserve info
     reserveId: transaction.reserveId || null,
     reserveStatus: transaction.reserveStatus || null,
-    estimatedReleaseTime: transaction.estimatedReleaseTime ? new Date(transaction.estimatedReleaseTime * 1000) : null,
+    estimatedReleaseTime: transaction.estimatedReleaseTime ? new Date(parseInt(transaction.estimatedReleaseTime) * 1000) : null,
 
     // Breakdown fields as JSON
-    revenueBreakdown: transaction.revenueBreakdown || null,
-    shippingCostBreakdown: transaction.shippingCostBreakdown || null,
-    feeTaxBreakdown: transaction.feeTaxBreakdown || null,
-    supplementaryComponent: transaction.supplementaryComponent || null,
+    revenueBreakdown: transaction.revenueBreakdown ? JSON.parse(JSON.stringify(transaction.revenueBreakdown)) : null,
+    shippingCostBreakdown: transaction.shippingCostBreakdown ? JSON.parse(JSON.stringify(transaction.shippingCostBreakdown)) : null,
+    feeTaxBreakdown: transaction.feeTaxBreakdown ? JSON.parse(JSON.stringify(transaction.feeTaxBreakdown)) : null,
+    supplementaryComponent: transaction.supplementaryComponent ? JSON.parse(JSON.stringify(transaction.supplementaryComponent)) : null,
   };
 
   // Check if transaction already exists
   const existingTransaction = await prisma.tikTokTransaction.findFirst({
     where: {
       shopId: shopId,
-      transactionId: transaction.transactionId,
+      transactionId: transaction.id,
     }
   });
 
