@@ -82,7 +82,7 @@ export async function POST(req: NextRequest) {
 }
 
 // Make addTracking return structured data (no NextResponse)
-async function addTracking(rows: BulkRow[], shop_id: string): Promise<{ shopId: string; data?: any; errors?: any[]; error?: string }> {
+export async function addTracking(rows: BulkRow[], shop_id: string): Promise<{ shopId: string; data?: any; errors?: any[]; error?: string }> {
     const shopId = String(shop_id || '').trim();
     if (!shopId) {
         return { shopId, error: 'Missing required fields: shop_id' };

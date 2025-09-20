@@ -30,17 +30,11 @@ export default function ImportOrdersModal({
       {/* Overlay */}
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
       {/* Dialog */}
-      <div className="relative bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md mx-4 shadow-xl">
+      <div className="relative bg-white dark:bg-gray-800 rounded-lg p-6 w-full shadow-xl">
         <div className="flex justify-between items-center mb-4">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
             Import Orders from Excel
           </h3>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-          >
-            <X className="h-6 w-6" />
-          </button>
         </div>
 
         <div className="space-y-4">
@@ -48,7 +42,7 @@ export default function ImportOrdersModal({
             <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
               Upload an Excel file with order tracking information. The file should contain columns for Order ID, SKU ID, Product name, Variations, Quantity, Shipping provider name, Tracking ID, and Receipt ID.
             </p>
-            <button
+            {/* <button
               onClick={onTemplateDownload}
               className="text-blue-600 hover:text-blue-700 text-sm underline mb-2"
             >
@@ -60,7 +54,7 @@ export default function ImportOrdersModal({
               className="text-green-600 hover:text-green-700 text-sm underline mb-3"
             >
               Download Sample Data
-            </button>
+            </button> */}
           </div>
 
           <div>

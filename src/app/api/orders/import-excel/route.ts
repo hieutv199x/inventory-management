@@ -2,31 +2,36 @@ import { NextRequest, NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 import { getUserWithShopAccess } from "@/lib/auth";
 import * as XLSX from 'xlsx';
+import { addTracking as addTrackingBulk } from '@/app/api/orders/bulk-tracking/route';
 
 const prisma = new PrismaClient();
 
-interface ImportRow {
-  'Order ID': string;
-  'SKU ID'?: string;
-  'Product name'?: string;
-  'Variations'?: string;
-  'Quantity'?: number;
-  'Shipping provider name': string;
-  'Tracking ID': string;
-  'Receipt ID'?: string;
-}
+type PackageRow = {
+  'Order ID'?: string | number;
+  'Package ID'?: string | number;
+  'Provider ID'?: string | number;
+  'Provider Name'?: string;
+  'Tracking ID'?: string | number;
+  // ...other columns are ignored
+};
+
+type ProviderRow = {
+  'Provider ID'?: string | number;
+  'Provider Name'?: string;
+  // ...other columns are ignored
+};
 
 export async function POST(req: NextRequest) {
   try {
-    const { user, accessibleShopIds, isAdmin } = await getUserWithShopAccess(req, prisma);
-    
+    // Auth (kept)
+    await getUserWithShopAccess(req, prisma);
+
     const formData = await req.formData();
     const file = formData.get('file') as File;
 
     if (!file) {
       return NextResponse.json({ success: false, error: "No file provided" }, { status: 400 });
     }
-
     if (!file.name.match(/\.(xlsx|xls)$/i)) {
       return NextResponse.json({ success: false, error: "Invalid file format. Please upload Excel file (.xlsx or .xls)" }, { status: 400 });
     }
@@ -34,139 +39,152 @@ export async function POST(req: NextRequest) {
     // Read Excel file
     const buffer = Buffer.from(await file.arrayBuffer());
     const workbook = XLSX.read(buffer, { type: 'buffer' });
-    const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-    const jsonData = XLSX.utils.sheet_to_json(worksheet) as ImportRow[];
 
-    if (jsonData.length === 0) {
-      return NextResponse.json({ success: false, error: "Excel file is empty or has no data rows" }, { status: 400 });
+    // Resolve sheets by name with fallbacks
+    const packagesSheet =
+      workbook.Sheets['Order Packages'] ??
+      workbook.Sheets[workbook.SheetNames[0]];
+    const providersSheet =
+      workbook.Sheets['Shipping Providers'] ??
+      workbook.Sheets[
+        workbook.SheetNames.find(n => n.toLowerCase().includes('provider')) || ''
+      ];
+
+    if (!packagesSheet) {
+      return NextResponse.json({ success: false, error: 'Sheet "Order Packages" not found' }, { status: 400 });
     }
 
-    console.log(`Processing ${jsonData.length} rows from Excel file`);
+    // Parse sheets
+    const pkgRows = XLSX.utils.sheet_to_json<PackageRow>(packagesSheet, { defval: '' });
+    const provRows = providersSheet ? XLSX.utils.sheet_to_json<ProviderRow>(providersSheet, { defval: '' }) : [];
 
-    let processedCount = 0;
-    let errorCount = 0;
+    // Build provider name -> id map (case-insensitive)
+    const providerMap = new Map<string, string>();
+    for (const pr of provRows) {
+      const id = String(pr['Provider ID'] ?? '').trim();
+      const name = String(pr['Provider Name'] ?? '').trim();
+      if (!name) continue;
+      providerMap.set(name.toLowerCase(), id);
+    }
+
+    const mapped: { orderId: string; packageId: string; providerId: string; trackingNumber: string }[] = [];
     const errors: string[] = [];
 
-    // Process each row
-    for (let i = 0; i < jsonData.length; i++) {
-      const row = jsonData[i];
-      const rowIndex = i + 2; // Excel row number (accounting for header)
+    // Map rows
+    pkgRows.forEach((row, i) => {
+      const rowIndex = i + 2; // account for header row
+      const orderId = String(row['Order ID'] ?? '').trim();
+      const packageId = String(row['Package ID'] ?? '').trim();
+      const trackingNumber = String(row['Tracking ID'] ?? '').trim();
 
-      try {
-        // Validate required fields
-        if (!row['Order ID']) {
-          errors.push(`Row ${rowIndex}: Order ID is required`);
-          errorCount++;
-          continue;
-        }
+      let providerId = String(row['Provider ID'] ?? '').trim();
+      const providerName = String(row['Provider Name'] ?? '').trim();
 
-        if (!row['Shipping provider name']) {
-          errors.push(`Row ${rowIndex}: Shipping provider name is required`);
-          errorCount++;
-          continue;
-        }
-
-        if (!row['Tracking ID']) {
-          errors.push(`Row ${rowIndex}: Tracking ID is required`);
-          errorCount++;
-          continue;
-        }
-
-        const orderId = row['Order ID'].toString().trim();
-        const shippingProviderName = row['Shipping provider name'].toString().trim();
-        const trackingNumber = row['Tracking ID'].toString().trim();
-
-        // Find the order in database
-        const order = await prisma.order.findFirst({
-          where: {
-            orderId: orderId,
-            ...(isAdmin ? {} : { shopId: { in: accessibleShopIds } })
-          }
-        });
-
-        if (!order) {
-          errors.push(`Row ${rowIndex}: Order ${orderId} not found or access denied`);
-          errorCount++;
-          continue;
-        }
-
-        // Create or update order package
-        const packageData: any = {
-          packageId: `${orderId}_${Date.now()}`, // Generate unique package ID
-          trackingNumber: trackingNumber,
-          shippingProviderName: shippingProviderName,
-          shippingProviderId: null, // Will be set if we have mapping
-          status: 'IN_TRANSIT',
-          createTime: Math.floor(Date.now() / 1000),
-          updateTime: Math.floor(Date.now() / 1000),
-          orderId: order.id,
-        };
-
-        // Optional fields
-        if (row['SKU ID']) {
-          packageData.orderLineItemIds = [row['SKU ID'].toString()];
-        }
-
-        if (row['Receipt ID']) {
-          packageData.channelData = JSON.stringify({
-            receiptId: row['Receipt ID'].toString(),
-            productName: row['Product name']?.toString(),
-            variations: row['Variations']?.toString(),
-            quantity: row['Quantity'] || 1,
-            importedAt: new Date().toISOString(),
-          });
-        }
-
-        // Check if package with same tracking number already exists for this order
-        const existingPackage = await prisma.orderPackage.findFirst({
-          where: {
-            orderId: order.id,
-            trackingNumber: trackingNumber,
-          }
-        });
-
-        if (existingPackage) {
-          // Update existing package
-          await prisma.orderPackage.update({
-            where: { id: existingPackage.id },
-            data: {
-              shippingProviderName: packageData.shippingProviderName,
-              updateTime: packageData.updateTime,
-              channelData: packageData.channelData,
-            }
-          });
-          console.log(`Updated existing package for order ${orderId}, tracking: ${trackingNumber}`);
-        } else {
-          // Create new package
-          await prisma.orderPackage.create({
-            data: packageData
-          });
-          console.log(`Created new package for order ${orderId}, tracking: ${trackingNumber}`);
-        }
-
-        processedCount++;
-
-      } catch (error: any) {
-        console.error(`Error processing row ${rowIndex}:`, error);
-        errors.push(`Row ${rowIndex}: ${error.message}`);
-        errorCount++;
+      if (!providerId && providerName) {
+        const looked = providerMap.get(providerName.toLowerCase());
+        if (looked) providerId = looked;
       }
+
+      // Minimal validation
+      if (!orderId) {
+        errors.push(`Row ${rowIndex}: Missing Order ID`);
+        return;
+      }
+      if (!trackingNumber) {
+        errors.push(`Row ${rowIndex}: Missing Tracking ID`);
+        return;
+      }
+      if (!providerId) {
+        errors.push(`Row ${rowIndex}: Missing Provider ID and could not resolve from Provider Name "${providerName}"`);
+        return;
+      }
+
+      mapped.push({ orderId, packageId, providerId, trackingNumber });
+    });
+
+    // If we have mapped rows, enrich and push via addTracking (no HTTP call)
+    let bulk: { summary?: any; errors?: any[]; results?: any[] } | undefined;
+    if (mapped.length > 0) {
+      // Get TikTok shopId (shop.shopId) per orderId
+      const orderIds = Array.from(new Set(mapped.map(r => r.orderId)));
+      const dbOrders = await prisma.order.findMany({
+        where: { orderId: { in: orderIds } },
+        select: { orderId: true, shop: { select: { shopId: true } } },
+      });
+      const orderShopMap = new Map(dbOrders.map(o => [o.orderId, o.shop?.shopId || '']));
+
+      // Prepare rows to send to addTracking
+      const rows = mapped.map(r => ({
+        orderId: r.orderId,
+        shopId: orderShopMap.get(r.orderId) || '',
+        packageId: r.packageId,
+        providerId: r.providerId,
+        trackingId: r.trackingNumber,
+      }));
+
+      // Group by shopId and collect input errors for missing shopId
+      const groups = new Map<string, typeof rows>();
+      const inputErrors: any[] = [];
+      for (const r of rows) {
+        const sid = String(r.shopId || '').trim();
+        if (!sid) {
+          inputErrors.push({
+            code: 'MISSING_SHOP_ID',
+            message: 'shopId is required',
+            packageId: r.packageId || null,
+            orderId: r.orderId || null,
+          });
+          continue;
+        }
+        if (!groups.has(sid)) groups.set(sid, []);
+        groups.get(sid)!.push(r);
+      }
+
+      // Call addTracking per shopId in parallel
+      const groupResults = await Promise.all(
+        Array.from(groups.entries()).map(async ([sid, groupRows]) => {
+          const res = await addTrackingBulk(groupRows as any, sid);
+          return { ...res };
+        })
+      );
+
+      // Normalize errors and build summary
+      const apiErrors = groupResults.flatMap((gr: any) =>
+        (gr.errors || []).map((e: any) => ({
+          shopId: gr.shopId,
+          packageId: e?.detail?.packageId ?? e?.packageId ?? null,
+          code: e?.code ?? 'UNKNOWN',
+          message: e?.message ?? 'Unknown error',
+        }))
+      );
+
+      const submitted = Array.from(groups.values()).reduce((sum, arr) => sum + arr.length, 0);
+      const failed = apiErrors.length + inputErrors.length;
+      const succeeded = Math.max(submitted - failed, 0);
+
+      bulk = {
+        summary: {
+          groups: groups.size,
+          submitted,
+          succeeded,
+          failed,
+        },
+        errors: [...inputErrors, ...apiErrors],
+        results: groupResults,
+      };
     }
 
-    const result = {
+    return NextResponse.json({
       success: true,
       data: {
-        totalRows: jsonData.length,
-        processed: processedCount,
-        errors: errorCount,
-        errorDetails: errors.slice(0, 10), // Limit to first 10 errors for response
+        totalRows: pkgRows.length,
+        mapped: mapped.length,
+        errors: errors.length,
+        errorDetails: errors.slice(0, 20),
+        rows: mapped,
+        bulk,
       }
-    };
-
-    console.log(`Import completed: ${processedCount} successful, ${errorCount} errors`);
-
-    return NextResponse.json(result);
-
+    });
   } catch (error: any) {
     console.error("Import Excel API error:", error);
     return NextResponse.json({

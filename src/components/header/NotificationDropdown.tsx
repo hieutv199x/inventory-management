@@ -24,6 +24,7 @@ interface NotificationData {
   shop?: {
     shopName?: string;
     shopId: string;
+    managedName?: string;
   };
 }
 
@@ -148,22 +149,35 @@ export default function NotificationDropdown() {
     return format(date, "MMM dd, HH:mm");
   };
 
-  const formatNotificationData = (notification: NotificationData) => {
-    let additionalInfo = "";
+  const formatNotificationData = (notification: NotificationData): React.ReactNode => {
+    let orderInfo = "";
+    let shopInfo = "";
 
     if (notification.order) {
-      additionalInfo = `Order ${notification.order.orderId}`;
+      orderInfo = `Order ${notification.order.orderId}`;
       if (notification.order.totalAmount) {
-        additionalInfo += ` • ${notification.order.totalAmount} ${notification.order.currency || ""
+        orderInfo += ` • ${notification.order.totalAmount} ${notification.order.currency || ""
           }`;
       }
     }
 
     if (notification.shop) {
-      additionalInfo += ` • ${notification.shop.shopName || notification.shop.shopId}`;
+      shopInfo = notification.shop.managedName || notification.shop.shopId || "";
     }
 
-    return additionalInfo;
+    if (!orderInfo && !shopInfo) return "";
+
+    if (orderInfo && shopInfo) {
+      return (
+        <>
+          {orderInfo}
+          <br />
+          {shopInfo}
+        </>
+      );
+    }
+
+    return orderInfo || shopInfo;
   };
 
   // Fetch notifications on component mount
@@ -294,7 +308,7 @@ export default function NotificationDropdown() {
                       </span>
 
                       {formatNotificationData(notification) && (
-                        <span className="block mb-1 text-xs text-blue-600 dark:text-blue-400 truncate">
+                        <span className="block mb-1 text-xs text-blue-600 dark:text-blue-400 whitespace-pre-line">
                           {formatNotificationData(notification)}
                         </span>
                       )}

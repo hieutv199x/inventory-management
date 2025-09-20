@@ -1,356 +1,249 @@
-import { NextRequest, NextResponse } from "next/server";
-import { PrismaClient, Channel } from "@prisma/client";
-import { getUserWithShopAccess } from "@/lib/auth";
-import * as XLSX from 'xlsx';
+import { NextRequest, NextResponse } from 'next/server';
+import ExcelJS from 'exceljs';
+import { prisma } from '@/lib/prisma';
 
-const prisma = new PrismaClient();
-
-// Helper function to extract quantity from channelData JSON
-function getQuantityFromChannelData(channelData: string | null): number {
-  if (!channelData) return 1;
+export async function POST(request: NextRequest) {
   try {
-    const data = JSON.parse(channelData);
-    return parseInt(data.quantity) || 1;
-  } catch {
-    return 1;
-  }
-}
+    const { filters } = await request.json();
 
-export async function GET(req: NextRequest) {
-  try {
-    const { user, accessibleShopIds, isAdmin } = await getUserWithShopAccess(req, prisma);
-    const { searchParams } = new URL(req.url);
+    // Build filters for orders table
+    const whereOrder: any = {};
 
-    // Check if this is an export request
-    const isExport = searchParams.get('export') === 'true';
-    if (!isExport) {
-      return NextResponse.json({ error: "This endpoint is for export only" }, { status: 400 });
+    // Optional shop filter
+    if (filters?.shopId) {
+      whereOrder.shopId = filters.shopId;
     }
 
-    // Pagination parameters (for export, we want more data)
-    const limit = parseInt(searchParams.get('limit') || '10000');
-    const offset = 0; // Start from beginning for export
-
-    // Filter parameters (same as regular orders API)
-    const shopId = searchParams.get('shopId');
-    const status = searchParams.get('status');
-    const customStatus = searchParams.get('customStatus');
-    const channelParam = searchParams.get('channel');
-    const channel = channelParam && channelParam !== 'all' ? channelParam as Channel : null;
-    const keyword = searchParams.get('keyword') || searchParams.get('search');
-    const createTimeGe = searchParams.get('createTimeGe');
-    const createTimeLt = searchParams.get('createTimeLt');
-
-    // Build where clause (same logic as orders API)
-    const where: any = {};
-
-    // Shop access control
-    if (!isAdmin && !shopId) {
-      where.shopId = { in: accessibleShopIds };
-    } else if (shopId) {
-      where.shopId = shopId;
+    // Optional status filter
+    if (filters?.status && filters.status !== 'all') {
+      whereOrder.status = filters.status;
     }
 
-    // Other filters
-    if (status && status !== 'all') {
-      where.status = status;
-    }
-    if (channel) {
-      where.channel = channel;
+    // Optional date range (uses createTime like other APIs)
+    if (filters?.dateFrom || filters?.dateTo) {
+      whereOrder.createTime = {};
+      if (filters.dateFrom) {
+        whereOrder.createTime.gte = Math.floor(new Date(filters.dateFrom).getTime() / 1000);
+      }
+      if (filters.dateTo) {
+        whereOrder.createTime.lt = Math.floor(new Date(filters.dateTo).getTime() / 1000);
+      }
     }
 
-    if (keyword) {
-      where.OR = [
-        { orderId: { contains: keyword, mode: 'insensitive' } },
-        { buyerEmail: { contains: keyword, mode: 'insensitive' } },
-        { buyerMessage: { contains: keyword, mode: 'insensitive' } }
+    // Optional text search on orderId/buyerEmail
+    if (filters?.searchTerm) {
+      whereOrder.OR = [
+        { orderId: { contains: filters.searchTerm, mode: 'insensitive' } },
+        { buyerEmail: { contains: filters.searchTerm, mode: 'insensitive' } },
       ];
     }
 
-    // Add customStatus filter
-    if (customStatus && customStatus !== 'all') {
-      (where.AND ??= []);
-
-      if (customStatus === 'NOT_SET') {
-        where.AND.push({
-          OR: [
-            { customStatus: { isSet: false } },
-            { customStatus: null },
-            { customStatus: '' },
-            { customStatus: { notIn: ['DELIVERED', 'SPLITTED'] } },
-          ],
-        });
-      } else {
-        const list = customStatus.split(',').map(s => s.trim()).filter(Boolean);
-        if (list.length > 1) {
-          where.AND.push({ customStatus: { in: list } });
-        } else {
-          where.AND.push({ customStatus });
-        }
-      }
-    }
-
-    // Date range filter
-    if (createTimeGe || createTimeLt) {
-      where.createTime = {};
-      
-      if (createTimeGe) {
-        where.createTime.gte = parseInt(createTimeGe);
-      }
-      
-      if (createTimeLt) {
-        where.createTime.lte = parseInt(createTimeLt);
-      }
-    }
-
-    // Fetch orders data
+    // Fetch orders with only packages relation
     const orders = await prisma.order.findMany({
-      where,
-      include: {
-        shop: {
-          select: {
-            shopName: true,
-            shopId: true,
-            managedName: true,
-          }
-        },
-        lineItems: {
-          select: {
-            skuId: true,
-            productName: true,
-            skuName: true,
-            sellerSku: true,
-            originalPrice: true,
-            salePrice: true,
-            channelData: true,
-          }
-        },
+      where: whereOrder,
+      select: {
+        orderId: true,
+        shopId: true,
+        createTime: true,
+        status: true,
+        lineItems: true,
         packages: {
           select: {
             packageId: true,
             trackingNumber: true,
-            shippingProviderName: true,
             shippingProviderId: true,
-            status: true,
+            shippingProviderName: true,
+            orderLineItemIds: true,
           }
-        },
-        recipientAddress: {
-          select: {
-            fullAddress: true,
-            name: true,
-            phoneNumber: true,
-          }
-        },
-        payment: {
-          select: {
-            totalAmount: true,
-            currency: true,
-          }
-        },
+        }
       },
-      orderBy: {
-        createTime: 'desc'
-      },
-      take: limit,
-      skip: offset,
+      orderBy: { createTime: 'desc' }
     });
 
-    // Create workbook
-    const wb = XLSX.utils.book_new();
+    // Helpers to compute matched line items and aggregates
+    const parseCD = (v: any) => {
+      try { return typeof v === 'string' ? JSON.parse(v || '{}') : (v || {}); } catch { return {}; }
+    };
+    const getQty = (li: any) => {
+      if (typeof li?.quantity === 'number') return li.quantity;
+      const cd = parseCD(li?.channelData);
+      return Number(cd?.quantity) || 1;
+    };
 
-    // Sheet 1: Orders Data (based on the template image)
-    const ordersData = [];
-    
-    // Headers based on the template image
-    const orderHeaders = [
-      'Order ID',
-      'SKU ID', 
-      'Product name',
-      'Variations',
-      'Quantity',
-      'Shipping provider name',
-      'Tracking ID',
-      'Receipt ID',
-      // Additional useful fields
-      'Buyer Email',
-      'Status',
-      'Custom Status',
-      'Create Time',
-      'Total Amount',
-      'Currency',
-      'Shop Name',
-      'Recipient Name',
-      'Full Address'
-    ];
-    
-    ordersData.push(orderHeaders);
+    // Flatten packages for main worksheet with additional columns
+    const packageRows = orders.flatMap(o => {
+      const items = Array.isArray(o.lineItems) ? o.lineItems : [];
+      return (o.packages || []).map(pkg => {
+        const ids: string[] = Array.isArray(pkg.orderLineItemIds) ? pkg.orderLineItemIds : [];
+        const matched = items.filter((li: any) => {
+          const k1 = li?.id;
+          const k2 = li?.lineItemId;
+          return (k1 && ids.includes(k1)) || (k2 && ids.includes(k2));
+        });
 
-    // Process each order
-    for (const order of orders) {
-      if (order.lineItems && order.lineItems.length > 0) {
-        // Create a row for each line item (SKU)
-        for (const lineItem of order.lineItems) {
-          // Find corresponding package info
-          const packageInfo = order.packages?.[0]; // Get first package if exists
-          
-          const row = [
-            order.orderId || '',
-            lineItem.skuId || lineItem.sellerSku || '',
-            lineItem.productName || '',
-            lineItem.skuName || '', // Using skuName as variations
-            getQuantityFromChannelData(lineItem.channelData) || 1, // Extract quantity from channelData
-            packageInfo?.shippingProviderName || '',
-            packageInfo?.trackingNumber || '',
-            '', // Receipt ID - empty for now
-            // Additional fields
-            order.buyerEmail || '',
-            order.status || '',
-            order.customStatus || '',
-            order.createTime ? new Date(order.createTime * 1000).toISOString() : '',
-            order.payment?.totalAmount || order.totalAmount || '',
-            order.payment?.currency || order.currency || '',
-            order.shop?.shopName || order.shop?.managedName || '',
-            order.recipientAddress?.name || '',
-            order.recipientAddress?.fullAddress || '',
-          ];
-          ordersData.push(row);
-        }
-      } else {
-        // Order without line items
-        const packageInfo = order.packages?.[0];
-        
-        const row = [
-          order.orderId || '',
-          '', // No SKU ID
-          '', // No product name
-          '', // No variations
-          0, // No quantity
-          packageInfo?.shippingProviderName || '',
-          packageInfo?.trackingNumber || '',
-          '', // Receipt ID
-          // Additional fields
-          order.buyerEmail || '',
-          order.status || '',
-          order.customStatus || '',
-          order.createTime ? new Date(order.createTime * 1000).toISOString() : '',
-          order.payment?.totalAmount || order.totalAmount || '',
-          order.payment?.currency || order.currency || '',
-          order.shop?.shopName || order.shop?.managedName || '',
-          order.recipientAddress?.name || '',
-          order.recipientAddress?.fullAddress || '',
-        ];
-        ordersData.push(row);
+        const skuIds = matched.map((li: any) => li?.skuId || li?.sellerSku || li?.id || '').filter(Boolean).join('\n');
+        const productNames = matched.map((li: any) => li?.productName || '').filter(Boolean).join('\n');
+        const variations = matched.map((li: any) => li?.skuName || '').filter(Boolean).join('\n');
+        const quantities = matched.map((li: any) => String(getQty(li))).join('\n');
+
+        return {
+          'Order ID': o.orderId,
+          'Package ID': pkg.packageId || '',
+          'Provider ID': pkg.shippingProviderId || '',
+          'Provider Name': pkg.shippingProviderName || '',
+          'Tracking ID': pkg.trackingNumber || '',
+          'SKU ID': skuIds,
+          'Product name': productNames,
+          'Variations': variations,
+          'Quantity': quantities,
+        };
+      });
+    });
+
+    // Helper: fetch providers from internal API for a representative order per shop
+    const baseApi = new URL('/api/tiktok/Fulfillment/shipping-provider', request.url).toString();
+
+    // Pick one representative orderId per shopId to reduce API calls
+    const shopToOrderId = new Map<string, string>();
+    for (const o of orders) {
+      if (o.shopId && !shopToOrderId.has(o.shopId)) {
+        shopToOrderId.set(o.shopId, o.orderId);
       }
     }
 
-    // Create orders worksheet
-    const ordersWS = XLSX.utils.aoa_to_sheet(ordersData);
-
-    // Set column widths for orders sheet
-    ordersWS['!cols'] = [
-      { wch: 15 }, // Order ID
-      { wch: 15 }, // SKU ID
-      { wch: 30 }, // Product name
-      { wch: 20 }, // Variations
-      { wch: 10 }, // Quantity
-      { wch: 20 }, // Shipping provider name
-      { wch: 20 }, // Tracking ID
-      { wch: 15 }, // Receipt ID
-      { wch: 25 }, // Buyer Email
-      { wch: 15 }, // Status
-      { wch: 15 }, // Custom Status
-      { wch: 20 }, // Create Time
-      { wch: 15 }, // Total Amount
-      { wch: 10 }, // Currency
-      { wch: 20 }, // Shop Name
-      { wch: 20 }, // Recipient Name
-      { wch: 40 }, // Full Address
-    ];
-
-    XLSX.utils.book_append_sheet(wb, ordersWS, 'Orders Data');
-
-    // Sheet 2: Shipping Providers Summary
-    const shippingProviders = new Map();
-    
-    // Collect shipping provider statistics
-    for (const order of orders) {
-      if (order.packages) {
-        for (const pkg of order.packages) {
-          if (pkg.shippingProviderName) {
-            const providerName = pkg.shippingProviderName;
-            if (!shippingProviders.has(providerName)) {
-              shippingProviders.set(providerName, {
-                name: providerName,
-                id: pkg.shippingProviderId,
-                count: 0,
-                orders: new Set()
-              });
-            }
-            const provider = shippingProviders.get(providerName);
-            provider.count++;
-            provider.orders.add(order.orderId);
-          }
+    const providerLists = await Promise.all(
+      Array.from(shopToOrderId.values()).map(async (orderId) => {
+        try {
+          const res = await fetch(`${baseApi}?orderId=${encodeURIComponent(orderId)}`, {
+            method: 'GET',
+            headers: { 'content-type': 'application/json' },
+          });
+          if (!res.ok) return [];
+          const data = await res.json();
+          return Array.isArray(data) ? data : [];
+        } catch {
+          return [];
         }
+      })
+    );
+
+    // Deduplicate providers across shops
+    const providerSeen = new Set<string>();
+    const providers: { id: string; name: string }[] = [];
+
+    for (const list of providerLists) {
+      for (const p of list) {
+        const id = typeof p === 'string' ? p : (p.id || p.name || p.displayName || '');
+        const name = typeof p === 'string' ? p : (p.displayName || p.name || p.id || '');
+        if (!id && !name) continue;
+
+        const key = `${id}::${name}`;
+        if (providerSeen.has(key)) continue;
+        providerSeen.add(key);
+        providers.push({ id, name });
       }
     }
 
-    const shippingData = [];
-    const shippingHeaders = [
-      'Shipping Provider Name',
-      'Provider ID',
-      'Total Packages',
-      'Unique Orders',
-      'Percentage'
-    ];
-    shippingData.push(shippingHeaders);
+    // Create workbook and worksheets with exceljs
+    const workbook = new ExcelJS.Workbook();
 
-    const totalPackages = Array.from(shippingProviders.values()).reduce((sum, p) => sum + p.count, 0);
-    
-    for (const provider of shippingProviders.values()) {
-      const percentage = totalPackages > 0 ? ((provider.count / totalPackages) * 100).toFixed(2) + '%' : '0%';
-      shippingData.push([
-        provider.name,
-        provider.id || '',
-        provider.count,
-        provider.orders.size,
-        percentage
+    // Main sheet: Order Packages (add new columns)
+    const pkgSheet = workbook.addWorksheet('Order Packages');
+    pkgSheet.columns = [
+      { header: 'Order ID', width: 22 },        // A
+      { header: 'Package ID', width: 24 },      // B
+      { header: 'Provider ID', width: 22 },     // C
+      { header: 'Provider Name', width: 28 },   // D
+      { header: 'Tracking ID', width: 24 },     // E
+      { header: 'SKU ID', width: 28 },          // F
+      { header: 'Product name', width: 40 },    // G
+      { header: 'Variations', width: 28 },      // H
+      { header: 'Quantity', width: 12 },        // I
+    ];
+    // Add package rows
+    for (const row of packageRows) {
+      pkgSheet.addRow([
+        row['Order ID'],
+        row['Package ID'],
+        row['Provider ID'],
+        row['Provider Name'],
+        row['Tracking ID'],
+        row['SKU ID'],
+        row['Product name'],
+        row['Variations'],
+        row['Quantity'],
       ]);
     }
 
-    // Create shipping providers worksheet
-    const shippingWS = XLSX.utils.aoa_to_sheet(shippingData);
-    
-    // Set column widths for shipping sheet
-    shippingWS['!cols'] = [
-      { wch: 25 }, // Shipping Provider Name
-      { wch: 15 }, // Provider ID
-      { wch: 15 }, // Total Packages
-      { wch: 15 }, // Unique Orders
-      { wch: 12 }, // Percentage
+    // Wrap text for multi-line cells in SKU/Name/Variations/Quantity columns
+    const wrapCols = ['F', 'G', 'H', 'I'];
+    for (let r = 2; r <= (packageRows.length + 1); r++) {
+      for (const col of wrapCols) {
+        const cell = pkgSheet.getCell(`${col}${r}`);
+        cell.alignment = { wrapText: true, vertical: 'top' };
+      }
+    }
+
+    // Providers sheet
+    const provSheet = workbook.addWorksheet('Shipping Providers');
+    provSheet.columns = [
+      { header: 'No', width: 6 },
+      { header: 'Provider ID', width: 24 },
+      { header: 'Provider Name', width: 32 },
     ];
+    const providersData = providers.map((p, idx) => ({ no: idx + 1, id: p.id, name: p.name }));
+    for (const p of providersData) {
+      provSheet.addRow([p.no, p.id, p.name]);
+    }
 
-    XLSX.utils.book_append_sheet(wb, shippingWS, 'Shipping Providers');
+    // Data validation + formula mapping
+    const pkgCount = packageRows.length;
+    const provCount = providers.length;
 
-    // Generate Excel buffer
-    const buffer = XLSX.write(wb, { bookType: 'xlsx', type: 'buffer' });
+    if (pkgCount > 0 && provCount > 0) {
+      const pkgStartRow = 2; // header is row 1
+      const pkgEndRow = pkgStartRow + pkgCount - 1;
+      const provStartRow = 2;
+      const provEndRow = provStartRow + provCount - 1;
 
-    // Create response with proper headers
-    return new NextResponse(buffer, {
+      // Named range for Provider Names (column C in providers sheet)
+      workbook.definedNames.add(
+        'Providers',
+        `'Shipping Providers'!$C$${provStartRow}:$C$${provEndRow}`
+      );
+
+      // NOTE: ExcelJS does not support adding data validation (dropdowns) directly.
+      // You can only set cell values and formulas. Data validation must be added manually in Excel.
+      // If you need to inform users, consider adding a note or instruction in the sheet.
+      pkgSheet.getCell('D1').note = 'Vui lòng chọn tên hãng vận chuyển từ danh sách ở sheet "Shipping Providers".';
+      pkgSheet.getCell('C1').note = 'Cột này sẽ tự điền theo cột "Provider Name".';
+
+      // Auto-map Provider ID in column C using INDEX/MATCH against providers sheet
+      for (let r = pkgStartRow; r <= pkgEndRow; r++) {
+        const formula = `IFERROR(INDEX('Shipping Providers'!$B$${provStartRow}:$B$${provEndRow}, MATCH(D${r}, 'Shipping Providers'!$C$${provStartRow}:$C$${provEndRow}, 0)), "")`;
+        const cell = pkgSheet.getCell(`C${r}`);
+        cell.value = { formula };
+      }
+    }
+
+    // Generate and return Excel buffer
+    const excelBuffer = await workbook.xlsx.writeBuffer();
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const filename = `order-packages-export-${timestamp}.xlsx`;
+
+    return new NextResponse(excelBuffer as any, {
       status: 200,
       headers: {
         'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        'Content-Disposition': `attachment; filename="orders_export_${new Date().toISOString().slice(0, 10)}.xlsx"`,
-        'Content-Length': buffer.length.toString(),
+        'Content-Disposition': `attachment; filename="${filename}"`,
+        'Content-Length': String((excelBuffer as ArrayBuffer).byteLength ?? (excelBuffer as any).length),
       },
     });
-
-  } catch (error: any) {
-    console.error("Export Excel API error:", error);
-    return NextResponse.json({
-      success: false,
-      error: error?.message || "Internal server error"
-    }, { status: 500 });
-  } finally {
-    await prisma.$disconnect();
+  } catch (error) {
+    console.error('Export Excel error:', error);
+    return NextResponse.json(
+      { error: 'Failed to export data to Excel' },
+      { status: 500 }
+    );
   }
 }

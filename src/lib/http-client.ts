@@ -36,6 +36,12 @@ class HttpClient {
       ...(headers as Record<string, string>),
     };
 
+    // Remove JSON content-type if sending FormData (let browser set boundary)
+    const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
+    if (isFormData && requestHeaders['Content-Type']) {
+      delete requestHeaders['Content-Type'];
+    }
+
     // Add authorization header if token exists
     const token = this.getAuthToken();
     if (token) {
@@ -154,6 +160,17 @@ class HttpClient {
       url,
       method: 'PATCH',
       body: data ? JSON.stringify(data) : undefined,
+    });
+  }
+
+  // New: POST multipart/form-data helper
+  async postFormData<T = any>(url: string, formData: FormData, config?: Omit<RequestConfig, 'url' | 'method' | 'body'>): Promise<T> {
+    return this.request<T>({
+      ...config,
+      url,
+      method: 'POST',
+      body: formData,
+      // do not set Content-Type here; request() will remove the default
     });
   }
 

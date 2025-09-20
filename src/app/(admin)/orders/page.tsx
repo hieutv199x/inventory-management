@@ -172,7 +172,7 @@ export default function OrdersPage() {
                 dateTo: filters.dateTo
             };
 
-            const response = await fetch('/api/admin/export-excel', {
+            const response = await fetch('/api/orders/export-excel', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -313,6 +313,16 @@ export default function OrdersPage() {
         [filters, currentPage, pageSize, showLoading, hideLoading]
     );
 
+    // New: validate and update selected import file
+    const handleImportFileChange = (file: File | null) => {
+        if (file && !/\.(xlsx|xls)$/i.test(file.name)) {
+            toast.error('Please upload Excel file (.xlsx or .xls)');
+            setImportFile(null);
+            return;
+        }
+        setImportFile(file);
+    };
+
     const handleImportExcel = async () => {
         if (!importFile) {
             toast.error('Please select an Excel file');
@@ -324,40 +334,48 @@ export default function OrdersPage() {
             const formData = new FormData();
             formData.append('file', importFile);
 
-            const response = await httpClient.post('/orders/import-excel', formData, {
-                headers: {
-                    'Content-Type': 'multipart/form-data',
-                }
-            });
+            // Upload to mapping API (no DB writes here; API may push to TikTok)
+            const response = await httpClient.postFormData('/orders/import-excel', formData);
 
             if (response.success) {
-                const { totalRows, processed, errors, errorDetails } = response.data;
-                
+                const { totalRows, mapped, errors, errorDetails, bulk } = response.data || {};
+                const bulkSummary = bulk?.summary;
+                const bulkErrors = Array.isArray(bulk?.errors) ? bulk.errors : [];
+
                 let message = `Import completed!\n`;
-                message += `Total rows: ${totalRows}\n`;
-                message += `Successfully processed: ${processed}\n`;
-                
-                if (errors > 0) {
-                    message += `Errors: ${errors}\n`;
+                message += `Total rows: ${totalRows ?? 0}\n`;
+                message += `Mapped: ${mapped ?? 0}\n`;
+                if (bulkSummary) {
+                    message += `Pushed to TikTok - Succeeded: ${bulkSummary.succeeded ?? 0}, Failed: ${bulkSummary.failed ?? 0}\n`;
+                }
+
+                if ((errors ?? 0) > 0 || bulkErrors.length > 0) {
                     if (errorDetails && errorDetails.length > 0) {
-                        message += `\nFirst ${Math.min(errors, 5)} errors:\n`;
+                        message += `\nFirst ${Math.min(errorDetails.length, 5)} errors:\n`;
                         message += errorDetails.slice(0, 5).join('\n');
+                    }
+                    if (bulkErrors.length > 0) {
+                        message += `\nTikTok errors (first ${Math.min(bulkErrors.length, 5)}):\n`;
+                        message += bulkErrors.slice(0, 5).map((e: any) => {
+                            const pkg = e?.packageId ? `pkg ${e.packageId}` : 'pkg -';
+                            const code = e?.code ? `[${e.code}]` : '';
+                            return `${pkg} ${code} ${e?.message || 'Unknown error'}`;
+                        }).join('\n');
                     }
                     toast.error(message);
                 } else {
                     toast.success(message);
                 }
-
-                setShowImportModal(false);
-                setImportFile(null);
-                fetchOrders(); // Refresh orders list
             } else {
                 toast.error(response.error || 'Import failed');
             }
         } catch (error: any) {
             console.error('Import error:', error);
-            toast.error(error.message || 'Import failed');
+            toast.error(error?.message || 'Import failed');
         } finally {
+            // Always close modal and clear file
+            setShowImportModal(false);
+            setImportFile(null);
             setIsImporting(false);
         }
     };
@@ -1342,7 +1360,7 @@ export default function OrdersPage() {
                 isOpen={showImportModal}
                 isSubmitting={isImporting}
                 file={importFile}
-                onFileChange={setImportFile}
+                onFileChange={handleImportFileChange}
                 onTemplateDownload={downloadTemplate}
                 onSampleDownload={downloadSample}
                 onClose={() => {

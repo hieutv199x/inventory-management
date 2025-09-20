@@ -60,7 +60,8 @@ export async function GET(req: NextRequest) {
                 shop: {
                     select: {
                         shopName: true,
-                        shopId: true
+                        shopId: true,
+                        managedName: true
                     }
                 }
             },
@@ -94,7 +95,8 @@ export async function GET(req: NextRequest) {
             } : undefined,
             shop: notification.shop ? {
                 shopName: notification.shop.shopName,
-                shopId: notification.shop.shopId
+                shopId: notification.shop.shopId,
+                managedName: notification.shop.managedName
             } : undefined
         }));
 
