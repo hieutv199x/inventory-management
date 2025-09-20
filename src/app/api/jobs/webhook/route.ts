@@ -90,19 +90,6 @@ async function handleOrderStatusChange(webhookData: TikTokWebhookData) {
 
         if (!credentials) {
             console.error('Shop credentials not found');
-            // Create system alert notification for missing shop
-            await NotificationService.createNotification({
-                type: NotificationType.SYSTEM_ALERT,
-                title: 'Webhook Processing Error',
-                message: `Order ${order_id} webhook received for unknown shop ${shop_id}`,
-                userId: 'system', // You might want to create a system user
-                data: {
-                    webhookType: 'ORDER_STATUS_CHANGE',
-                    orderId: order_id,
-                    shopId: shop_id,
-                    timestamp: webhookData.timestamp
-                }
-            });
             return;
         }
 
@@ -174,43 +161,10 @@ async function handleOrderStatusChange(webhookData: TikTokWebhookData) {
             }
         } catch (syncError) {
             console.error(`Failed to sync order ${order_id} from webhook:`, syncError);
-            await NotificationService.createNotification({
-                type: NotificationType.WEBHOOK_ERROR,
-                title: 'Order Sync Failed',
-                message: `Failed to sync order ${order_id} after status change: ${syncError instanceof Error ? syncError.message : String(syncError)}`,
-                userId: 'system',
-                data: {
-                    webhookType: 'ORDER_STATUS_CHANGE',
-                    orderId: order_id,
-                    shopId: shop_id,
-                    error: syncError instanceof Error ? syncError.message : String(syncError),
-                    timestamp: webhookData.timestamp
-                }
-            });
         }
 
     } catch (error) {
         console.error('Error handling order status change:', error);
-
-        // Create error notification
-        try {
-            await NotificationService.createNotification({
-                type: NotificationType.WEBHOOK_ERROR,
-                title: 'Webhook Processing Failed',
-                message: `Failed to process order status change for order ${webhookData.data.order_id}: ${error instanceof Error ? error.message : String(error)}`,
-                userId: 'system', // You might want to create a system user or get admin users
-                data: {
-                    webhookType: 'ORDER_STATUS_CHANGE',
-                    orderId: webhookData.data.order_id,
-                    shopId: webhookData.shop_id,
-                    error: (error as Error).message,
-                    timestamp: webhookData.timestamp
-                }
-            });
-        } catch (notificationError) {
-            console.error('Failed to create error notification:', notificationError);
-        }
-
         throw error;
     }
 }
@@ -236,8 +190,8 @@ async function handleSpecificStatusChanges(orderId: string, newStatus: string, w
             // Create specific notification for awaiting shipment
             await NotificationService.createNotification({
                 type: NotificationType.ORDER_STATUS_CHANGE,
-                title: '📦 Order Ready to Ship',
-                message: `Order ${webhookData.data.order_id} is awaiting shipment and ready for processing`,
+                title: '📦 Đơn hàng sẵn sàng giao',
+                message: `Đơn hàng ${webhookData.data.order_id} đang chờ giao và sẵn sàng xử lý`,
                 userId: shopId, // Will be distributed to shop users
                 orderId: orderId,
                 shopId: shopId,
@@ -254,8 +208,8 @@ async function handleSpecificStatusChanges(orderId: string, newStatus: string, w
             // Create tracking notification
             await NotificationService.createNotification({
                 type: NotificationType.ORDER_STATUS_CHANGE,
-                title: '🚚 Order In Transit',
-                message: `Order ${webhookData.data.order_id} is now in transit to the customer`,
+                title: '🚚 Đơn hàng đang vận chuyển',
+                message: `Đơn hàng ${webhookData.data.order_id} đang được vận chuyển tới khách hàng`,
                 userId: shopId,
                 orderId: orderId,
                 shopId: shopId,
@@ -298,8 +252,8 @@ async function handleSpecificStatusChanges(orderId: string, newStatus: string, w
             // Create cancellation alert
             await NotificationService.createNotification({
                 type: NotificationType.ORDER_CANCELLED,
-                title: '❌ Order Cancelled',
-                message: `Order ${webhookData.data.order_id} has been cancelled`,
+                title: '❌ Đơn hàng đã hủy',
+                message: `Đơn hàng ${webhookData.data.order_id} đã bị hủy`,
                 userId: shopId,
                 orderId: orderId,
                 shopId: shopId,
@@ -316,8 +270,8 @@ async function handleSpecificStatusChanges(orderId: string, newStatus: string, w
             // Create payment reminder notification
             await NotificationService.createNotification({
                 type: NotificationType.ORDER_STATUS_CHANGE,
-                title: '💳 Payment Pending',
-                message: `Order ${webhookData.data.order_id} is awaiting payment from customer`,
+                title: '💳 Chờ thanh toán',
+                message: `Đơn hàng ${webhookData.data.order_id} đang chờ khách hàng thanh toán`,
                 userId: shopId,
                 orderId: orderId,
                 shopId: shopId,
@@ -334,8 +288,8 @@ async function handleSpecificStatusChanges(orderId: string, newStatus: string, w
             // Create generic status change notification
             await NotificationService.createNotification({
                 type: NotificationType.ORDER_STATUS_CHANGE,
-                title: 'Order Status Updated',
-                message: `Order ${webhookData.data.order_id} status changed to ${newStatus}`,
+                title: 'Cập nhật trạng thái đơn hàng',
+                message: `Trạng thái đơn hàng ${webhookData.data.order_id} đã thay đổi thành ${newStatus}`,
                 userId: shopId,
                 orderId: orderId,
                 shopId: shopId,
@@ -374,8 +328,8 @@ async function handleCancellationStatusChange(webhookData: TikTokWebhookData) {
             // Create system alert for missing shop
             await NotificationService.createNotification({
                 type: NotificationType.SYSTEM_ALERT,
-                title: 'Cancellation Webhook Error',
-                message: `Cancellation webhook received for unknown shop ${shop_id}`,
+                title: 'Lỗi webhook hủy đơn',
+                message: `Nhận webhook hủy đơn cho shop không xác định ${shop_id}`,
                 userId: 'system',
                 data: {
                     webhookType: 'CANCELLATION_STATUS_CHANGE',
@@ -401,8 +355,8 @@ async function handleCancellationStatusChange(webhookData: TikTokWebhookData) {
             // Create notification about missing order
             await NotificationService.createNotification({
                 type: NotificationType.SYSTEM_ALERT,
-                title: 'Order Sync Required',
-                message: `Cancellation received for order ${order_id} not found locally, syncing from API`,
+                title: 'Cần đồng bộ đơn hàng',
+                message: `Nhận thông tin hủy cho đơn ${order_id} chưa có trong hệ thống, đang đồng bộ từ API`,
                 userId: credentials.id,
                 shopId: credentials.id,
                 data: {
@@ -471,8 +425,8 @@ async function handleCancellationStatusChange(webhookData: TikTokWebhookData) {
         // Create cancellation notification
         await NotificationService.createNotification({
             type: NotificationType.ORDER_CANCELLED,
-            title: 'Order Cancellation Update',
-            message: `Order ${order_id} cancellation status: ${cancellation_status}`,
+            title: 'Cập nhật hủy đơn hàng',
+            message: `Trạng thái hủy của đơn ${order_id}: ${cancellation_status}`,
             userId: credentials.id,
             orderId: existingOrder.id,
             shopId: credentials.id,
@@ -497,8 +451,8 @@ async function handleCancellationStatusChange(webhookData: TikTokWebhookData) {
         try {
             await NotificationService.createNotification({
                 type: NotificationType.WEBHOOK_ERROR,
-                title: 'Cancellation Processing Failed',
-                message: `Failed to process cancellation for order ${webhookData.data.order_id}: ${error instanceof Error ? error.message : String(error)}`,
+                title: 'Xử lý hủy đơn thất bại',
+                message: `Không thể xử lý hủy cho đơn ${webhookData.data.order_id}: ${error instanceof Error ? error.message : String(error)}`,
                 userId: 'system',
                 data: {
                     webhookType: 'CANCELLATION_STATUS_CHANGE',
@@ -524,8 +478,8 @@ async function handleSpecificCancellationStatusChanges(orderId: string, cancella
             console.log(`Order ${data.order_id} was cancelled by buyer`);
             await NotificationService.createNotification({
                 type: NotificationType.ORDER_CANCELLED,
-                title: '🛑 Buyer Cancelled Order',
-                message: `Order ${data.order_id} was cancelled by the buyer. Reason: ${data.cancel_reason}`,
+                title: '🛑 Người mua hủy đơn',
+                message: `Đơn ${data.order_id} đã bị người mua hủy. Lý do: ${data.cancel_reason}`,
                 userId: shopId,
                 orderId: orderId,
                 shopId: shopId,
@@ -542,8 +496,8 @@ async function handleSpecificCancellationStatusChanges(orderId: string, cancella
             console.log(`Order ${data.order_id} was cancelled by seller`);
             await NotificationService.createNotification({
                 type: NotificationType.ORDER_CANCELLED,
-                title: '📋 Seller Cancelled Order',
-                message: `Order ${data.order_id} was cancelled by seller. Reason: ${data.cancel_reason}`,
+                title: '📋 Người bán hủy đơn',
+                message: `Đơn ${data.order_id} đã bị người bán hủy. Lý do: ${data.cancel_reason}`,
                 userId: shopId,
                 orderId: orderId,
                 shopId: shopId,
@@ -560,8 +514,8 @@ async function handleSpecificCancellationStatusChanges(orderId: string, cancella
             console.log(`Order ${data.order_id} was cancelled by system`);
             await NotificationService.createNotification({
                 type: NotificationType.SYSTEM_ALERT,
-                title: '⚠️ System Cancelled Order',
-                message: `Order ${data.order_id} was automatically cancelled by the system. Reason: ${data.cancel_reason}`,
+                title: '⚠️ Hệ thống hủy đơn',
+                message: `Đơn ${data.order_id} đã bị hệ thống tự động hủy. Lý do: ${data.cancel_reason}`,
                 userId: shopId,
                 orderId: orderId,
                 shopId: shopId,
@@ -610,8 +564,8 @@ async function handleSpecificCancellationStatusChanges(orderId: string, cancella
             console.log(`Order ${data.order_id} was partially cancelled`);
             await NotificationService.createNotification({
                 type: NotificationType.ORDER_CANCELLED,
-                title: '🔄 Partial Order Cancellation',
-                message: `Order ${data.order_id} was partially cancelled (${data.line_items?.length || 0} items)`,
+                title: '🔄 Hủy đơn hàng một phần',
+                message: `Đơn ${data.order_id} bị hủy một phần (${data.line_items?.length || 0} sản phẩm)`,
                 userId: shopId,
                 orderId: orderId,
                 shopId: shopId,
@@ -629,8 +583,8 @@ async function handleSpecificCancellationStatusChanges(orderId: string, cancella
             console.log(`Unhandled cancellation status: ${cancellationStatus} for order ${data.order_id}`);
             await NotificationService.createNotification({
                 type: NotificationType.SYSTEM_ALERT,
-                title: 'Unknown Cancellation Status',
-                message: `Order ${data.order_id} received unknown cancellation status: ${cancellationStatus}`,
+                title: 'Trạng thái hủy không xác định',
+                message: `Đơn ${data.order_id} nhận trạng thái hủy không xác định: ${cancellationStatus}`,
                 userId: shopId,
                 orderId: orderId,
                 shopId: shopId,

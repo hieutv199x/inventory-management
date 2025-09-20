@@ -5,7 +5,6 @@ import {
     Fulfillment202309SearchPackageResponseDataPackages,
     TikTokShopNodeApiClient,
 } from "@/nodejs_sdk";
-//import { syncOrderById } from "../../webhook/route";
 
 const prisma = new PrismaClient();
 
@@ -94,7 +93,6 @@ export async function GET(req: NextRequest) {
             shopCipher,
             fulfillment202309SearchPackageRequestBody
         );
-        console.log('response: ', JSON.stringify(result, null, 2));
 
         // ---- Persist packages to DB (OrderPackage) ----
         const packages: Fulfillment202309SearchPackageResponseDataPackages[] = result?.body?.data?.packages || [];
