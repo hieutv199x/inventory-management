@@ -154,16 +154,14 @@ async function handleOrderStatusChange(webhookData: TikTokWebhookData) {
                     );
                 }
 
-                if (updatedOrder.canSplitPackages === null) {
-                    try {
-                        // Sync order attributes
-                        await syncOrderCanSplitOrNot(prisma, {
-                            shop_id: credentials.shopId,
-                            order_ids: [updatedOrder.orderId]
-                        });
-                    } catch (attributeError) {
-                        console.error(`Failed to sync order attributes for order ${updatedOrder.orderId}:`, attributeError);
-                    }
+                try {
+                    // Sync order attributes
+                    await syncOrderCanSplitOrNot(prisma, {
+                        shop_id: credentials.shopId,
+                        order_ids: [updatedOrder.orderId]
+                    });
+                } catch (attributeError) {
+                    console.error(`Failed to sync order attributes for order ${updatedOrder.orderId}:`, attributeError);
                 }
 
                 await handleSpecificStatusChanges(

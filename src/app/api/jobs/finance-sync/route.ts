@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { PrismaClient, NotificationType } from "@prisma/client";
-import { NotificationService } from "@/lib/notification-service";
 // Finance sync utilities
 // Adjust imports to match your existing finance APIs
 import { syncUnsettledTransactions } from "@/lib/tiktok-unsettled-transactions-sync";
@@ -15,7 +14,7 @@ function getWindowFromQuery(req: NextRequest) {
   const url = new URL(req.url);
   const ge = url.searchParams.get("search_time_ge");
   const lt = url.searchParams.get("search_time_lt");
-  const now = Math.floor(Date.now() / 1000);
+  const now = Math.floor(new Date().setHours(23, 59, 59, 999) / 1000);
   const halfDay = 12 * 60 * 60;
 
   const search_time_ge = ge ? Number(ge) : now - halfDay;
@@ -62,14 +61,6 @@ export async function GET(req: NextRequest) {
         } catch (e) {
           const msg = `payments:${e instanceof Error ? e.message : String(e)}`;
           errors.push(msg);
-          await NotificationService.createNotification({
-            type: NotificationType.SYSTEM_ALERT,
-            title: "Finance Sync Error - Payments",
-            message: `Shop ${shopId} payments sync failed: ${msg}`,
-            userId: "system",
-            shopId: shop.id,
-            data: { shopId, search_time_ge, search_time_lt },
-          });
         }
 
         // Unsettled Transactions
@@ -83,14 +74,6 @@ export async function GET(req: NextRequest) {
         } catch (e) {
           const msg = `unsettled_transactions:${e instanceof Error ? e.message : String(e)}`;
           errors.push(msg);
-          await NotificationService.createNotification({
-            type: NotificationType.SYSTEM_ALERT,
-            title: "Finance Sync Error - Unsettled",
-            message: `Shop ${shopId} unsettled transactions sync failed: ${msg}`,
-            userId: "system",
-            shopId: shop.id,
-            data: { shopId, search_time_ge, search_time_lt },
-          });
         }
 
         // Statements, order statements by time
@@ -104,14 +87,6 @@ export async function GET(req: NextRequest) {
         } catch (e) {
           const msg = `statements:${e instanceof Error ? e.message : String(e)}`;
           errors.push(msg);
-          await NotificationService.createNotification({
-            type: NotificationType.SYSTEM_ALERT,
-            title: "Finance Sync Error - Statements",
-            message: `Shop ${shopId} statements sync failed: ${msg}`,
-            userId: "system",
-            shopId: shop.id,
-            data: { shopId, search_time_ge, search_time_lt },
-          });
         }
         
         // Withdrawals
@@ -125,14 +100,6 @@ export async function GET(req: NextRequest) {
         } catch (e) {
           const msg = `withdrawals:${e instanceof Error ? e.message : String(e)}`;
           errors.push(msg);
-          await NotificationService.createNotification({
-            type: NotificationType.SYSTEM_ALERT,
-            title: "Finance Sync Error - Withdrawals",
-            message: `Shop ${shopId} withdrawals sync failed: ${msg}`,
-            userId: "system",
-            shopId: shop.id,
-            data: { shopId, search_time_ge, search_time_lt },
-          });
         }
         
       } finally {
