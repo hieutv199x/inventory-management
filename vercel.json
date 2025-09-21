@@ -11,6 +11,7 @@
         "src/app/api/tiktok/CustomerService/sync-conversations/route.ts": { "maxDuration": 60, "memory": 1024 },
         "src/app/api/tiktok/webhook/route.ts": { "maxDuration": 60, "memory": 1024 },
         "src/app/api/tiktok/Orders/sync-recent-orders/route.ts": { "maxDuration": 60, "memory": 1024 },
+        "src/app/api/jobs/**/*.ts": { "maxDuration": 600, "memory": 1024 },
         "src/app/api/**/*.ts": {
             "maxDuration": 30
         }
