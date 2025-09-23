@@ -69,6 +69,7 @@ export async function GET(req: NextRequest) {
             { customStatus: { notIn: ['DELIVERED', 'SPLITTED'] } },
           ],
         });
+        where.AND.push({ status: { in: ['AWAITING_SHIPMENT']} });
       } else {
         // Support CSV values e.g. ?customStatus=SPLITTED,DELIVERED
         const list = customStatus.split(',').map(s => s.trim()).filter(Boolean);
