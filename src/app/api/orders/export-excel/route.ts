@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import ExcelJS from 'exceljs';
 import { prisma } from '@/lib/prisma';
+import path from 'path';
 
 export async function POST(request: NextRequest) {
   try {
@@ -144,62 +145,57 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const providersData = providers.map((p, idx) => ({ no: idx + 1, id: p.id, name: p.name }));
     // Create workbook and worksheets with exceljs
     const workbook = new ExcelJS.Workbook();
+    const templatePath = path.resolve(process.cwd(), 'public/templates/template-order-package.xlsx');
+    await workbook.xlsx.readFile(templatePath);
 
     // Main sheet: Order Packages (add new columns)
-    const pkgSheet = workbook.addWorksheet('Order Packages');
-    pkgSheet.columns = [
-      { header: 'Order ID', width: 22 },        // A
-      { header: 'Package ID', width: 24 },      // B
-      { header: 'Provider ID', width: 22 },     // C
-      { header: 'Provider Name', width: 28 },   // D
-      { header: 'Tracking ID', width: 24 },     // E
-      { header: 'SKU ID', width: 28 },          // F
-      { header: 'Product name', width: 40 },    // G
-      { header: 'Variations', width: 28 },      // H
-      { header: 'Quantity', width: 12 },        // I
-    ];
-    // Add package rows
-    for (const row of packageRows) {
-      pkgSheet.addRow([
-        row['Order ID'],
-        row['Package ID'],
-        row['Provider ID'],
-        row['Provider Name'],
-        row['Tracking ID'],
-        row['SKU ID'],
-        row['Product name'],
-        row['Variations'],
-        row['Quantity'],
-      ]);
+    const pkgSheet = workbook.getWorksheet('Order Packages');
+
+    if (!pkgSheet) {
+      throw new Error('Template is missing "Order Packages" sheet');
     }
 
-    // Wrap text for multi-line cells in SKU/Name/Variations/Quantity columns
-    const wrapCols = ['F', 'G', 'H', 'I'];
-    for (let r = 2; r <= (packageRows.length + 1); r++) {
-      for (const col of wrapCols) {
-        const cell = pkgSheet.getCell(`${col}${r}`);
-        cell.alignment = { wrapText: true, vertical: 'top' };
-      }
+    // Add package rows
+    let i = 1;
+    const formulaeProvider = providersData?.map(p => p.name).join(',');
+    for (const row of packageRows) {
+      pkgSheet.getCell(`A${i + 1}`).value = row['Order ID'];
+      pkgSheet.getCell(`B${i + 1}`).value = row['Package ID'];
+      pkgSheet.getCell(`D${i + 1}`).dataValidation = {
+        type: 'list',
+        allowBlank: true,
+        formulae: [`"${formulaeProvider}"`],
+        showErrorMessage: true,
+        error: 'Please select a value from the list.'
+      };
+      pkgSheet.getCell(`F${i + 1}`).value = row['SKU ID'];
+      pkgSheet.getCell(`G${i + 1}`).value = row['Product name'];
+      pkgSheet.getCell(`H${i + 1}`).value = row['Variations'];
+      pkgSheet.getCell(`I${i + 1}`).value = row['Quantity'];
+      i++;
     }
+
 
     // Providers sheet
-    const provSheet = workbook.addWorksheet('Shipping Providers');
-    provSheet.columns = [
-      { header: 'No', width: 6 },
-      { header: 'Provider ID', width: 24 },
-      { header: 'Provider Name', width: 32 },
-    ];
-    const providersData = providers.map((p, idx) => ({ no: idx + 1, id: p.id, name: p.name }));
-    for (const p of providersData) {
-      provSheet.addRow([p.no, p.id, p.name]);
+    const provSheet = workbook.getWorksheet('Shipping Providers');
+
+    if (!provSheet) {
+      throw new Error('Template is missing "Shipping Providers" sheet');
     }
 
-    // Data validation + formula mapping
+    i = 1;
+    for (const p of providersData) {
+      provSheet.getCell(`A${i + 1}`).value = p.no;
+      provSheet.getCell(`B${i + 1}`).value = p.id;
+      provSheet.getCell(`C${i + 1}`).value = p.name;
+      i++;
+    }
+
     const pkgCount = packageRows.length;
     const provCount = providers.length;
-
     if (pkgCount > 0 && provCount > 0) {
       const pkgStartRow = 2; // header is row 1
       const pkgEndRow = pkgStartRow + pkgCount - 1;
@@ -211,12 +207,6 @@ export async function POST(request: NextRequest) {
         'Providers',
         `'Shipping Providers'!$C$${provStartRow}:$C$${provEndRow}`
       );
-
-      // NOTE: ExcelJS does not support adding data validation (dropdowns) directly.
-      // You can only set cell values and formulas. Data validation must be added manually in Excel.
-      // If you need to inform users, consider adding a note or instruction in the sheet.
-      pkgSheet.getCell('D1').note = 'Vui lòng chọn tên hãng vận chuyển từ danh sách ở sheet "Shipping Providers".';
-      pkgSheet.getCell('C1').note = 'Cột này sẽ tự điền theo cột "Provider Name".';
 
       // Auto-map Provider ID in column C using INDEX/MATCH against providers sheet
       for (let r = pkgStartRow; r <= pkgEndRow; r++) {
