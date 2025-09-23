@@ -28,6 +28,10 @@
         {
             "path": "/api/jobs/finance-sync",
             "schedule": "0 */12 * * *"
+        },
+        {
+            "path": "/api/jobs/refresh-token",
+            "schedule": "0 0 */3 * *"
         }
     ]
 }

@@ -743,14 +743,14 @@ export default function OrdersPage() {
                             className="bg-orange-600 text-white px-3 py-1.5 text-xs rounded-md hover:bg-orange-700 disabled:opacity-50 flex items-center justify-center hover:shadow-lg transition duration-200"
                         >
                             {isExporting ? <Loader2 className="h-3 w-3 animate-spin mr-1.5" /> : <Download className="h-3 w-3 mr-1.5" />}
-                            {isExporting ? 'Exporting...' : 'Export Excel'}
+                            {isExporting ? 'Exporting...' : 'Export Shipment Info'}
                         </button>
                         <button
                             onClick={() => setShowImportModal(true)}
                             className="bg-blue-600 text-white px-3 py-1.5 text-xs rounded-md hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center hover:shadow-lg transition duration-200"
                         >
                             <Upload className="h-3 w-3 mr-1.5" />
-                            Import Excel
+                            Import Shipment Info
                         </button>
                         <button
                             onClick={() => setShowSyncModal(true)}
@@ -773,53 +773,55 @@ export default function OrdersPage() {
 
             </div>
 
-            {/* Stats Cards - Update to use new status categories */}
-            <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-4 gap-6 mb-6">
-                {/* Total Orders */}
-                <button
-                    type="button"
-                    onClick={() => {
-                        handleFilterChange('status', '');
-                        setNeedSearch(true);
-                    }}
-                    aria-pressed={filters.status === ''}
-                    className={`bg-white p-6 rounded-lg shadow-sm border dark:border-gray-800 dark:bg-white/[0.03] transition hover:shadow-md cursor-pointer ${
-                        filters.status === '' ? 'ring-2 ring-blue-400 border-blue-300 dark:ring-blue-500' : ''
-                    }`}
-                >
-                    <div className="flex items-center">
-                        <Package className="h-8 w-8 text-blue-600" />
-                        <div className="ml-4">
-                            <p className="text-sm font-medium text-gray-600 dark:text-gray-400">{t('orders.total_orders')}</p>
-                            <p className="text-2xl font-semibold text-gray-900 dark:text-white/90">{pagination.totalItems}</p>
-                        </div>
-                    </div>
-                </button>
-
-                {STATUS_DEFS.map(({ key, label, Icon, color }) => (
+            {/* Stats Cards - Inline horizontal scroll */}
+            <div className="mb-6">
+                <div className="flex items-stretch gap-3 overflow-x-auto py-2 scrollbar-thin">
+                    {/* Total Orders */}
                     <button
-                        key={key}
                         type="button"
                         onClick={() => {
-                            handleFilterChange('status', key);
+                            handleFilterChange('status', '');
                             setNeedSearch(true);
                         }}
-                        aria-pressed={filters.status === key}
-                        className={`bg-white p-6 rounded-lg shadow-sm border dark:border-gray-800 dark:bg-white/[0.03] transition hover:shadow-md cursor-pointer ${
-                            filters.status === key ? 'ring-2 ring-blue-400 border-blue-300 dark:ring-blue-500' : ''
+                        aria-pressed={filters.status === ''}
+                        className={`shrink-0 min-w-[240px] snap-start bg-white p-6 rounded-lg shadow-sm border dark:border-gray-800 dark:bg-white/[0.03] transition hover:shadow-md cursor-pointer ${
+                            filters.status === '' ? 'ring-2 ring-blue-400 border-blue-300 dark:ring-blue-500' : ''
                         }`}
                     >
                         <div className="flex items-center">
-                            <Icon className={`h-8 w-8 ${color}`} />
+                            <Package className="h-8 w-8 text-blue-600" />
                             <div className="ml-4">
-                                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">{label}</p>
-                                <p className="text-2xl font-semibold text-gray-900 dark:text-white/90">
-                                    {loadingCounts ? '...' : (statusCounts[key] ?? 0)}
-                                </p>
+                                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">{t('orders.total_orders')}</p>
+                                <p className="text-2xl font-semibold text-gray-900 dark:text-white/90">{pagination.totalItems}</p>
                             </div>
                         </div>
                     </button>
-                ))}
+
+                    {STATUS_DEFS.map(({ key, label, Icon, color }) => (
+                        <button
+                            key={key}
+                            type="button"
+                            onClick={() => {
+                                handleFilterChange('status', key);
+                                setNeedSearch(true);
+                            }}
+                            aria-pressed={filters.status === key}
+                            className={`shrink-0 min-w-[240px] snap-start bg-white p-6 rounded-lg shadow-sm border dark:border-gray-800 dark:bg-white/[0.03] transition hover:shadow-md cursor-pointer ${
+                                filters.status === key ? 'ring-2 ring-blue-400 border-blue-300 dark:ring-blue-500' : ''
+                            }`}
+                        >
+                            <div className="flex items-center">
+                                <Icon className={`h-8 w-8 ${color}`} />
+                                <div className="ml-4">
+                                    <p className="text-sm font-medium text-gray-600 dark:text-gray-400">{label}</p>
+                                    <p className="text-2xl font-semibold text-gray-900 dark:text-white/90">
+                                        {loadingCounts ? '...' : (statusCounts[key] ?? 0)}
+                                    </p>
+                                </div>
+                            </div>
+                        </button>
+                    ))}
+                </div>
             </div>
 
             {/* Updated Filters */}
