@@ -93,26 +93,26 @@ export class TikTokOrderSync {
             try {
                 return await fn();
             } catch (err: any) {
-                    const status = err?.statusCode || err?.response?.statusCode;
-                    const finalAttempt = attempt === this.MAX_RETRIES;
+                const status = err?.statusCode || err?.response?.statusCode;
+                const finalAttempt = attempt === this.MAX_RETRIES;
 
-                    console.error(`[TikTok API] ${context} failed (attempt ${attempt + 1}/${this.MAX_RETRIES + 1})`, {
-                        status,
-                        message: err?.message
+                console.error(`[TikTok API] ${context} failed (attempt ${attempt + 1}/${this.MAX_RETRIES + 1})`, {
+                    status,
+                    message: err?.message
+                });
+
+                // Authentication failure - abort immediately and surface
+                if (status === 401) {
+                    throw Object.assign(new Error('UNAUTHORIZED_TIKTOK_API'), {
+                        code: 'UNAUTHORIZED_TIKTOK_API',
+                        original: err
                     });
+                }
 
-                    // Authentication failure - abort immediately and surface
-                    if (status === 401) {
-                        throw Object.assign(new Error('UNAUTHORIZED_TIKTOK_API'), {
-                            code: 'UNAUTHORIZED_TIKTOK_API',
-                            original: err
-                        });
-                    }
+                if (finalAttempt) throw err;
 
-                    if (finalAttempt) throw err;
-
-                    // Backoff
-                    await new Promise(r => setTimeout(r, this.RETRY_BASE_DELAY_MS * (attempt + 1)));
+                // Backoff
+                await new Promise(r => setTimeout(r, this.RETRY_BASE_DELAY_MS * (attempt + 1)));
             }
         }
         // Should never reach here
@@ -498,13 +498,13 @@ export class TikTokOrderSync {
                         if (order.recipientAddress) {
                             await this.upsertRecipientAddress(existingOrderMap.get(order.id)!, order.recipientAddress);
                         }
-                        if(order.packages && order.packages.length > 0){
+                        if (order.packages && order.packages.length > 0) {
                             await prisma.orderPackage.deleteMany({
                                 where: {
                                     orderId: existingOrderMap.get(order.id)!,
                                 }
                             });
-                            for(const pkg of order.packages){
+                            for (const pkg of order.packages) {
                                 await this.upsertOrderPackage(existingOrderMap.get(order.id)!, pkg);
                             }
                         }
@@ -711,20 +711,20 @@ export class TikTokOrderSync {
 
             if (packageDetailResult?.body?.data) {
                 const packageDetail = packageDetailResult.body.data;
-                
+
                 // Map API response to model fields - only include non-undefined values
                 const apiFields: any = {};
-                
+
                 // Core TikTok package fields
                 if (packageDetail.packageStatus !== undefined) apiFields.status = packageDetail.packageStatus;
                 if (packageDetail.trackingNumber !== undefined) apiFields.trackingNumber = packageDetail.trackingNumber;
                 if (packageDetail.shippingProviderId !== undefined) apiFields.shippingProviderId = packageDetail.shippingProviderId;
                 if (packageDetail.shippingProviderName !== undefined) apiFields.shippingProviderName = packageDetail.shippingProviderName;
-                
+
                 // API response data
                 if (packageDetail.orderLineItemIds !== undefined) apiFields.orderLineItemIds = packageDetail.orderLineItemIds || [];
                 if (packageDetail.orders !== undefined) apiFields.ordersData = JSON.stringify(packageDetail.orders);
-                
+
                 // Extended fields from new schema
                 if (packageDetail.shippingType !== undefined) apiFields.shippingType = packageDetail.shippingType;
                 if (packageDetail.createTime !== undefined) apiFields.createTime = packageDetail.createTime;
@@ -738,7 +738,7 @@ export class TikTokOrderSync {
                 if ((packageDetail as any).pickupSlot?.startTime !== undefined) apiFields.pickupSlotStartTime = (packageDetail as any).pickupSlot.startTime;
                 if ((packageDetail as any).pickupSlot?.endTime !== undefined) apiFields.pickupSlotEndTime = (packageDetail as any).pickupSlot.endTime;
                 if (packageDetail.handoverMethod !== undefined) apiFields.handoverMethod = packageDetail.handoverMethod;
-                
+
                 packageData = {
                     ...packageData,
                     ...apiFields
@@ -759,12 +759,12 @@ export class TikTokOrderSync {
             }
 
             packageData.channelData = JSON.stringify(packageChannelData);
-            
+
             // Prepare data for upsert - separate update and create data
             const { orderId: _, packageId: __, ...updateData } = packageData;
-            
+
             await prisma.orderPackage.upsert({
-                where: { 
+                where: {
                     orderId_packageId: {
                         orderId: orderId,
                         packageId: pkg.id
@@ -778,14 +778,14 @@ export class TikTokOrderSync {
 
             // Add small delay to avoid rate limiting
             await new Promise(resolve => setTimeout(resolve, 100));
-            
+
         } catch (packageError: any) {
             if (packageError?.code === 'UNAUTHORIZED_TIKTOK_API') {
                 console.error(`Auth failed while fetching package ${pkg.id}, aborting upsert`);
                 return;
             }
             console.warn(`Failed to upsert package ${pkg.id} for order ${orderId}:`, packageError);
-            
+
             // Still try to upsert package with basic info if API call fails
             try {
                 const fallbackData = {
@@ -798,11 +798,11 @@ export class TikTokOrderSync {
                         fetchSuccess: false
                     })
                 };
-                
+
                 const { orderId: _, packageId: __, ...updateFallbackData } = fallbackData;
-                
+
                 await prisma.orderPackage.upsert({
-                    where: { 
+                    where: {
                         orderId_packageId: {
                             orderId: orderId,
                             packageId: pkg.id
@@ -920,23 +920,12 @@ export class TikTokOrderSync {
         if (existing?.id) {
             try {
                 console.log(`Cleaning previous associations for order ${order.id} (${persistedOrder.id})`);
-                await prisma.$transaction([
-                    prisma.orderLineItem.deleteMany({ where: { orderId: persistedOrder.id } }),
-                    prisma.orderPayment.deleteMany({ where: { orderId: persistedOrder.id } }),
-                    prisma.orderRecipientAddress.deleteMany({ where: { orderId: persistedOrder.id } }),
-                    prisma.orderPackage.deleteMany({ where: { orderId: persistedOrder.id } }) // ensure old packages removed too
-                ]);
+                await prisma.orderLineItem.deleteMany({ where: { orderId: persistedOrder.id } });
+                await prisma.orderPayment.deleteMany({ where: { orderId: persistedOrder.id } });
+                await prisma.orderRecipientAddress.deleteMany({ where: { orderId: persistedOrder.id } });
+                await prisma.orderPackage.deleteMany({ where: { orderId: persistedOrder.id } });
             } catch (cleanupErr) {
                 console.warn(`Transactional cleanup failed for order ${order.id}, attempting fallback:`, cleanupErr);
-                // Fallback: sequential deletes (avoids parallel transaction conflicts)
-                try {
-                    await prisma.orderLineItem.deleteMany({ where: { orderId: persistedOrder.id } });
-                    await prisma.orderPayment.deleteMany({ where: { orderId: persistedOrder.id } });
-                    await prisma.orderRecipientAddress.deleteMany({ where: { orderId: persistedOrder.id } });
-                    await prisma.orderPackage.deleteMany({ where: { orderId: persistedOrder.id } });
-                } catch (fallbackErr) {
-                    console.error(`Fallback cleanup failed for order ${order.id}:`, fallbackErr);
-                }
             }
         }
 
@@ -1039,20 +1028,20 @@ export class TikTokOrderSync {
 
                     if (packageDetailResult?.body?.data) {
                         const packageDetail = packageDetailResult.body.data;
-                        
+
                         // Map API response to model fields - only include non-undefined values
                         const apiFields: any = {};
-                        
+
                         // Core TikTok package fields
                         if (packageDetail.packageStatus !== undefined) apiFields.status = packageDetail.packageStatus;
                         if (packageDetail.trackingNumber !== undefined) apiFields.trackingNumber = packageDetail.trackingNumber;
                         if (packageDetail.shippingProviderId !== undefined) apiFields.shippingProviderId = packageDetail.shippingProviderId;
                         if (packageDetail.shippingProviderName !== undefined) apiFields.shippingProviderName = packageDetail.shippingProviderName;
-                        
+
                         // API response data
                         if (packageDetail.orderLineItemIds !== undefined) apiFields.orderLineItemIds = packageDetail.orderLineItemIds || [];
                         if (packageDetail.orders !== undefined) apiFields.ordersData = JSON.stringify(packageDetail.orders);
-                        
+
                         // Extended fields from new schema
                         if (packageDetail.shippingType !== undefined) apiFields.shippingType = packageDetail.shippingType;
                         if (packageDetail.createTime !== undefined) apiFields.createTime = packageDetail.createTime;
@@ -1066,7 +1055,7 @@ export class TikTokOrderSync {
                         if ((packageDetail as any).pickupSlot?.startTime !== undefined) apiFields.pickupSlotStartTime = (packageDetail as any).pickupSlot.startTime;
                         if ((packageDetail as any).pickupSlot?.endTime !== undefined) apiFields.pickupSlotEndTime = (packageDetail as any).pickupSlot.endTime;
                         if (packageDetail.handoverMethod !== undefined) apiFields.handoverMethod = packageDetail.handoverMethod;
-                        
+
                         packageData = {
                             ...packageData,
                             ...apiFields
@@ -1087,19 +1076,25 @@ export class TikTokOrderSync {
                     }
 
                     packageData.channelData = JSON.stringify(packageChannelData);
-                    
+
                     await prisma.orderPackage.create({
                         data: packageData
+                    });
+
+                    // Sync order attributes
+                    await syncOrderCanSplitOrNot(prisma, {
+                        shop_id: shopId,
+                        order_ids: [order.id]
                     });
 
                     console.log(`Created package ${pkg.id} for order ${order.id}`);
 
                     // Add small delay to avoid rate limiting
                     await new Promise(resolve => setTimeout(resolve, 100));
-                    
+
                 } catch (packageError) {
                     console.warn(`Failed to create package ${pkg.id} for order ${order.id}:`, packageError);
-                    
+
                     // Still create package with basic info if API call fails
                     try {
                         await prisma.orderPackage.create({

@@ -9,7 +9,6 @@ export class TikTokOrderAttributesSync {
     }
 
     async syncOrderCanSplit(options: any): Promise<any> {
-        let processedCount = 0;
         let successCount = 0;
         const errors: string[] = [];
 
