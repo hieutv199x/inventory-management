@@ -177,7 +177,10 @@ export async function POST(request: NextRequest) {
       pkgSheet.getCell(`I${i + 1}`).value = row['Quantity'];
       i++;
     }
-
+    pkgSheet.getColumn("F").hidden = true;
+    pkgSheet.getColumn("G").hidden = true;
+    pkgSheet.getColumn("H").hidden = true;
+    pkgSheet.getColumn("I").hidden = true;
 
     // Providers sheet
     const provSheet = workbook.getWorksheet('Shipping Providers');

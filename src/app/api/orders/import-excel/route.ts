@@ -12,13 +12,11 @@ type PackageRow = {
   'Provider ID'?: string | number;
   'Provider Name'?: string;
   'Tracking ID'?: string | number;
-  // ...other columns are ignored
 };
 
 type ProviderRow = {
   'Provider ID'?: string | number;
   'Provider Name'?: string;
-  // ...other columns are ignored
 };
 
 export async function POST(req: NextRequest) {
