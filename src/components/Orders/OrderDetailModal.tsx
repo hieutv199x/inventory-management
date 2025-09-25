@@ -107,14 +107,13 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({ order, isOpen, onCl
         // Group similar items within this package
         const itemGroups: Record<string, any> = {};
         items.forEach(item => {
-            // Create grouping key based on item characteristics
+            // Create grouping key based on item characteristics (IGNORE salePrice differences)
             const groupKey = JSON.stringify({
                 productId: item.productId,
                 skuId: item.skuId,
                 skuName: item.skuName,
                 sellerSku: item.sellerSku,
                 packageId: item.mergedChannelData.packageId,
-                salePrice: item.salePrice,
                 isCancelled: item.isCancelled
             });
 
@@ -123,12 +122,21 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({ order, isOpen, onCl
                     ...item,
                     count: 1,
                     lineItemIds: [item.lineItemId],
-                    totalQuantity: parseInt(item.mergedChannelData.quantity || 1)
+                    totalQuantity: parseInt(item.mergedChannelData.quantity || 1),
+                    // Collect unique sale prices for this group to show all price variants
+                    salePrices: item.salePrice ? [String(item.salePrice)] : []
                 };
             } else {
                 itemGroups[groupKey].count += 1;
                 itemGroups[groupKey].lineItemIds.push(item.lineItemId);
                 itemGroups[groupKey].totalQuantity += parseInt(item.mergedChannelData.quantity || 1);
+                // Track unique sale prices
+                if (item.salePrice) {
+                    const priceStr = String(item.salePrice);
+                    if (!itemGroups[groupKey].salePrices.includes(priceStr)) {
+                        itemGroups[groupKey].salePrices.push(priceStr);
+                    }
+                }
             }
         });
 
@@ -639,7 +647,9 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({ order, isOpen, onCl
                                                                 <div>
                                                                     <dt className="text-xs font-medium text-gray-500 dark:text-gray-400">Sale Price</dt>
                                                                     <dd className="text-lg font-semibold text-green-600">
-                                                                        {formatCurrency(item.salePrice, item.currency)}
+                                                                        {Array.isArray(item.salePrices) && item.salePrices.length > 0
+                                                                            ? item.salePrices.map((p: string) => formatCurrency(p, item.currency)).join(', ')
+                                                                            : formatCurrency(item.salePrice, item.currency)}
                                                                     </dd>
                                                                 </div>
                                                                 {(itemChannelData.sellerDiscount || itemChannelData.platformDiscount) && (
