@@ -506,6 +506,35 @@ model Order {
   // Timing fields (universal)
   paidTime                        Int?
   deliveryTime                    Int?
+
+  // SLA / deadline timestamps (TikTok specific) - Unix epoch seconds
+  // Automatic cancellation deadline for unpaid/processing orders
+  cancelOrderSlaTime             Int?    // API: cancel_order_sla_time
+  // Latest time seller should hand over to platform (time to ship / to submit to shipping) - platform specific
+  ttsSlaTime                      Int?    // API: tts_sla_time
+  // Latest ready-to-ship (RTS) time specified by platform
+  rtsSlaTime                      Int?    // API: rts_sla_time
+  // Deadline by which order should be delivered to avoid late delivery penalties
+  deliverySlaTime                 Int?    // API: delivery_sla_time
+  // If not delivered before this time order may auto cancel (platform rule)
+  deliveryDueTime                 Int?    // API: delivery_due_time
+  // If not collected (moved to IN_TRANSIT) before this time order auto cancels
+  collectionDueTime               Int?    // API: collection_due_time
+  // If not moved to AWAITING_COLLECTION before this time order auto cancels
+  shippingDueTime                 Int?    // API: shipping_due_time
+  // Fast dispatch / NDD incentive cutoff (TH / PH)
+  fastDispatchSlaTime             Int?    // API: fast_dispatch_sla_time
+  // Cut off time to avoid LDR (late dispatch rate) in SEA regions
+  pickUpCutOffTime                Int?    // API: pick_up_cut_off_time
+  // Required delivery time commitment for selected delivery option
+  deliveryOptionRequiredDeliveryTime Int? // API: delivery_option_required_delivery_time
+
+  // Additional milestone / event timestamps (TikTok specific)
+  cancelTime                      Int?    // API: cancel_time (when status became CANCELLED)
+  requestCancelTime               Int?    // API: request_cancel_time (buyer requested cancellation)
+  rtsTime                         Int?    // API: rts_time (seller shipped / marked RTS)
+  collectionTime                  Int?    // API: collection_time (status became IN_TRANSIT)
+  releaseDate                     Int?    // API: release_date (for PRE_ORDER types)
   
   // Shop relation (universal) - Fix: use ObjectId reference
   shopId                          String   @db.ObjectId

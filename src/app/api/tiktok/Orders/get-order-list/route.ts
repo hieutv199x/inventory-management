@@ -219,11 +219,10 @@ async function processBatch(orders: any[], shopId: string, client: any, credenti
                 shippingProviderId: order.shippingProviderId,
                 shippingType: order.shippingType,
                 trackingNumber: order.trackingNumber,
-                rtsSlaTime: order.rtsSlaTime,
-                rtsTime: order.rtsTime,
-                ttsSlaTime: order.ttsSlaTime,
                 userId: order.userId,
-                warehouseId: order.warehouseId
+                warehouseId: order.warehouseId,
+                isBuyerRequestCancel: order.isBuyerRequestCancel || false,
+                handlingDuration: order.handlingDuration || null,
             };
 
             const orderData = {
@@ -239,7 +238,16 @@ async function processBatch(orders: any[], shopId: string, client: any, credenti
                 paidTime: order.paidTime,
                 deliveryTime: order.deliveryTime,
                 channelData: JSON.stringify(channelData),
-                shopId: shopId
+                shopId: shopId,
+                ttsSlaTime: order.ttsSlaTime || null,
+                rtsSlaTime: order.rtsSlaTime || null,
+                deliverySlaTime: order.deliverySlaTime || null,
+                deliveryDueTime: order.deliveryDueTime || null,
+                collectionDueTime: order.collectionDueTime || null,
+                shippingDueTime: order.shippingDueTime || null,
+                fastDispatchSlaTime: order.fastDispatchSlaTime || null,
+                pickUpCutOffTime: order.pickUpCutOffTime || null,
+                deliveryOptionRequiredDeliveryTime: order.deliveryOptionRequiredDeliveryTime || null
             };
 
             if (existingOrderMap.has(order.id)) {

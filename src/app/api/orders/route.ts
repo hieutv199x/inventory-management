@@ -28,9 +28,10 @@ export async function GET(req: NextRequest) {
     const dateTo = searchParams.get('dateTo');
     const sortBy = searchParams.get('sortBy') || 'createTime';
     const sortOrder = (searchParams.get('sortOrder') || 'desc').toLowerCase();
+    const alert = searchParams.get('alert'); // custom alert filter
 
     // Build where clause
-    const where: any = {};
+    let where: any = {};
 
     // Shop access control
     if (!isAdmin && !shopId) {
@@ -69,7 +70,7 @@ export async function GET(req: NextRequest) {
             { customStatus: { notIn: ['DELIVERED', 'SPLITTED'] } },
           ],
         });
-        where.AND.push({ status: { in: ['AWAITING_SHIPMENT']} });
+        where.AND.push({ status: { in: ['AWAITING_SHIPMENT'] } });
       } else {
         // Support CSV values e.g. ?customStatus=SPLITTED,DELIVERED
         const list = customStatus.split(',').map(s => s.trim()).filter(Boolean);
@@ -84,22 +85,80 @@ export async function GET(req: NextRequest) {
     // Date range filter - support both timestamp and date string
     if (createTimeGe || createTimeLt || dateFrom || dateTo) {
       where.createTime = {};
-      
+
       // Priority: use timestamp parameters if available
       if (createTimeGe) {
         where.createTime.gte = parseInt(createTimeGe);
       } else if (dateFrom) {
         where.createTime.gte = Math.floor(new Date(dateFrom).getTime() / 1000);
       }
-      
+
       if (createTimeLt) {
         where.createTime.lte = parseInt(createTimeLt);
       } else if (dateTo) {
-        where.createTime.lte = Math.floor(new Date(dateTo + 'T23:59:59').getTime() / 1000);
+        where.createTime.lte = Math.floor(new Date(dateTo).getTime() / 1000);
       }
     }
 
     // Get total count for pagination
+    // Apply alert-specific filters AFTER base filters so pagination reflects narrowed set
+    if (alert) {
+      where = {};
+      const now = Math.floor(Date.now() / 1000);
+      const twentyFourHoursFromNow = now + 24 * 60 * 60;
+      switch (alert) {
+        case 'countShipingWithin24':
+          // AWAITING_SHIPMENT created >48h ago
+          where.status = 'AWAITING_SHIPMENT';
+          (where.createTime ??= {});
+          where.createTime.lt = now - 48 * 60 * 60;
+          break;
+        case 'countAutoCancelled':
+          // Match alert route: ANY of (shippingDueTime in window & status != AWAITING_COLLECTION)
+          // (collectionDueTime in window & status != IN_TRANSIT)
+          // (deliveryDueTime in window & status != DELIVERED)
+          // Remove a previously applied single status filter to avoid over-restricting
+          if (where.status) {
+            delete where.status;
+          }
+          (where.AND ??= []);
+          where.AND.push({
+            OR: [
+              {
+                shippingDueTime: { gt: now, lt: twentyFourHoursFromNow },
+                status: { not: 'AWAITING_COLLECTION' }
+              },
+              {
+                collectionDueTime: { gt: now, lt: twentyFourHoursFromNow },
+                status: { not: 'IN_TRANSIT' }
+              },
+              {
+                deliveryDueTime: { gt: now, lt: twentyFourHoursFromNow },
+                status: { not: 'DELIVERED' }
+              }
+            ]
+          });
+          break;
+        case 'countShippingOverdue':
+          // AWAITING_SHIPMENT past shippingDueTime
+          where.status = 'AWAITING_SHIPMENT';
+          where.shippingDueTime = { lt: now };
+          break;
+        case 'countBuyerCancelled':
+          // buyer requested cancellation but not cancelled yet
+          where.status = { not: 'CANCELLED' };
+          (where.channelData ??= {});
+          // Keep simple contains match (string JSON) to align with alert endpoint
+          where.channelData.contains = '"isBuyerRequestCancel"';
+          break;
+        case 'countLogisticsIssue':
+          // Placeholder - no concrete logic yet; return empty by forcing false condition if desired
+          break;
+        case 'countReturnRefund':
+          // Placeholder - similar; could look for refund flags in channelData later
+          break;
+      }
+    }
     const totalItems = await prisma.order.count({ where });
     const totalPages = Math.ceil(totalItems / limit);
 
@@ -151,7 +210,7 @@ export async function GET(req: NextRequest) {
         };
       }
     }
-    
+
     return NextResponse.json({
       success: true,
       orders: orders, // Frontend expects "orders" field

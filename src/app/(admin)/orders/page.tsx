@@ -122,7 +122,7 @@ export default function OrdersPage() {
         status: '',
         customStatus: '', // Added customStatus filter
         dateFrom: getDateWithTimezone(new Date(Date.now() - 24 * 60 * 60 * 1000)), // 1 day ago
-        dateTo: getDateWithTimezone(new Date()), // now
+        dateTo: getDateWithTimezone(new Date(Date.now() + 24 * 60 * 60 * 1000)), // 1 day from now
         keyword: '',
     });
 
@@ -131,7 +131,7 @@ export default function OrdersPage() {
     const [isSearching, setIsSearching] = useState(false);
 
     // Updated pagination state - now managed by server
-    const [pageSize, setPageSize] = useState<number>(20);
+    const [pageSize, setPageSize] = useState<number>(100);
     const [currentPage, setCurrentPage] = useState<number>(1);
     const [pagination, setPagination] = useState<PaginationInfo>({
         currentPage: 1,
@@ -158,6 +158,9 @@ export default function OrdersPage() {
     const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(new Set());
     const [showBulkTrackingModal, setShowBulkTrackingModal] = useState(false);
     const [bulkTrackingData, setBulkTrackingData] = useState<{[key: string]: {trackingId: string, shippingProvider: string, receiptId: string}}>({});
+
+    // New alert filter state
+    const [alertFilter, setAlertFilter] = useState<string>('');
 
     const handleExportExcel = async () => {
         setIsExporting(true);
@@ -285,17 +288,13 @@ export default function OrdersPage() {
                 const params = new URLSearchParams();
                 params.append('page', effectivePage.toString());
                 params.append('pageSize', effectivePageSize.toString());
-
                 if (filters.shopId) params.append('shopId', filters.shopId);
                 if (filters.status) params.append('status', filters.status);
                 if (filters.customStatus) params.append('customStatus', filters.customStatus);
-                if (effectiveKeyword) params.append('keyword', effectiveKeyword);
-                if (filters.dateFrom) {
-                    params.append('createTimeGe', Math.floor(new Date(filters.dateFrom).getTime() / 1000).toString());
-                }
-                if (filters.dateTo) {
-                    params.append('createTimeLt', Math.floor(new Date(filters.dateTo).getTime() / 1000).toString());
-                }
+                if (filters.keyword || options?.keyword) params.append('keyword', (options?.keyword || filters.keyword));
+                if (filters.dateFrom) params.append('dateFrom', filters.dateFrom);
+                if (filters.dateTo) params.append('dateTo', filters.dateTo);
+                if (alertFilter) params.append('alert', alertFilter);
 
                 const response = await httpClient.get(`/orders?${params.toString()}`);
                 setOrders(response.orders || []);
@@ -315,7 +314,7 @@ export default function OrdersPage() {
                 if (isSearch) setIsSearching(false);
             }
         },
-        [filters, currentPage, pageSize, showLoading, hideLoading]
+        [filters, currentPage, pageSize, showLoading, hideLoading, alertFilter]
     );
 
     // New: validate and update selected import file
@@ -424,6 +423,7 @@ export default function OrdersPage() {
     useEffect(() => {
         fetchOrders(); // initial load
         fetchStatusCounts();
+        fetchAlertCounts();
     }, []); // intentionally empty (fetchOrders uses latest refs internally)
 
     // Consolidate all fetchOrders triggers into a single useEffect
@@ -666,6 +666,60 @@ export default function OrdersPage() {
         }
     };
 
+    // (duplicate function block removed)
+
+    // Backend-driven status counts (exclude keyword to avoid counting non-persisted search results)
+    const ALERT_DEFS = [
+        // key maps to property returned from /api/orders/alert
+        { key: 'countShipingWithin24', label: 'Ship within 24h', Icon: Truck, color: 'text-orange-600', tooltip: 'Orders waiting >48h but still AWAITING_SHIPMENT (need action).' },
+        { key: 'countAutoCancelled', label: 'Auto-cancelling <24h', Icon: Calendar, color: 'text-red-600', tooltip: 'Orders approaching collection due time in next 24h.' },
+        { key: 'countShippingOverdue', label: 'Shipping overdue', Icon: Package, color: 'text-pink-600', tooltip: 'AWAITING_SHIPMENT orders past shipping_due_time.' },
+        { key: 'countBuyerCancelled', label: 'Cancellation requested', Icon: X, color: 'text-yellow-600', tooltip: 'Buyer has requested cancellation (isBuyerRequestCancel=true).' },
+        { key: 'countLogisticsIssue', label: 'Logistics issue', Icon: RefreshCw, color: 'text-purple-600', tooltip: 'Detected logistics exceptions (placeholder – implement logic).' },
+        { key: 'countReturnRefund', label: 'Return/Refund', Icon: CreditCard, color: 'text-indigo-600', tooltip: 'Orders with return/refund request (placeholder).' },
+    ] as const;
+
+    const [statusCounts, setStatusCounts] = useState<Record<string, number>>({});
+    const [loadingCounts, setLoadingCounts] = useState<boolean>(false);
+    const [alertCounts, setAlertCounts] = useState<Record<string, number>>({});
+    const [loadingAlerts, setLoadingAlerts] = useState<boolean>(false);
+
+    const fetchStatusCounts = useCallback(async () => {
+        setLoadingCounts(true);
+        try {
+            const params = new URLSearchParams();
+            if (filters.shopId) params.append('shopId', filters.shopId);
+            if (filters.dateFrom) params.append('createTimeGe', Math.floor(new Date(filters.dateFrom).getTime() / 1000).toString());
+            if (filters.dateTo) params.append('createTimeLt', Math.floor(new Date(filters.dateTo).getTime() / 1000).toString());
+            if (filters.keyword) params.append('keyword', filters.keyword);
+            if (filters.customStatus) params.append('customStatus', filters.customStatus);
+
+            const res = await httpClient.get(`/orders/status-counts?${params.toString()}`);
+            setStatusCounts(res?.counts || {});
+        } finally {
+            setLoadingCounts(false);
+        }
+    }, [filters.shopId, filters.dateFrom, filters.dateTo, filters.keyword, filters.customStatus]);
+
+    const fetchAlertCounts = useCallback(async () => {
+        setLoadingAlerts(true);
+        try {
+            const params = new URLSearchParams();
+            if (filters.shopId) params.append('shopId', filters.shopId);
+            const res = await httpClient.get(`/orders/alert?${params.toString()}`);
+
+            // Merge API data with placeholders (0 if not returned)
+            const base: Record<string, number> = {};
+            ALERT_DEFS.forEach(def => { base[def.key] = 0; });
+            Object.assign(base, res || {});
+            setAlertCounts(base);
+        } catch (e) {
+            console.error('Failed to fetch alert counts', e);
+        } finally {
+            setLoadingAlerts(false);
+        }
+    }, [filters.shopId]);
+
     const closeTrackingModal = () => {
         setShowTrackingModal(false);
         setSelectedOrderForTracking(null);
@@ -717,39 +771,6 @@ export default function OrdersPage() {
             setSyncingDetail(null);
         }
     };
-
-    // Backend-driven status counts (exclude keyword to avoid counting non-persisted search results)
-    const STATUS_DEFS = [
-        { key: 'UNPAID', label: 'Unpaid', Icon: CreditCard, color: 'text-red-600' },
-        { key: 'ON_HOLD', label: 'On Hold', Icon: RefreshCw, color: 'text-yellow-600' },
-        { key: 'AWAITING_SHIPMENT', label: 'Awaiting Shipment', Icon: Package, color: 'text-orange-600' },
-        { key: 'PARTIALLY_SHIPPING', label: 'Partially Shipping', Icon: Package, color: 'text-blue-600' },
-        { key: 'AWAITING_COLLECTION', label: 'Awaiting Collection', Icon: Calendar, color: 'text-purple-600' },
-        { key: 'IN_TRANSIT', label: 'In Transit', Icon: Truck, color: 'text-indigo-600' },
-        { key: 'DELIVERED', label: 'Delivered', Icon: Check, color: 'text-teal-600' },
-        { key: 'COMPLETED', label: 'Completed', Icon: Check, color: 'text-green-600' },
-        { key: 'CANCELLED', label: 'Cancelled', Icon: X, color: 'text-gray-600' },
-    ] as const;
-
-    const [statusCounts, setStatusCounts] = useState<Record<string, number>>({});
-    const [loadingCounts, setLoadingCounts] = useState<boolean>(false);
-
-    const fetchStatusCounts = useCallback(async () => {
-        setLoadingCounts(true);
-        try {
-            const params = new URLSearchParams();
-            if (filters.shopId) params.append('shopId', filters.shopId);
-            if (filters.dateFrom) params.append('createTimeGe', Math.floor(new Date(filters.dateFrom).getTime() / 1000).toString());
-            if (filters.dateTo) params.append('createTimeLt', Math.floor(new Date(filters.dateTo).getTime() / 1000).toString());
-            if (filters.keyword) params.append('keyword', filters.keyword);
-            if (filters.customStatus) params.append('customStatus', filters.customStatus);
-
-            const res = await httpClient.get(`/orders/status-counts?${params.toString()}`);
-            setStatusCounts(res?.counts || {});
-        } finally {
-            setLoadingCounts(false);
-        }
-    }, [filters.shopId, filters.dateFrom, filters.dateTo, filters.keyword, filters.customStatus]);
 
     return (
         <div>
@@ -828,25 +849,29 @@ export default function OrdersPage() {
                         </div>
                     </button>
 
-                    {STATUS_DEFS.map(({ key, label, Icon, color }) => (
+                    {ALERT_DEFS.map(({ key, label, Icon, color, tooltip }) => (
                         <button
                             key={key}
                             type="button"
                             onClick={() => {
-                                handleFilterChange('status', key);
+                                setAlertFilter(prev => prev === key ? '' : key); // toggle
+                                setCurrentPage(1);
                                 setNeedSearch(true);
+                                // when selecting alert filter, clear status filter (to avoid conflicts)
+                                setFilters(f => ({ ...f, status: '' }));
                             }}
-                            aria-pressed={filters.status === key}
-                            className={`shrink-0 min-w-[240px] snap-start bg-white p-6 rounded-lg shadow-sm border dark:border-gray-800 dark:bg-white/[0.03] transition hover:shadow-md cursor-pointer ${
-                                filters.status === key ? 'ring-2 ring-blue-400 border-blue-300 dark:ring-blue-500' : ''
-                            }`}
+                            aria-pressed={alertFilter === key}
+                            title={tooltip}
+                            className={`shrink-0 min-w-[240px] text-left snap-start p-6 rounded-lg shadow-sm border transition hover:shadow-md cursor-pointer dark:border-gray-800 dark:bg-white/[0.03] bg-white ${alertFilter === key ? 'ring-2 ring-blue-400 border-blue-300 dark:ring-blue-500' : ''}`}
                         >
                             <div className="flex items-center">
                                 <Icon className={`h-8 w-8 ${color}`} />
                                 <div className="ml-4">
-                                    <p className="text-sm font-medium text-gray-600 dark:text-gray-400">{label}</p>
+                                    <p className="text-sm font-medium text-gray-600 dark:text-gray-400 flex items-center gap-1">
+                                        {label}
+                                    </p>
                                     <p className="text-2xl font-semibold text-gray-900 dark:text-white/90">
-                                        {loadingCounts ? '...' : (statusCounts[key] ?? 0)}
+                                        {loadingAlerts ? '...' : (alertCounts[key] ?? 0)}
                                     </p>
                                 </div>
                             </div>

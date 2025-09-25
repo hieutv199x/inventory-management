@@ -173,22 +173,6 @@ export class TikTokOrderSync {
             syncResults.errors = batchResults.errors;
             syncResults.success = true;
 
-            // Create notification for sync completion
-            if (options.create_notifications !== false && syncResults.totalOrdersProcessed > 0) {
-                await NotificationService.createNotification({
-                    type: NotificationType.SYSTEM_ALERT,
-                    title: '📊 Order Sync Completed',
-                    message: `Successfully synced ${syncResults.totalOrdersProcessed} orders (${syncResults.ordersCreated} new, ${syncResults.ordersUpdated} updated) for shop ${this.credentials.shopName || options.shop_id}`,
-                    userId: this.credentials.id,
-                    shopId: this.credentials.id,
-                    data: {
-                        syncType: options.sync_all ? 'time_range' : 'specific_orders',
-                        results: syncResults,
-                        apiVersion: 'utility_function'
-                    }
-                });
-            }
-
         } catch (error: any) {
             if (error?.code === 'UNAUTHORIZED_TIKTOK_API') {
                 authFailed = true;
@@ -445,10 +429,8 @@ export class TikTokOrderSync {
                         warehouseId: order.warehouseId,
                         sellerNote: order.sellerNote,
                         // Additional fields
-                        cancelOrderSlaTime: order.cancelOrderSlaTime,
-                        ttsSlaTime: order.ttsSlaTime,
-                        rtsSlaTime: order.rtsSlaTime,
-                        rtsTime: order.rtsTime,
+                        isBuyerRequestCancel: order.isBuyerRequestCancel || false,
+                        handlingDuration: order.handlingDuration || null,
                         // Enhanced price details
                         ...(priceDetails && {
                             priceDetails,
@@ -471,6 +453,15 @@ export class TikTokOrderSync {
                         deliveryTime: order.deliveryTime,
                         channelData: JSON.stringify(channelData),
                         shopId: shopId,
+                        ttsSlaTime: order.ttsSlaTime || null,
+                        rtsSlaTime: order.rtsSlaTime || null,
+                        deliverySlaTime: order.deliverySlaTime || null,
+                        deliveryDueTime: order.deliveryDueTime || null,
+                        collectionDueTime: order.collectionDueTime || null,
+                        shippingDueTime: order.shippingDueTime || null,
+                        fastDispatchSlaTime: order.fastDispatchSlaTime || null,
+                        pickUpCutOffTime: order.pickUpCutOffTime || null,
+                        deliveryOptionRequiredDeliveryTime: order.deliveryOptionRequiredDeliveryTime || null
                     };
 
                     if (existingOrderMap.has(order.id)) {

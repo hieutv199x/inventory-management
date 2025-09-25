@@ -1,6 +1,6 @@
 "use client";
 import React from "react";
-import { X, Package, MapPin, CreditCard, Truck, User, Calendar, ShoppingBag, Info, Copy, Check } from 'lucide-react';
+import { X, Package, MapPin, CreditCard, Truck, User, ShoppingBag, Info, Copy, Check } from 'lucide-react';
 import Image from "next/image";
 import { Modal } from "../ui/modal";
 import { format } from 'date-fns';
