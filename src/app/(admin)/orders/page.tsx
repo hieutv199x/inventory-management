@@ -162,15 +162,20 @@ export default function OrdersPage() {
     const handleExportExcel = async () => {
         setIsExporting(true);
         try {
-            // Use current filters to export matching data
-            const exportFilters = {
-                shopId: filters.shopId,
-                status: filters.status && filters.status !== 'all' ? filters.status : undefined,
-                channel: filters.customStatus && filters.customStatus !== 'all' ? filters.customStatus : undefined,
-                searchTerm: filters.keyword || undefined,
-                dateFrom: filters.dateFrom,
-                dateTo: filters.dateTo
-            };
+            // Check if there are selected orders, if so export only selected ones
+            let exportData;
+            
+            if (selectedOrderIds.size > 0) {
+                // Export only selected orders
+                exportData = {
+                    selectedOrderIds: Array.from(selectedOrderIds)
+                };
+            } else {
+                // If no orders selected, show message to user
+                toast.error('Please select orders to export');
+                setIsExporting(false);
+                return;
+            }
 
             const response = await fetch('/api/orders/export-excel', {
                 method: 'POST',
@@ -178,7 +183,7 @@ export default function OrdersPage() {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${localStorage.getItem('token')}`,
                 },
-                body: JSON.stringify({ filters: exportFilters })
+                body: JSON.stringify(exportData)
             });
 
             if (!response.ok) {
@@ -573,12 +578,33 @@ export default function OrdersPage() {
     );
 
     const formatCustomerInfo = (order: Order) => {
+        const address = order.recipientAddress;
+        if (!address) return 'N/A';
+        
+        // Parse fullAddress to separate street address from city/state/country
+        const fullAddress = address.fullAddress || '';
+        const addressParts = fullAddress.split(',').map(part => part.trim());
+        
+        let streetAddress = '';
+        let cityStateCountry = '';
+        
+        if (addressParts.length >= 2) {
+            // First part is usually street address (house number, street name)
+            streetAddress = addressParts[0];
+            // Rest is city, state, country
+            cityStateCountry = addressParts.slice(1).join(', ');
+        } else {
+            streetAddress = fullAddress;
+        }
+        
         const customerInfo = [
-            `${order.recipientAddress?.name || 'N/A'}`,
-            `${order.recipientAddress?.phoneNumber || 'N/A'}`,
-            `${order.recipientAddress?.fullAddress || 'N/A'}`,
-            `${order.recipientAddress?.postalCode || 'N/A'}`,
-        ].join('\n');
+            `${address.name || 'N/A'}`,
+            `${address.phoneNumber || 'N/A'}`,
+            `${streetAddress || 'N/A'}`,
+            `${cityStateCountry || 'N/A'}`,
+            `${address.postalCode || 'N/A'}`,
+        ].filter(line => line && line !== 'N/A').join('\n');
+        
         return customerInfo;
     };
 
@@ -739,11 +765,16 @@ export default function OrdersPage() {
                     <div className="flex items-center gap-2">
                         <button
                             onClick={handleExportExcel}
-                            disabled={isExporting || orders.length === 0}
+                            disabled={isExporting || selectedOrderIds.size === 0}
                             className="bg-orange-600 text-white px-3 py-1.5 text-xs rounded-md hover:bg-orange-700 disabled:opacity-50 flex items-center justify-center hover:shadow-lg transition duration-200"
                         >
                             {isExporting ? <Loader2 className="h-3 w-3 animate-spin mr-1.5" /> : <Download className="h-3 w-3 mr-1.5" />}
-                            {isExporting ? 'Exporting...' : 'Export Shipment Info'}
+                            {isExporting 
+                                ? 'Exporting...' 
+                                : selectedOrderIds.size > 0 
+                                    ? `Export Selected (${selectedOrderIds.size})` 
+                                    : 'Select orders to export'
+                            }
                         </button>
                         <button
                             onClick={() => setShowImportModal(true)}

@@ -5,38 +5,45 @@ import path from 'path';
 
 export async function POST(request: NextRequest) {
   try {
-    const { filters } = await request.json();
+    const { filters, selectedOrderIds } = await request.json();
 
     // Build filters for orders table
     const whereOrder: any = {};
 
-    // Optional shop filter
-    if (filters?.shopId) {
-      whereOrder.shopId = filters.shopId;
-    }
-
-    // Optional status filter
-    if (filters?.status && filters.status !== 'all') {
-      whereOrder.status = filters.status;
-    }
-
-    // Optional date range (uses createTime like other APIs)
-    if (filters?.dateFrom || filters?.dateTo) {
-      whereOrder.createTime = {};
-      if (filters.dateFrom) {
-        whereOrder.createTime.gte = Math.floor(new Date(filters.dateFrom).getTime() / 1000);
+    // If specific order IDs are selected, use them
+    if (selectedOrderIds && Array.isArray(selectedOrderIds) && selectedOrderIds.length > 0) {
+      whereOrder.id = { in: selectedOrderIds };
+    } else {
+      // Otherwise, use filters (fallback for backward compatibility)
+      
+      // Optional shop filter
+      if (filters?.shopId) {
+        whereOrder.shopId = filters.shopId;
       }
-      if (filters.dateTo) {
-        whereOrder.createTime.lt = Math.floor(new Date(filters.dateTo).getTime() / 1000);
-      }
-    }
 
-    // Optional text search on orderId/buyerEmail
-    if (filters?.searchTerm) {
-      whereOrder.OR = [
-        { orderId: { contains: filters.searchTerm, mode: 'insensitive' } },
-        { buyerEmail: { contains: filters.searchTerm, mode: 'insensitive' } },
-      ];
+      // Optional status filter
+      if (filters?.status && filters.status !== 'all') {
+        whereOrder.status = filters.status;
+      }
+
+      // Optional date range (uses createTime like other APIs)
+      if (filters?.dateFrom || filters?.dateTo) {
+        whereOrder.createTime = {};
+        if (filters.dateFrom) {
+          whereOrder.createTime.gte = Math.floor(new Date(filters.dateFrom).getTime() / 1000);
+        }
+        if (filters.dateTo) {
+          whereOrder.createTime.lt = Math.floor(new Date(filters.dateTo).getTime() / 1000);
+        }
+      }
+
+      // Optional text search on orderId/buyerEmail
+      if (filters?.searchTerm) {
+        whereOrder.OR = [
+          { orderId: { contains: filters.searchTerm, mode: 'insensitive' } },
+          { buyerEmail: { contains: filters.searchTerm, mode: 'insensitive' } },
+        ];
+      }
     }
 
     // Fetch orders with only packages relation
