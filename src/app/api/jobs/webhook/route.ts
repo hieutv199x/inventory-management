@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { TikTokWebhookData } from "../../tiktok/webhook/route";
 import { NotificationService } from "@/lib/notification-service";
 import { syncOrderById } from "@/lib/tiktok-order-sync";
+import { syncTikTokProductById } from "@/lib/tiktok-product-sync";
 import { syncUnsettledTransactions } from "@/lib/tiktok-unsettled-transactions-sync";
 import { syncOrderCanSplitOrNot } from "@/lib/tiktok-order-sync-fulfillment-state";
 
@@ -31,7 +32,10 @@ export async function GET(req: NextRequest) {
                     }
 
                     // Build a stable deduplication key
-                    const dedupKey = `${webhookData?.shop_id ?? ''}:${webhookData?.type ?? ''}:${webhookData?.data?.order_id ?? ''}:${webhookData?.data?.cancellation_id ?? ''}`;
+                    // Deduplicate using order_id if present else product_id, plus cancellation id when exists
+                    const dataAny: any = webhookData?.data || {};
+                    const logicalOrderOrProductId = dataAny.order_id ?? dataAny.product_id ?? '';
+                    const dedupKey = `${webhookData?.shop_id ?? ''}:${webhookData?.type ?? ''}:${logicalOrderOrProductId}:${webhookData?.data?.cancellation_id ?? ''}`;
 
                     if (seen.has(dedupKey)) {
                         console.log(`Duplicate webhook detected (key=${dedupKey}), skipping processing`);
@@ -50,6 +54,9 @@ export async function GET(req: NextRequest) {
                             break;
                         case 11: // CANCELLATION_STATUS_CHANGE
                             await handleCancellationStatusChange(webhookData);
+                            break;
+                        case 15:
+                            await handleSyncProductById(webhookData);
                             break;
                         default:
                             console.log(`Unhandled webhook type: ${webhookData.type}`);
@@ -593,5 +600,74 @@ async function handleSpecificCancellationStatusChanges(orderId: string, cancella
                     reviewRequired: true
                 }
             });
+    }
+}
+
+// Handle product change webhook (type 15)
+async function handleSyncProductById(webhookData: TikTokWebhookData) {
+    try {
+        const { shop_id, data } = webhookData as any;
+        if (!data?.product_id) {
+            console.warn('Product webhook missing product_id');
+            return;
+        }
+
+        console.log(`Processing product change webhook product_id=${data.product_id}`);
+
+        // Attempt sync (force update to capture changes)
+        const syncResult = await syncTikTokProductById({
+            shopId: shop_id,
+            productId: String(data.product_id),
+            forceUpdate: true
+        });
+
+        if (!syncResult.success) {
+            // await NotificationService.createNotification({
+            //     type: NotificationType.WEBHOOK_ERROR,
+            //     title: 'Đồng bộ sản phẩm thất bại',
+            //     message: `Không thể đồng bộ sản phẩm ${data.product_id}: ${syncResult.errors?.join(', ')}`,
+            //     userId: 'system',
+            //     data: {
+            //         webhookType: 'PRODUCT_CHANGE',
+            //         productId: data.product_id,
+            //         shopId: shop_id,
+            //         errors: syncResult.errors
+            //     }
+            // });
+            return;
+        }
+
+        // Create success notification (optional informational)
+        await NotificationService.createNotification({
+            type: NotificationType.SYSTEM_ALERT,
+            title: 'Cập nhật sản phẩm',
+            message: `Đã đồng bộ sản phẩm ${data.product_id} (created=${syncResult.created} updated=${syncResult.updated})`,
+            userId: shop_id,
+            shopId: shop_id,
+            data: {
+                productId: data.product_id,
+                updated: syncResult.updated,
+                created: syncResult.created,
+                changeSource: data.change_source,
+                changedFields: data.changed_fields,
+                webhookTimestamp: webhookData.timestamp
+            }
+        });
+    } catch (error) {
+        console.error('Error handling product sync webhook:', error);
+        try {
+            await NotificationService.createNotification({
+                type: NotificationType.WEBHOOK_ERROR,
+                title: 'Lỗi xử lý webhook sản phẩm',
+                message: `Không thể xử lý webhook sản phẩm: ${error instanceof Error ? error.message : String(error)}`,
+                userId: 'system',
+                data: {
+                    webhookType: 'PRODUCT_CHANGE',
+                    error: error instanceof Error ? error.message : String(error)
+                }
+            });
+        } catch (notifyErr) {
+            console.error('Failed to create error notification for product webhook:', notifyErr);
+        }
     }
 }
