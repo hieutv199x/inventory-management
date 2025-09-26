@@ -57,7 +57,7 @@ export async function GET(req: Request) {
             where: {
                 status: "AWAITING_SHIPMENT",
                 shippingDueTime: {
-                    lt: now,
+                    gte: now,
                 },
                 ...(shopId ? { shopId } : {}),
             }

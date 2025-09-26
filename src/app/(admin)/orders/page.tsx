@@ -170,11 +170,11 @@ export default function OrdersPage() {
     const [importFile, setImportFile] = useState<File | null>(null);
     const [isImporting, setIsImporting] = useState(false);
     const [isExporting, setIsExporting] = useState(false);
-    
+
     // New states for bulk tracking
     const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(new Set());
     const [showBulkTrackingModal, setShowBulkTrackingModal] = useState(false);
-    const [bulkTrackingData, setBulkTrackingData] = useState<{[key: string]: {trackingId: string, shippingProvider: string, receiptId: string}}>({});
+    const [bulkTrackingData, setBulkTrackingData] = useState<{ [key: string]: { trackingId: string, shippingProvider: string, receiptId: string } }>({});
 
     // New alert filter state
     const [alertFilter, setAlertFilter] = useState<string>('');
@@ -184,7 +184,7 @@ export default function OrdersPage() {
         try {
             // Check if there are selected orders, if so export only selected ones
             let exportData;
-            
+
             if (selectedOrderIds.size > 0) {
                 // Export only selected orders
                 exportData = {
@@ -251,7 +251,7 @@ export default function OrdersPage() {
 
     const handleOpenBulkTrackingModal = () => {
         // Initialize bulk tracking data for selected orders
-        const initialData: {[key: string]: {trackingId: string, shippingProvider: string, receiptId: string}} = {};
+        const initialData: { [key: string]: { trackingId: string, shippingProvider: string, receiptId: string } } = {};
         selectedOrderIds.forEach(orderId => {
             initialData[orderId] = {
                 trackingId: '',
@@ -549,7 +549,7 @@ export default function OrdersPage() {
     };
 
     const formatTimestamp = (timestamp: number) => {
-        return formatTikTokTimestamp(timestamp, { includeSeconds: false });
+        return formatTikTokTimestamp(timestamp, { includeSeconds: false, includeTimezone: true });
     };
 
     const getStatusColor = (status: string) => {
@@ -657,14 +657,14 @@ export default function OrdersPage() {
     const formatCustomerInfo = (order: Order) => {
         const address = order.recipientAddress;
         if (!address) return 'N/A';
-        
+
         // Parse fullAddress to separate street address from city/state/country
         const fullAddress = address.fullAddress || '';
         const addressParts = fullAddress.split(',').map(part => part.trim());
-        
+
         let streetAddress = '';
         let cityStateCountry = '';
-        
+
         if (addressParts.length >= 2) {
             // First part is usually street address (house number, street name)
             streetAddress = addressParts[0];
@@ -673,7 +673,7 @@ export default function OrdersPage() {
         } else {
             streetAddress = fullAddress;
         }
-        
+
         const customerInfo = [
             `${address.name || 'N/A'}`,
             `${address.phoneNumber || 'N/A'}`,
@@ -681,7 +681,7 @@ export default function OrdersPage() {
             `${cityStateCountry || 'N/A'}`,
             `${address.postalCode || 'N/A'}`,
         ].filter(line => line && line !== 'N/A').join('\n');
-        
+
         return customerInfo;
     };
 
@@ -867,10 +867,10 @@ export default function OrdersPage() {
                             className="bg-orange-600 text-white px-3 py-1.5 text-xs rounded-md hover:bg-orange-700 disabled:opacity-50 flex items-center justify-center hover:shadow-lg transition duration-200"
                         >
                             {isExporting ? <Loader2 className="h-3 w-3 animate-spin mr-1.5" /> : <Download className="h-3 w-3 mr-1.5" />}
-                            {isExporting 
-                                ? 'Exporting...' 
-                                : selectedOrderIds.size > 0 
-                                    ? `Export Selected (${selectedOrderIds.size})` 
+                            {isExporting
+                                ? 'Exporting...'
+                                : selectedOrderIds.size > 0
+                                    ? `Export Selected (${selectedOrderIds.size})`
                                     : 'Select orders to export'
                             }
                         </button>
@@ -913,9 +913,8 @@ export default function OrdersPage() {
                             setNeedSearch(true);
                         }}
                         aria-pressed={filters.status === ''}
-                        className={`shrink-0 min-w-[240px] snap-start bg-white p-6 rounded-lg shadow-sm border dark:border-gray-800 dark:bg-white/[0.03] transition hover:shadow-md cursor-pointer ${
-                            filters.status === '' ? 'ring-2 ring-blue-400 border-blue-300 dark:ring-blue-500' : ''
-                        }`}
+                        className={`shrink-0 min-w-[240px] snap-start bg-white p-6 rounded-lg shadow-sm border dark:border-gray-800 dark:bg-white/[0.03] transition hover:shadow-md cursor-pointer ${filters.status === '' ? 'ring-2 ring-blue-400 border-blue-300 dark:ring-blue-500' : ''
+                            }`}
                     >
                         <div className="flex items-center">
                             <Package className="h-8 w-8 text-blue-600" />
@@ -1136,7 +1135,6 @@ export default function OrdersPage() {
                                     />
                                 </th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('common.id') || 'ID'}</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('orders.account_seller')}</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('orders.order')}</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('orders.items_images')}</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('orders.customer_info')}</th>
@@ -1174,31 +1172,21 @@ export default function OrdersPage() {
                                                     className="h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300 rounded"
                                                 />
                                             </td>
-                                            
+
                                             {/* Update index calculation for server-side pagination */}
                                             <td className="px-6 py-4 whitespace-nowrap">
                                                 <div className="text-sm font-medium text-gray-900 dark:text-gray-400">
                                                     #{((pagination.currentPage - 1) * pagination.pageSize) + index + 1}
                                                 </div>
                                             </td>
-
-                                            {/* Account/Seller - Thông tin tên shop, seller vận hành */}
-                                            <td className="px-6 py-4 whitespace-nowrap">
-                                                <div className="flex flex-col">
-                                                    <div className="text-sm font-medium text-gray-900 dark:text-gray-400">
-                                                        {order.shop.managedName || t('common.na')}
-                                                    </div>
-                                                    <div className="text-xs text-gray-500 dark:text-gray-400">
-                                                        {t('orders.shop_id_label')} {order.shopId}
-                                                    </div>
-                                                </div>
-                                            </td>
-
                                             {/* Order - Mã đơn hàng tiktok, thời gian đặt hàng, trạng thái đơn hàng */}
                                             <td className="px-6 py-4">
                                                 <div className="flex flex-col space-y-1">
                                                     <div className="font-mono text-sm font-medium text-gray-900 dark:text-gray-400">
                                                         {order.orderId}
+                                                    </div>
+                                                    <div className="flex items-center space-x-2">
+                                                        {order.shop.managedName || t('common.na')}
                                                     </div>
                                                     <div className="text-xs text-gray-600 dark:text-gray-400">
                                                         {formatTimestamp(order.createTime)}
@@ -1376,7 +1364,7 @@ export default function OrdersPage() {
                                                         </div>
                                                     )}
 
-                                                    {(!parseChannelData(order?.channelData ?? "").trackingNumber && !order.mustSplitPackages)  && (
+                                                    {(!parseChannelData(order?.channelData ?? "").trackingNumber && !order.mustSplitPackages) && (
                                                         <div className="flex flex-col gap-1">
                                                             <button
                                                                 onClick={() => handleAddTracking(order)}
@@ -1390,7 +1378,7 @@ export default function OrdersPage() {
                                                         </div>
                                                     )}
 
-                                                    {(!parseChannelData(order?.channelData ?? "").trackingNumber && (order.mustSplitPackages || order.canSplitPackages) && order.customStatus !== 'SPLITTED')  && (
+                                                    {(!parseChannelData(order?.channelData ?? "").trackingNumber && (order.mustSplitPackages || order.canSplitPackages) && order.customStatus !== 'SPLITTED') && (
                                                         <div className="flex flex-col gap-1">
                                                             <button
                                                                 onClick={() => openSplitModal(order)}
@@ -1448,7 +1436,7 @@ export default function OrdersPage() {
                         <div>
                             <p className="text-sm text-gray-700 dark:text-gray-400">
                                 {t(
-                                  `Showing results ${pagination.totalItems === 0 ? 0 : ((pagination.currentPage - 1) * pagination.pageSize) + 1} - ${Math.min(pagination.currentPage * pagination.pageSize, pagination.totalItems)} of ${pagination.totalItems}`
+                                    `Showing results ${pagination.totalItems === 0 ? 0 : ((pagination.currentPage - 1) * pagination.pageSize) + 1} - ${Math.min(pagination.currentPage * pagination.pageSize, pagination.totalItems)} of ${pagination.totalItems}`
                                 )}
                             </p>
                         </div>

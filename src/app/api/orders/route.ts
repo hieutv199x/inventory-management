@@ -179,7 +179,7 @@ export async function GET(req: NextRequest) {
         case 'countShippingOverdue':
           // AWAITING_SHIPMENT past shippingDueTime
           where.status = 'AWAITING_SHIPMENT';
-          where.shippingDueTime = { lt: now };
+          where.shippingDueTime = { gt: now };
           break;
         case 'countBuyerCancelled':
           // buyer requested cancellation but not cancelled yet
