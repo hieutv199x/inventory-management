@@ -166,7 +166,7 @@ async function processProductBatch(products: any[], shopObjectId: string, client
                     continue;
                 }
 
-                const result = await client.api.ProductV202502Api.ProductsProductIdGet(
+                const result = await client.api.ProductV202309Api.ProductsProductIdGet(
                     productId, 
                     credentials.accessToken, 
                     "application/json", 
@@ -261,17 +261,16 @@ async function processProductBatch(products: any[], shopObjectId: string, client
                         currency: productDetail.skus?.[0]?.price?.currency,
                         createTime: productDetail.createTime ?? productDetail.create_time ?? 0,
                         updateTime: productDetail.updateTime ?? productDetail.update_time ?? 0,
-                        // New extended fields
-                        salesRegions,
-                        productSyncFailReasons,
-                        isNotForSale,
-                        recommendedCategories: safeStringify(recommendedCategoriesRaw),
-                        listingQualityTier,
-                        integratedPlatformStatuses: safeStringify(integratedPlatformStatusesRaw),
-                        productFamilies: safeStringify(productFamiliesRaw),
-                        hasDraft,
+                        // New extended fields - removed fields that don't exist in schema
                         channelData: JSON.stringify({
+                            salesRegions: salesRegions,
+                            productSyncFailReasons: productSyncFailReasons,
                             isNotForSale: isNotForSale,
+                            recommendedCategories: recommendedCategoriesRaw,
+                            listingQualityTier: listingQualityTier,
+                            integratedPlatformStatuses: integratedPlatformStatusesRaw,
+                            productFamilies: productFamiliesRaw,
+                            hasDraft: hasDraft,
                             isCodAllowed: productDetail.isCodAllowed ?? productDetail.is_cod_allowed ?? false,
                             isPreOwned: productDetail.isPreOwned ?? productDetail.is_pre_owned ?? false,
                             shippingInsuranceRequirement: productDetail.shippingInsuranceRequirement ?? productDetail.shipping_insurance_requirement ?? "",
@@ -447,25 +446,9 @@ async function handleProductRelatedData(productDetail: any, productDbId: string)
                             skuId: sku.id!,
                             productId: productDbId,
                             sellerSku: sku.sellerSku ?? "",
-                            listPriceAmount: listPrice?.amount ?? null,
-                            listPriceCurrency: listPrice?.currency ?? null,
-                            externalListPrices: JSON.stringify(externalListPricesRaw ?? []),
-                            preSaleType: preSale?.type ?? null,
-                            preSaleHandlingDurationDays: fulfillmentType?.handlingDurationDays ?? fulfillmentType?.handling_duration_days ?? null,
-                            preSaleReleaseDate: fulfillmentType?.releaseDate ?? fulfillmentType?.release_date ?? null,
-                            skuStatus: statusInfo?.status ?? null,
-                            skuDeactivationSource: statusInfo?.deactivationSource ?? statusInfo?.deactivation_source ?? null,
                         },
                         update: {
                             sellerSku: sku.sellerSku ?? "",
-                            listPriceAmount: listPrice?.amount ?? null,
-                            listPriceCurrency: listPrice?.currency ?? null,
-                            externalListPrices: JSON.stringify(externalListPricesRaw ?? []),
-                            preSaleType: preSale?.type ?? null,
-                            preSaleHandlingDurationDays: fulfillmentType?.handlingDurationDays ?? fulfillmentType?.handling_duration_days ?? null,
-                            preSaleReleaseDate: fulfillmentType?.releaseDate ?? fulfillmentType?.release_date ?? null,
-                            skuStatus: statusInfo?.status ?? null,
-                            skuDeactivationSource: statusInfo?.deactivationSource ?? statusInfo?.deactivation_source ?? null,
                         }
                     });
 
