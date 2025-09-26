@@ -224,7 +224,7 @@ async function processBatch(orders: any[], shopId: string, client: any, credenti
                 handlingDuration: order.handlingDuration || null,
             };
 
-            const orderData = {
+            const orderData: any = {
                 orderId: order.id,
                 channel: 'TIKTOK' as any,
                 buyerEmail: order.buyerEmail || "",
@@ -250,9 +250,9 @@ async function processBatch(orders: any[], shopId: string, client: any, credenti
             };
 
             if (existingOrderMap.has(order.id)) {
-                updateOrders.push({ orderData: {...orderData}, dbId: existingOrderMap.get(order.id) });
+                updateOrders.push({ orderData: { ...orderData }, dbId: existingOrderMap.get(order.id) });
             } else {
-                newOrders.push(orderData);
+                newOrders.push({...orderData, shopId });
             }
 
             // Sync order attributes like can_split, must_split
