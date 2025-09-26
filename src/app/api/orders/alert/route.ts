@@ -1,12 +1,15 @@
+import { getUserWithShopAccess } from "@/lib/auth";
 import { PrismaClient } from "@prisma/client";
+import { NextRequest } from "next/server";
 
 const prisma = new PrismaClient();
 
-export async function GET(req: Request) {
+export async function GET(req: NextRequest) {
     try {
         const url = new URL(req.url);
         const shopId = url.searchParams.get('shopId') || '';
-
+        const { accessibleShopIds } = await getUserWithShopAccess(req, prisma);
+        
         // Calculate the Unix timestamp for the current moment
         const now = Math.floor(Date.now() / 1000);
         // Calculate the Unix timestamp for 24 hours from now
@@ -16,7 +19,7 @@ export async function GET(req: Request) {
         const countShipingWithin24 = await prisma.order.count({
             where: {
                 status: "AWAITING_SHIPMENT",
-                ...(shopId ? { shopId } : {}),
+                shopId: { in: accessibleShopIds },
                 createTime: {
                     lt: deadline,
                 },
@@ -25,7 +28,7 @@ export async function GET(req: Request) {
 
         const countAutoCancelled = await prisma.order.count({
             where: {
-                ...(shopId ? { shopId } : {}),
+                shopId: { in: accessibleShopIds },
                 OR: [
                     {
                         shippingDueTime: {
@@ -59,14 +62,14 @@ export async function GET(req: Request) {
                 shippingDueTime: {
                     gte: now,
                 },
-                ...(shopId ? { shopId } : {}),
+                shopId: { in: accessibleShopIds },
             }
         });
 
         const countBuyerCancelled = await prisma.order.count({
             where: {
                 status: { not: "CANCELLED" },
-                ...(shopId ? { shopId } : {}),
+                shopId: { in: accessibleShopIds },
                 channelData: {
                     contains: '"isBuyerRequestCancel":"true"',
                 },

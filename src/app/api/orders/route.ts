@@ -140,6 +140,7 @@ export async function GET(req: NextRequest) {
     // Get total count for pagination
     // Apply alert-specific filters AFTER base filters so pagination reflects narrowed set
     if (alert) {
+      where = {};
       if (!isAdmin && !shopId) {
         where.shopId = { in: accessibleShopIds };
       } else if (shopId) {
