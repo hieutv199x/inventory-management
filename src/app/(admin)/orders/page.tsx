@@ -788,20 +788,20 @@ export default function OrdersPage() {
     const [loadingAlerts, setLoadingAlerts] = useState<boolean>(false);
 
     const fetchStatusCounts = useCallback(async () => {
-        setLoadingCounts(true);
-        try {
-            const params = new URLSearchParams();
-            if (filters.shopId) params.append('shopId', filters.shopId);
-            if (filters.dateFrom) params.append('createTimeGe', Math.floor(new Date(filters.dateFrom).getTime() / 1000).toString());
-            if (filters.dateTo) params.append('createTimeLt', Math.floor(new Date(filters.dateTo).getTime() / 1000).toString());
-            if (filters.keyword) params.append('keyword', filters.keyword);
-            if (filters.customStatus) params.append('customStatus', filters.customStatus);
+        // setLoadingCounts(true);
+        // try {
+        //     const params = new URLSearchParams();
+        //     if (filters.shopId) params.append('shopId', filters.shopId);
+        //     if (filters.dateFrom) params.append('createTimeGe', Math.floor(new Date(filters.dateFrom).getTime() / 1000).toString());
+        //     if (filters.dateTo) params.append('createTimeLt', Math.floor(new Date(filters.dateTo).getTime() / 1000).toString());
+        //     if (filters.keyword) params.append('keyword', filters.keyword);
+        //     if (filters.customStatus) params.append('customStatus', filters.customStatus);
 
-            const res = await httpClient.get(`/orders/status-counts?${params.toString()}`);
-            setStatusCounts(res?.counts || {});
-        } finally {
-            setLoadingCounts(false);
-        }
+        //     const res = await httpClient.get(`/orders/status-counts?${params.toString()}`);
+        //     setStatusCounts(res?.counts || {});
+        // } finally {
+        //     setLoadingCounts(false);
+        // }
     }, [filters.shopId, filters.dateFrom, filters.dateTo, filters.keyword, filters.customStatus]);
 
     const fetchAlertCounts = useCallback(async () => {

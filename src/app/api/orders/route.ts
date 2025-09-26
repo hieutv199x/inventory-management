@@ -163,15 +163,15 @@ export async function GET(req: NextRequest) {
             OR: [
               {
                 shippingDueTime: { gt: now, lt: twentyFourHoursFromNow },
-                status: { not: 'AWAITING_COLLECTION' }
+                status: { notIn: ["AWAITING_COLLECTION", "IN_TRANSIT", "DELIVERED", "COMPLETED"] }
               },
               {
                 collectionDueTime: { gt: now, lt: twentyFourHoursFromNow },
-                status: { not: 'IN_TRANSIT' }
+                status: { notIn: ["IN_TRANSIT", "DELIVERED", "COMPLETED"] }
               },
               {
                 deliveryDueTime: { gt: now, lt: twentyFourHoursFromNow },
-                status: { not: 'DELIVERED' }
+                status: { notIn: ["DELIVERED", "COMPLETED"] }
               }
             ]
           });
