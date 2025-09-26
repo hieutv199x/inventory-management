@@ -270,6 +270,18 @@ const translations: Record<Language, TranslationMap> = {
         'orders.sla.cancelled_at': 'Cancelled At',
         'orders.sla.req_cancel_at': 'Req. Cancel At',
         'orders.sla.release_date': 'Release Date',
+        // SLA descriptions (EN)
+        'orders.sla.desc.rts_sla': 'rts_sla_time: Latest shipping (RTS) time specified by the platform. ',
+        'orders.sla.desc.tts_sla': 'tts_sla_time: Automatic cancellation time defined by the platform. ',
+        'orders.sla.desc.delivery_sla': 'delivery_sla_time: Order must arrive by this time to be on-time and avoid late delivery penalties.',
+        'orders.sla.desc.ship_due': 'shipping_due_time: Deadline to create/confirm shipment before breach.',
+        'orders.sla.desc.collection_due': 'collection_due_time: Latest time courier should collect the package.',
+        'orders.sla.desc.delivery_due': 'delivery_due_time: Expected delivery due (soft expectation).',
+        'orders.sla.desc.cancel_sla': 'cancel_order_sla_time: Platform auto-cancellation cutoff.',
+        'orders.sla.desc.fast_dispatch': 'fast_dispatch_sla_time: SLA for fast dispatch orders.',
+        'orders.sla.desc.pickup_cutoff': 'pick_up_cut_off_time: Cutoff time for pickup request submission.',
+        'orders.sla.desc.req_delivery': 'delivery_option_required_delivery_time: Required delivery time for selected option.',
+        'orders.sla.desc.events.generic': 'Event timestamp captured from logistics lifecycle.',
 
         // Common (missing)
         'common.previous': 'Previous',
@@ -617,6 +629,18 @@ const translations: Record<Language, TranslationMap> = {
         'orders.sla.cancelled_at': 'Hủy lúc',
         'orders.sla.req_cancel_at': 'Y/c hủy lúc',
         'orders.sla.release_date': 'Ngày phát hành',
+        // SLA descriptions (VI)
+        'orders.sla.desc.rts_sla': 'rts_sla_time: Thời hạn cuối cùng phải giao (RTS) do nền tảng quy định. ',
+        'orders.sla.desc.tts_sla': 'tts_sla_time: Thời điểm hệ thống tự hủy đơn nếu chưa xử lý. ',
+        'orders.sla.desc.delivery_sla': 'delivery_sla_time: Đơn phải được giao trước thời điểm này để không bị phạt giao trễ.',
+        'orders.sla.desc.ship_due': 'shipping_due_time: Hạn cuối tạo/xác nhận vận đơn trước khi vi phạm.',
+        'orders.sla.desc.collection_due': 'collection_due_time: Thời hạn cuối cùng đơn vị vận chuyển phải qua lấy hàng.',
+        'orders.sla.desc.delivery_due': 'delivery_due_time: Thời điểm dự kiến giao (mốc tham chiếu mềm).',
+        'orders.sla.desc.cancel_sla': 'cancel_order_sla_time: Thời điểm hệ thống tự hủy nếu chưa xử lý.',
+        'orders.sla.desc.fast_dispatch': 'fast_dispatch_sla_time: SLA dành cho đơn giao nhanh.',
+        'orders.sla.desc.pickup_cutoff': 'pick_up_cut_off_time: Giới hạn thời gian gửi yêu cầu lấy hàng.',
+        'orders.sla.desc.req_delivery': 'delivery_option_required_delivery_time: Thời gian giao bắt buộc theo tùy chọn đã chọn.',
+        'orders.sla.desc.events.generic': 'Mốc sự kiện ghi nhận từ vòng đời logistics.',
 
         // Common (missing)
         'common.previous': 'Trước',

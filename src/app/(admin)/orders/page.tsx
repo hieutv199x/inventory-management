@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Loader2, Search, RefreshCw, Eye, Package, Calendar, User, X, MapPin, CreditCard, Truck, Copy, Check, Plus, Upload, Download } from 'lucide-react';
+import { Loader2, Search, RefreshCw, Eye, Package, Calendar, User, X, MapPin, CreditCard, Truck, Copy, Check, Plus, Upload, Download, Store, Clock } from 'lucide-react';
 import { format } from 'date-fns';
 import Image from 'next/image';
 import { httpClient } from '@/lib/http-client';
@@ -609,24 +609,25 @@ export default function OrdersPage() {
             return undefined;
         };
         return [
-            { key: 'shippingDueTime', label: 'Ship Due', value: pick('shippingDueTime', 'shipping_due_time'), type: 'deadline' as const },
-            { key: 'collectionDueTime', label: 'Collection Due', value: pick('collectionDueTime', 'collection_due_time'), type: 'deadline' as const },
-            { key: 'deliveryDueTime', label: 'Delivery Due', value: pick('deliveryDueTime', 'delivery_due_time'), type: 'deadline' as const },
-            { key: 'cancelOrderSlaTime', label: 'Cancel SLA', value: pick('cancelOrderSlaTime', 'cancel_order_sla_time'), type: 'deadline' as const },
-            { key: 'ttsSlaTime', label: 'TTS SLA', value: pick('ttsSlaTime', 'tts_sla_time'), type: 'deadline' as const },
-            { key: 'rtsSlaTime', label: 'RTS SLA', value: pick('rtsSlaTime', 'rts_sla_time'), type: 'deadline' as const },
-            { key: 'deliverySlaTime', label: 'Delivery SLA', value: pick('deliverySlaTime', 'delivery_sla_time'), type: 'deadline' as const },
-            { key: 'fastDispatchSlaTime', label: 'Fast Dispatch', value: pick('fastDispatchSlaTime', 'fast_dispatch_sla_time'), type: 'deadline' as const },
-            { key: 'pickUpCutOffTime', label: 'Pickup Cutoff', value: pick('pickUpCutOffTime', 'pick_up_cut_off_time'), type: 'deadline' as const },
-            { key: 'deliveryOptionRequiredDeliveryTime', label: 'Req. Delivery', value: pick('deliveryOptionRequiredDeliveryTime', 'delivery_option_required_delivery_time'), type: 'deadline' as const },
-            // Events
-            { key: 'rtsTime', label: 'RTS At', value: pick('rtsTime', 'rts_time'), type: 'event' as const },
-            { key: 'collectionTime', label: 'Collected At', value: pick('collectionTime', 'collection_time'), type: 'event' as const },
-            { key: 'cancelTime', label: 'Cancelled At', value: pick('cancelTime', 'cancel_time'), type: 'event' as const },
-            { key: 'requestCancelTime', label: 'Req. Cancel At', value: pick('requestCancelTime', 'request_cancel_time'), type: 'event' as const },
-            { key: 'releaseDate', label: 'Release Date', value: pick('releaseDate', 'release_date'), type: 'event' as const },
+            { key: 'shippingDueTime', label: t('orders.sla.ship_due'), desc: t('orders.sla.desc.ship_due'), value: pick('shippingDueTime', 'shipping_due_time'), type: 'deadline' as const },
+            { key: 'collectionDueTime', label: t('orders.sla.collection_due'), desc: t('orders.sla.desc.collection_due'), value: pick('collectionDueTime', 'collection_due_time'), type: 'deadline' as const },
+            { key: 'deliveryDueTime', label: t('orders.sla.delivery_due'), desc: t('orders.sla.desc.delivery_due'), value: pick('deliveryDueTime', 'delivery_due_time'), type: 'deadline' as const },
+            { key: 'cancelOrderSlaTime', label: t('orders.sla.cancel_sla'), desc: t('orders.sla.desc.cancel_sla'), value: pick('cancelOrderSlaTime', 'cancel_order_sla_time'), type: 'deadline' as const },
+            { key: 'ttsSlaTime', label: t('orders.sla.tts_sla'), desc: t('orders.sla.desc.tts_sla'), value: pick('ttsSlaTime', 'tts_sla_time'), type: 'deadline' as const },
+            { key: 'rtsSlaTime', label: t('orders.sla.rts_sla'), desc: t('orders.sla.desc.rts_sla'), value: pick('rtsSlaTime', 'rts_sla_time'), type: 'deadline' as const },
+            { key: 'deliverySlaTime', label: t('orders.sla.delivery_sla'), desc: t('orders.sla.desc.delivery_sla'), value: pick('deliverySlaTime', 'delivery_sla_time'), type: 'deadline' as const },
+            { key: 'fastDispatchSlaTime', label: t('orders.sla.fast_dispatch'), desc: t('orders.sla.desc.fast_dispatch'), value: pick('fastDispatchSlaTime', 'fast_dispatch_sla_time'), type: 'deadline' as const },
+            { key: 'pickUpCutOffTime', label: t('orders.sla.pickup_cutoff'), desc: t('orders.sla.desc.pickup_cutoff'), value: pick('pickUpCutOffTime', 'pick_up_cut_off_time'), type: 'deadline' as const },
+            { key: 'deliveryOptionRequiredDeliveryTime', label: t('orders.sla.req_delivery'), desc: t('orders.sla.desc.req_delivery'), value: pick('deliveryOptionRequiredDeliveryTime', 'delivery_option_required_delivery_time'), type: 'deadline' as const },
+            // Events (generic description)
+            { key: 'rtsTime', label: t('orders.sla.rts_at'), desc: t('orders.sla.desc.events.generic'), value: pick('rtsTime', 'rts_time'), type: 'event' as const },
+            { key: 'collectionTime', label: t('orders.sla.collected_at'), desc: t('orders.sla.desc.events.generic'), value: pick('collectionTime', 'collection_time'), type: 'event' as const },
+            { key: 'cancelTime', label: t('orders.sla.cancelled_at'), desc: t('orders.sla.desc.events.generic'), value: pick('cancelTime', 'cancel_time'), type: 'event' as const },
+            { key: 'requestCancelTime', label: t('orders.sla.req_cancel_at'), desc: t('orders.sla.desc.events.generic'), value: pick('requestCancelTime', 'request_cancel_time'), type: 'event' as const },
+            { key: 'releaseDate', label: t('orders.sla.release_date'), desc: t('orders.sla.desc.events.generic'), value: pick('releaseDate', 'release_date'), type: 'event' as const },
         ].filter(i => !!i.value);
     };
+    interface SlaItem { key: string; label: string; value?: number; type: 'deadline' | 'event'; desc?: string; }
     const classifyDeadline = (ts?: number) => {
         if (!ts) return 'text-gray-400';
         const now = Math.floor(Date.now() / 1000);
@@ -634,6 +635,16 @@ export default function OrdersPage() {
         if (diff < 0) return 'text-red-600';
         if (diff < 86400) return 'text-orange-600';
         return 'text-green-600';
+    };
+
+    // Badge styling for deadline severity (adds background + border for higher visual emphasis)
+    const classifyDeadlineBadge = (ts?: number) => {
+        if (!ts) return 'text-gray-400 bg-gray-100 dark:bg-gray-800 border-gray-200 dark:border-gray-700';
+        const now = Math.floor(Date.now() / 1000);
+        const diff = ts - now;
+        if (diff < 0) return 'text-red-700 bg-red-100 dark:text-red-300 dark:bg-red-900/30 border-red-200 dark:border-red-800';
+        if (diff < 86400) return 'text-orange-700 bg-orange-100 dark:text-orange-300 dark:bg-orange-900/30 border-orange-200 dark:border-orange-800';
+        return 'text-green-700 bg-green-100 dark:text-green-300 dark:bg-green-900/30 border-green-200 dark:border-green-800';
     };
 
     const getLineItemImages = (order: Order) => {
@@ -1154,7 +1165,12 @@ export default function OrdersPage() {
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('orders.items_images')}</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('orders.customer_info')}</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('orders.order_info')}</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('orders.sla_column')}</th>
+                                <th className="px-6 py-3 text-left text-xs font-semibold text-indigo-600 dark:text-indigo-300 uppercase tracking-wider w-[260px]">
+                                    <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-indigo-50 dark:bg-indigo-900/30 ring-1 ring-indigo-200/60 dark:ring-indigo-800/60 text-[11px] font-semibold">
+                                        <Clock className="h-3.5 w-3.5" />
+                                        {t('orders.sla_column')}
+                                    </span>
+                                </th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('orders.price')}</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('common.actions')}</th>
                             </tr>
@@ -1213,11 +1229,30 @@ export default function OrdersPage() {
                                                             )}
                                                         </button>
                                                     </div>
-                                                    <div className="flex items-center space-x-2">
-                                                        {order.shop.managedName || t('common.na')}
-                                                    </div>
-                                                    <div className="flex items-center space-x-2">
-                                                        {order.shop.managedName || t('common.na')}
+                                                    <div className="flex items-center gap-2">
+                                                        {order.shop.managedName ? (
+                                                            <span
+                                                                title={order.shop.managedName}
+                                                                className="group inline-flex items-center max-w-[160px] truncate rounded-md bg-gradient-to-r from-indigo-500/10 to-blue-500/10 px-2 py-0.5 text-[11px] font-medium text-indigo-700 dark:text-indigo-300 ring-1 ring-indigo-300/40 dark:ring-indigo-700/50 hover:from-indigo-500/20 hover:to-blue-500/20 transition"
+                                                            >
+                                                                <Store className="mr-1 h-3 w-3 opacity-70 group-hover:opacity-100" />
+                                                                {order.shop.managedName}
+                                                            </span>
+                                                        ) : (
+                                                            <span className="text-xs text-gray-400">{t('common.na')}</span>
+                                                        )}
+                                                        {order.shop.managedName && (
+                                                            <button
+                                                                onClick={() => {
+                                                                    navigator.clipboard.writeText(order.shop.managedName || '');
+                                                                    toast.success(t('products.copy.success'));
+                                                                }}
+                                                                className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-300 transition"
+                                                                title={t('products.actions.copy_id')}
+                                                            >
+                                                                <Copy className="h-3 w-3" />
+                                                            </button>
+                                                        )}
                                                     </div>
                                                     <div className="text-xs text-gray-600 dark:text-gray-400">
                                                         {formatTimestamp(order.createTime)}
@@ -1323,15 +1358,18 @@ export default function OrdersPage() {
                                             </td>
 
                                             {/* SLA / Due Times */}
-                                            <td className="px-6 py-4 align-top">
-                                                <div className="flex flex-col space-y-1 max-w-56">
+                                            <td className="px-6 py-4 align-top w-[260px]">
+                                                <div className="flex flex-col gap-1 max-w-64">
                                                     {buildSlaItems(order).length === 0 && (
                                                         <div className="text-xs text-gray-400">—</div>
                                                     )}
                                                     {buildSlaItems(order).map(item => (
-                                                        <div key={item.key} className="flex justify-between gap-2 text-[11px] font-mono leading-snug">
-                                                            <span className="truncate text-gray-600 dark:text-gray-400 font-medium" title={item.label}>{item.label}</span>
-                                                            <span className={`text-right text-[11px] font-semibold ${item.type === 'deadline' ? classifyDeadline(item.value) : 'text-gray-700 dark:text-gray-300'}`} title={item.value ? `${item.label}: ${formatEpoch(item.value)}` : ''}>
+                                                        <div key={item.key} className="flex items-center justify-between gap-2 text-[11px] leading-tight" title={item.desc || item.label}>
+                                                            <span className="truncate text-gray-600 dark:text-gray-400 font-medium" title={item.desc || item.label}>{item.label}</span>
+                                                            <span
+                                                                className={`inline-flex items-center justify-center min-w-[56px] px-1.5 py-0.5 rounded border font-semibold tracking-tight ${item.type === 'deadline' ? classifyDeadlineBadge(item.value) : 'text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 border-gray-200 dark:border-gray-700'}`}
+                                                                title={item.value ? `${item.label}: ${formatEpoch(item.value)}` : ''}
+                                                            >
                                                                 {formatRelative(item.value)}
                                                             </span>
                                                         </div>
