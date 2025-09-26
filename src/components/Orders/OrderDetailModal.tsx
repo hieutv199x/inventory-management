@@ -107,13 +107,14 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({ order, isOpen, onCl
         // Group similar items within this package
         const itemGroups: Record<string, any> = {};
         items.forEach(item => {
-            // Create grouping key based on item characteristics (IGNORE salePrice differences)
+            // Create grouping key based on item characteristics
             const groupKey = JSON.stringify({
                 productId: item.productId,
                 skuId: item.skuId,
                 skuName: item.skuName,
                 sellerSku: item.sellerSku,
                 packageId: item.mergedChannelData.packageId,
+                salePrice: item.salePrice,
                 isCancelled: item.isCancelled
             });
 
@@ -122,21 +123,12 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({ order, isOpen, onCl
                     ...item,
                     count: 1,
                     lineItemIds: [item.lineItemId],
-                    totalQuantity: parseInt(item.mergedChannelData.quantity || 1),
-                    // Collect unique sale prices for this group to show all price variants
-                    salePrices: item.salePrice ? [String(item.salePrice)] : []
+                    totalQuantity: parseInt(item.mergedChannelData.quantity || 1)
                 };
             } else {
                 itemGroups[groupKey].count += 1;
                 itemGroups[groupKey].lineItemIds.push(item.lineItemId);
                 itemGroups[groupKey].totalQuantity += parseInt(item.mergedChannelData.quantity || 1);
-                // Track unique sale prices
-                if (item.salePrice) {
-                    const priceStr = String(item.salePrice);
-                    if (!itemGroups[groupKey].salePrices.includes(priceStr)) {
-                        itemGroups[groupKey].salePrices.push(priceStr);
-                    }
-                }
             }
         });
 
@@ -175,12 +167,33 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({ order, isOpen, onCl
     };
 
     const formatDeliveryAddress = () => {
+        const fullAddress = order.recipientAddress?.fullAddress || '';
+        // Tách địa chỉ thông minh: 2 phần đầu gộp lại, phần còn lại tách riêng
+        const addressParts = fullAddress.split(',').map((part: string) => part.trim());
+        
+        let streetAddress = '';
+        let cityStateCountry = '';
+        
+        if (addressParts.length >= 3) {
+            // Gộp 2 phần đầu: số nhà/tên đường + thành phố đầu tiên
+            streetAddress = addressParts.slice(0, 2).join(', ');
+            // Phần còn lại: vùng/tỉnh/quốc gia
+            cityStateCountry = addressParts.slice(2).join(', ');
+        } else if (addressParts.length === 2) {
+            // Nếu chỉ có 2 phần thì tách như cũ
+            streetAddress = addressParts[0];
+            cityStateCountry = addressParts[1];
+        } else {
+            streetAddress = fullAddress;
+        }
+        
         const address = [
             `${addressChannelData.firstName} ${addressChannelData.lastName || order.recipientAddress?.name}`,
             `${order.recipientAddress?.phoneNumber}`,
-            `${order.recipientAddress?.fullAddress}`,
+            streetAddress,
+            cityStateCountry,
             `${order.recipientAddress?.postalCode || 'N/A'}`,
-        ].filter(line => !line.includes('undefined') && !line.endsWith(': ')).join('\n');
+        ].filter(line => line && !line.includes('undefined') && !line.endsWith(': ') && line.trim() !== 'N/A').join('\n');
         return address;
     };
 
@@ -647,9 +660,7 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({ order, isOpen, onCl
                                                                 <div>
                                                                     <dt className="text-xs font-medium text-gray-500 dark:text-gray-400">Sale Price</dt>
                                                                     <dd className="text-lg font-semibold text-green-600">
-                                                                        {Array.isArray(item.salePrices) && item.salePrices.length > 0
-                                                                            ? item.salePrices.map((p: string) => formatCurrency(p, item.currency)).join(', ')
-                                                                            : formatCurrency(item.salePrice, item.currency)}
+                                                                        {formatCurrency(item.salePrice, item.currency)}
                                                                     </dd>
                                                                 </div>
                                                                 {(itemChannelData.sellerDiscount || itemChannelData.platformDiscount) && (

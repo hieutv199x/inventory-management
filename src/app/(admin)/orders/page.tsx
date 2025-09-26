@@ -665,11 +665,15 @@ export default function OrdersPage() {
         let streetAddress = '';
         let cityStateCountry = '';
         
-        if (addressParts.length >= 2) {
-            // First part is usually street address (house number, street name)
+        if (addressParts.length >= 3) {
+            // Gộp 2 phần đầu: số nhà/tên đường + thành phố đầu tiên
+            streetAddress = addressParts.slice(0, 2).join(', ');
+            // Phần còn lại: vùng/tỉnh/quốc gia
+            cityStateCountry = addressParts.slice(2).join(', ');
+        } else if (addressParts.length === 2) {
+            // Nếu chỉ có 2 phần thì tách như cũ
             streetAddress = addressParts[0];
-            // Rest is city, state, country
-            cityStateCountry = addressParts.slice(1).join(', ');
+            cityStateCountry = addressParts[1];
         } else {
             streetAddress = fullAddress;
         }
