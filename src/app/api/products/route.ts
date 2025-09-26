@@ -42,7 +42,7 @@ export async function GET(req: NextRequest) {
             // For admin users, get all active shops unless specific shop is requested
             if (!shopId) {
                 const activeShops = await prisma.shopAuthorization.findMany({
-                    where: { shopId: { in: activeShopIds } },
+                    where: { id: { in: activeShopIds } },
                     select: { id: true }
                 });
                 allowedShopObjectIds = activeShops.map(shop => shop.id);

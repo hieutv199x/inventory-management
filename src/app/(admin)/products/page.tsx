@@ -141,7 +141,10 @@ export default function ProductPage() {
         fetchProducts();
     }, [fetchProducts]);
 
-
+    useEffect(() => {
+        fetchProducts();
+    }, []);
+        
     const handlerSyncProduct = async (shopId: string, status: string) => {
         try {
             const response = await fetch('/api/tiktok/Products/search-product', {
