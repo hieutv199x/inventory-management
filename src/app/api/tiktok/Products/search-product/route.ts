@@ -235,6 +235,20 @@ async function processProductBatch(products: any[], shopObjectId: string, client
                     continue;
                 }
 
+                // Map extended product-level fields safely (support snake_case & camelCase from SDK/JSON)
+                const salesRegions = productDetail.salesRegions ?? productDetail.sales_regions ?? [];
+                const productSyncFailReasons = productDetail.productSyncFailReasons ?? productDetail.product_sync_fail_reasons ?? [];
+                const isNotForSale = productDetail.isNotForSale ?? productDetail.is_not_for_sale ?? false;
+                const recommendedCategoriesRaw = productDetail.recommendedCategories ?? productDetail.recommended_categories ?? [];
+                const listingQualityTier = productDetail.listingQualityTier ?? productDetail.listing_quality_tier ?? null;
+                const integratedPlatformStatusesRaw = productDetail.integratedPlatformStatuses ?? productDetail.integrated_platform_statuses ?? [];
+                const productFamiliesRaw = productDetail.productFamilies ?? productDetail.product_families ?? [];
+                const hasDraft = productDetail.hasDraft ?? productDetail.has_draft ?? false;
+
+                const safeStringify = (v: any) => {
+                    try { return JSON.stringify(v ?? []); } catch { return '[]'; }
+                };
+
                 const productCreated = await prisma.product.create({
                     data: {
                         productId,
@@ -245,13 +259,22 @@ async function processProductBatch(products: any[], shopObjectId: string, client
                         status: productDetail.status ?? "",
                         price: productDetail.skus?.[0]?.price?.salePrice,
                         currency: productDetail.skus?.[0]?.price?.currency,
-                        createTime: productDetail.createTime ?? 0,
-                        updateTime: productDetail.updateTime ?? 0,
+                        createTime: productDetail.createTime ?? productDetail.create_time ?? 0,
+                        updateTime: productDetail.updateTime ?? productDetail.update_time ?? 0,
+                        // New extended fields
+                        salesRegions,
+                        productSyncFailReasons,
+                        isNotForSale,
+                        recommendedCategories: safeStringify(recommendedCategoriesRaw),
+                        listingQualityTier,
+                        integratedPlatformStatuses: safeStringify(integratedPlatformStatusesRaw),
+                        productFamilies: safeStringify(productFamiliesRaw),
+                        hasDraft,
                         channelData: JSON.stringify({
-                            isNotForSale: productDetail.isNotForSale ?? false,
-                            isCodAllowed: productDetail.isCodAllowed ?? false,
-                            isPreOwned: productDetail.isPreOwned ?? false,
-                            shippingInsuranceRequirement: productDetail.shippingInsuranceRequirement ?? "",
+                            isNotForSale: isNotForSale,
+                            isCodAllowed: productDetail.isCodAllowed ?? productDetail.is_cod_allowed ?? false,
+                            isPreOwned: productDetail.isPreOwned ?? productDetail.is_pre_owned ?? false,
+                            shippingInsuranceRequirement: productDetail.shippingInsuranceRequirement ?? productDetail.shipping_insurance_requirement ?? "",
                             originalShopId: credentials.shopId
                         }),
                         brandId: brandRecord?.id ?? null,
@@ -411,15 +434,38 @@ async function handleProductRelatedData(productDetail: any, productDbId: string)
         if (productDetail.skus?.length) {
             for (const sku of productDetail.skus) {
                 try {
+                    // Map extended SKU fields
+                    const listPrice = sku.listPrice ?? sku.list_price;
+                    const externalListPricesRaw = sku.externalListPrices ?? sku.external_list_prices ?? [];
+                    const preSale = sku.preSale ?? sku.pre_sale;
+                    const fulfillmentType = preSale?.fulfillmentType ?? preSale?.fulfillment_type;
+                    const statusInfo = sku.statusInfo ?? sku.status_info;
+
                     const skuRecord = await prisma.sku.upsert({
                         where: { skuId: sku.id! },
                         create: {
                             skuId: sku.id!,
                             productId: productDbId,
                             sellerSku: sku.sellerSku ?? "",
+                            listPriceAmount: listPrice?.amount ?? null,
+                            listPriceCurrency: listPrice?.currency ?? null,
+                            externalListPrices: JSON.stringify(externalListPricesRaw ?? []),
+                            preSaleType: preSale?.type ?? null,
+                            preSaleHandlingDurationDays: fulfillmentType?.handlingDurationDays ?? fulfillmentType?.handling_duration_days ?? null,
+                            preSaleReleaseDate: fulfillmentType?.releaseDate ?? fulfillmentType?.release_date ?? null,
+                            skuStatus: statusInfo?.status ?? null,
+                            skuDeactivationSource: statusInfo?.deactivationSource ?? statusInfo?.deactivation_source ?? null,
                         },
                         update: {
                             sellerSku: sku.sellerSku ?? "",
+                            listPriceAmount: listPrice?.amount ?? null,
+                            listPriceCurrency: listPrice?.currency ?? null,
+                            externalListPrices: JSON.stringify(externalListPricesRaw ?? []),
+                            preSaleType: preSale?.type ?? null,
+                            preSaleHandlingDurationDays: fulfillmentType?.handlingDurationDays ?? fulfillmentType?.handling_duration_days ?? null,
+                            preSaleReleaseDate: fulfillmentType?.releaseDate ?? fulfillmentType?.release_date ?? null,
+                            skuStatus: statusInfo?.status ?? null,
+                            skuDeactivationSource: statusInfo?.deactivationSource ?? statusInfo?.deactivation_source ?? null,
                         }
                     });
 

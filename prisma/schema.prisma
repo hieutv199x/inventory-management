@@ -87,14 +87,8 @@ model Session {
   expires      DateTime
   sessionToken String   @unique
 }
-
-model VerificationToken {
-  id         String   @id @default(auto()) @map("_id") @db.ObjectId
-  identifier String
-  token      String   @unique
-  expires    DateTime
-}
-
+ 
+// Restored ChannelApp model (previously corrupted by patch)
 model ChannelApp {
   id        String   @id @default(auto()) @map("_id") @db.ObjectId
   appName   String   // Descriptive name for the app
@@ -103,7 +97,7 @@ model ChannelApp {
   appKey    String   @unique // Unique key for the app
   appSecret String   // App secret
   appUrl    String?  // Optional URL for the app
-  BaseUrl  String?
+  BaseUrl   String?
   // Channel-specific configuration (JSON string)
   config    String?  // Store channel-specific settings as JSON
 
@@ -113,7 +107,7 @@ model ChannelApp {
 
   // Relations to unified authorization
   authorizations ShopAuthorization[]
-  
+
   @@map("channel_apps")
 }
 
@@ -227,6 +221,16 @@ model Product {
   images                     ProductImage[]
   attributes                 ProductAttribute[]
 
+  // ===== Added fields from channel product payload (TikTok extended) =====
+  salesRegions               String[] @default([]) // API: sales_regions [] of region codes
+  productSyncFailReasons     String[] @default([]) // API: product_sync_fail_reasons
+  isNotForSale               Boolean?              // API: is_not_for_sale
+  recommendedCategories      String?               // JSON array as string: [{id, local_name}]
+  listingQualityTier         String?               // API: listing_quality_tier (POOR / FAIR / GOOD ...)
+  integratedPlatformStatuses String?               // JSON array as string: [{platform, status}]
+  productFamilies            String?               // JSON array as string: product_families
+  hasDraft                   Boolean? @default(false) // API: has_draft
+
   createdAt                  DateTime @default(now())
   updatedAt                  DateTime @updatedAt
 }
@@ -318,6 +322,16 @@ model Sku {
   inventory    Inventory[]
   product      Product  @relation(fields: [productId], references: [id])
   channelData                    String?
+
+  // ===== Added per-SKU extended fields from product payload =====
+  listPriceAmount               String?  // API: list_price.amount
+  listPriceCurrency             String?  // API: list_price.currency
+  externalListPrices            String?  // JSON array: external_list_prices [{source, amount, currency}]
+  preSaleType                   String?  // API: pre_sale.type (e.g. PRE_ORDER)
+  preSaleHandlingDurationDays   Int?     // API: pre_sale.fulfillment_type.handling_duration_days
+  preSaleReleaseDate            Int?     // API: pre_sale.fulfillment_type.release_date (epoch seconds)
+  skuStatus                     String?  // API: status_info.status
+  skuDeactivationSource         String?  // API: status_info.deactivation_source
 }
 
 model Price {
