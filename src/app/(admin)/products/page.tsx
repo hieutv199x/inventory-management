@@ -1,14 +1,14 @@
 "use client";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { ChevronDownIcon } from "@/icons";
-import SelectShop from "@/components/common/SelectShop";
 import Label from "@/components/form/Label";
 import Select from "@/components/form/Select";
 import DatePicker from "@/components/form/date-picker";
 import { Table, TableBody, TableCell, TableHeader, TableRow } from "@/components/ui/table";
 import Image from "next/image";
 import { httpClient } from "@/lib/http-client";
-import { RefreshCw, Package, Calendar, User, Eye, Search, Loader2 } from 'lucide-react';
+import { RefreshCw, Package, Calendar, User, Eye, Search, Loader2, Sparkles, Layers, Copy, RefreshCcw } from 'lucide-react';
+import { useLanguage } from '@/context/LanguageContext';
 import Badge from "@/components/ui/badge/Badge";
 import ProductDetailModal from "@/components/Products/ProductDetailModal";
 import SyncProductModal from "@/components/Products/SyncProductModal";
@@ -32,24 +32,36 @@ interface PaginationInfo {
     hasPreviousPage: boolean;
 }
 
+// Simple debounce hook (local to this page - avoids adding new file)
+function useDebounce<T>(value: T, delay: number) {
+    const [debounced, setDebounced] = useState(value);
+    useEffect(() => {
+        const t = setTimeout(() => setDebounced(value), delay);
+        return () => clearTimeout(t);
+    }, [value, delay]);
+    return debounced;
+}
+
 export default function ProductPage() {
 
-    const optionsListing = [
-        { label: "UNKNOWN", value: "UNKNOWN" },
-        { label: "POOR", value: "POOR" },
-        { label: "FAIR", value: "FAIR" },
-        { label: "GOOD", value: "GOOD" },
-    ];
-    const optionStatus = [
-        { label: "All", value: "All" },
-        { label: "DRAFT", value: "DRAFT" },
-        { label: "PENDING", value: "PENDING" },
-        { label: "ACTIVATE", value: "ACTIVATE" },
-        { label: "SELLER_DEACTIVATED", value: "SELLER_DEACTIVATED" },
-        { label: "PLATFORM_DEACTIVATED", value: "PLATFORM_DEACTIVATED" },
-        { label: "FREEZE", value: "FREEZE" },
-        { label: "DELETED", value: "DELETED" },
-    ];
+    const { t } = useLanguage();
+    // i18n aware option labels
+    const optionsListing = useMemo(() => ([
+        { label: t('products.listing_quality.unknown'), value: 'UNKNOWN' },
+        { label: t('products.listing_quality.poor'), value: 'POOR' },
+        { label: t('products.listing_quality.fair'), value: 'FAIR' },
+        { label: t('products.listing_quality.good'), value: 'GOOD' },
+    ]), [t]);
+    const optionStatus = useMemo(() => ([
+        { label: t('common.total'), value: 'All' },
+        { label: t('orders.status') + ' DRAFT', value: 'DRAFT' }, // Could refine with distinct keys later
+        { label: 'PENDING', value: 'PENDING' },
+        { label: t('products.stats.active'), value: 'ACTIVATE' },
+        { label: t('products.stats.seller_deactivated'), value: 'SELLER_DEACTIVATED' },
+        { label: t('products.stats.platform_deactivated'), value: 'PLATFORM_DEACTIVATED' },
+        { label: 'FREEZE', value: 'FREEZE' },
+        { label: 'DELETED', value: 'DELETED' },
+    ]), [t]);
 
     const [filters, setFilters] = useState({
         shopId: "",
@@ -60,8 +72,9 @@ export default function ProductPage() {
         keyword: "",
     });
 
-    // Add separate search state
+    // Search state (debounced)
     const [searchKeyword, setSearchKeyword] = useState("");
+    const debouncedSearch = useDebounce(searchKeyword, 500);
     const [isSearching, setIsSearching] = useState(false);
 
     const [products, setProducts] = useState<Product[]>([]);
@@ -88,17 +101,20 @@ export default function ProductPage() {
     };
 
     // Add search function
-    const handleSearch = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setIsSearching(true);
-        setFilters(prev => ({ ...prev, keyword: searchKeyword }));
-        setCurrentPage(1);
-    };
+    // When debounced search changes, apply to filters
+    useEffect(() => {
+        if (debouncedSearch !== filters.keyword) {
+            setIsSearching(true);
+            setFilters(prev => ({ ...prev, keyword: debouncedSearch }));
+            setCurrentPage(1);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [debouncedSearch]);
 
     const fetchProducts = useCallback(async () => {
         setIsLoading(true);
         setError(null);
-        setIsSearching(false); // Reset search loading
+        setIsSearching(false); // Reset search loading when request begins
         try {
             const params = new URLSearchParams();
 
@@ -137,13 +153,7 @@ export default function ProductPage() {
         }
     }, [filters, currentPage, pageSize]);
 
-    useEffect(() => {
-        fetchProducts();
-    }, [fetchProducts]);
-
-    useEffect(() => {
-        fetchProducts();
-    }, []);
+    useEffect(() => { fetchProducts(); }, [fetchProducts]);
         
     const handlerSyncProduct = async (shopId: string, status: string) => {
         try {
@@ -275,8 +285,70 @@ export default function ProductPage() {
         setSelectedProduct(null);
     };
 
+    // Derived stats
+    const stats = useMemo(() => {
+        const total = products.length;
+        const active = products.filter(p => p.status === 'ACTIVATE').length;
+        const sellerDeact = products.filter(p => p.status === 'SELLER_DEACTIVATED').length;
+        const platformDeact = products.filter(p => p.status === 'PLATFORM_DEACTIVATED').length;
+        return { total, active, sellerDeact, platformDeact };
+    }, [products]);
+
+    // Toggle filters panel
+    const [showFilters, setShowFilters] = useState(true);
+
+    const copyToClipboard = (text: string) => {
+        if (!text) return;
+        navigator.clipboard.writeText(text).then(() => toast.success(t('products.copy.success')));
+    };
+
+    const syncSingleProduct = async (productId: string, shopId?: string) => {
+        if (!shopId) {
+            toast.error('Missing shop');
+            return;
+        }
+        try {
+            toast.loading(t('products.sync.loading_single'), { id: `sync-${productId}` });
+            const res = await fetch('/api/tiktok/Products/sync-one', { // (Potential future endpoint) fallback to search if not exist
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ shop_id: shopId, product_id: productId })
+            });
+            if (!res.ok) throw new Error('Failed');
+            toast.success(t('products.sync.success_single'), { id: `sync-${productId}` });
+            fetchProducts();
+        } catch {
+            toast.error(t('products.sync.failed_single'), { id: `sync-${productId}` });
+        }
+    };
+
+    // Skeleton rows when loading
+    const skeletonRows = Array.from({ length: 6 }).map((_, idx) => (
+        <TableRow key={`sk-${idx}`}>
+            {/* Images */}
+            <TableCell className="py-3"><div className="animate-pulse h-16 w-36 bg-gray-100 dark:bg-gray-800 rounded" /></TableCell>
+            {/* Info */}
+            <TableCell className="py-3"><div className="space-y-2 w-64">
+                <div className="h-4 bg-gray-100 dark:bg-gray-800 rounded animate-pulse" />
+                <div className="h-3 bg-gray-100 dark:bg-gray-800 rounded animate-pulse w-2/3" />
+            </div></TableCell>
+            {/* Listing Quality */}
+            <TableCell className="py-3"><div className="h-5 w-24 bg-gray-100 dark:bg-gray-800 rounded animate-pulse" /></TableCell>
+            {/* Retail Price */}
+            <TableCell className="py-3"><div className="h-4 w-20 bg-gray-100 dark:bg-gray-800 rounded animate-pulse" /></TableCell>
+            {/* Status */}
+            <TableCell className="py-3"><div className="h-5 w-24 bg-gray-100 dark:bg-gray-800 rounded-full animate-pulse" /></TableCell>
+            {/* Create Date */}
+            <TableCell className="py-3"><div className="h-4 w-24 bg-gray-100 dark:bg-gray-800 rounded animate-pulse" /></TableCell>
+            {/* Updated */}
+            <TableCell className="py-3"><div className="h-4 w-24 bg-gray-100 dark:bg-gray-800 rounded animate-pulse" /></TableCell>
+            {/* Action */}
+            <TableCell className="py-3"><div className="h-5 w-28 bg-gray-100 dark:bg-gray-800 rounded animate-pulse" /></TableCell>
+        </TableRow>
+    ));
+
     return (
-        <div>
+        <div className="space-y-6">
             {/* Loading Overlay */}
             {(isLoading || isSearching) && (
                 <div className="fixed inset-0 bg-gray-900/50 backdrop-blur-sm flex items-center justify-center" style={{ zIndex: 9999 }}>
@@ -289,237 +361,215 @@ export default function ProductPage() {
                 </div>
             )}
 
-            <div className="flex flex-col gap-5 mb-6 sm:flex-row sm:justify-between">
-                <div className="w-full">
-                    <div className="mb-6">
-                        <h1 className="text-2xl font-bold text-gray-900 dark:text-white/90">Products Management</h1>
-                        <p className="text-gray-600 dark:text-gray-400">Manage and sync TikTok products</p>
-                    </div>
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div className="space-y-2">
+                    <h1 className="text-2xl font-semibold tracking-tight text-gray-900 dark:text-white/90 flex items-center gap-2">
+                        <Sparkles className="h-6 w-6 text-indigo-500" /> {t('products.title')}
+                    </h1>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">{t('products.subtitle')}</p>
                 </div>
-                <div className="flex items-start w-full gap-3 sm:justify-end">
-                    <div className="flex items-center gap-2">
-                        <button
-                            onClick={() => setIsSyncModalOpen(true)}
-                            className="bg-green-600 inline-flex items-center gap-2 rounded-lg border hover:bg-green-700 px-4 py-2.5 text-theme-sm font-medium text-white shadow-theme-xs hover:text-white-50 hover:text-white-800 dark:bg-green-700 dark:bg-green-800 dark:text-white-400 dark:hover:bg-green/[0.03] dark:hover:text-white-200"
-                        >
-                            <RefreshCw className="h-4 w-4" />
-                            Sync Products
-                        </button>
-                        <button
-                            onClick={handleExport}
-                            disabled={exporting || isLoading}
-                            className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-theme-sm font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 disabled:opacity-50 disabled:cursor-not-allowed dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200"
-                        >
-                            {exporting ? "Exporting..." : "Export products"}
-                        </button>
-
-                        <button
-                            onClick={fetchProducts}
-                            className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-theme-sm font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200"
-                        >
-                            Refresh
-                        </button>
-                    </div>
-                </div>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
-                <div className="bg-white p-6 rounded-lg shadow-sm border dark:border-gray-800 dark:bg-white/[0.03]">
-                    <div className="flex items-center">
-                        <Package className="h-8 w-8 text-blue-600" />
-                        <div className="ml-4">
-                            <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Products</p>
-                            <p className="text-2xl font-semibold text-gray-900 dark:text-white/90">{products.length}</p>
-                        </div>
-                    </div>
-                </div>
-                <div className="bg-white p-6 rounded-lg shadow-sm border dark:border-gray-800 dark:bg-white/[0.03]">
-                    <div className="flex items-center">
-                        <Calendar className="h-8 w-8 text-green-600" />
-                        <div className="ml-4">
-                            <p className="text-sm font-medium text-gray-600 dark:text-gray-400">ACTIVATE</p>
-                            <p className="text-2xl font-semibold text-gray-900 dark:text-white/90">
-                                {products?.filter(p => p.status === 'ACTIVATE').length}
-                            </p>
-                        </div>
-                    </div>
-                </div>
-                <div className="bg-white p-6 rounded-lg shadow-sm border dark:border-gray-800 dark:bg-white/[0.03]">
-                    <div className="flex items-center">
-                        <RefreshCw className="h-8 w-8 text-yellow-600" />
-                        <div className="ml-4">
-                            <p className="text-sm font-medium text-gray-600 dark:text-gray-400">SELLER_DEACTIVATED</p>
-                            <p className="text-2xl font-semibold text-gray-900 dark:text-white/90">
-                                {products?.filter(p => p.status === 'SELLER_DEACTIVATED').length}
-                            </p>
-                        </div>
-                    </div>
-                </div>
-                <div className="bg-white p-6 rounded-lg shadow-sm border dark:border-gray-800 dark:bg-white/[0.03]">
-                    <div className="flex items-center">
-                        <User className="h-8 w-8 text-red-600" />
-                        <div className="ml-4">
-                            <p className="text-sm font-medium text-gray-600 dark:text-gray-400">PLATFORM_DEACTIVATED</p>
-                            <p className="text-2xl font-semibold text-gray-900 dark:text-white/90">
-                                {products.filter(p => p.status === 'PLATFORM_DEACTIVATED').length}
-                            </p>
-                        </div>
-                    </div>
+                <div className="flex flex-wrap gap-2">
+                    <button
+                        onClick={() => setIsSyncModalOpen(true)}
+                        className="bg-gradient-to-r from-green-600 to-green-500 inline-flex items-center gap-2 rounded-lg px-4 py-2.5 text-theme-sm font-medium text-white shadow hover:from-green-700 hover:to-green-600"
+                    >
+                        <RefreshCw className="h-4 w-4" /> {t('products.bulk_sync')}
+                    </button>
+                    <button
+                        onClick={handleExport}
+                        disabled={exporting || isLoading}
+                        className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-theme-sm font-medium text-gray-700 shadow hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
+                    >
+                        {exporting ? t('products.exporting') : t('products.export')}
+                    </button>
+                    <button
+                        onClick={fetchProducts}
+                        className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-theme-sm font-medium text-gray-700 shadow hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
+                    >
+                        <RefreshCcw className="h-4 w-4" /> {t('products.refresh')}
+                    </button>
+                    <button
+                        onClick={() => setShowFilters(s => !s)}
+                        className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-theme-sm font-medium text-gray-700 shadow hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
+                    >
+                        <Layers className="h-4 w-4" /> {showFilters ? t('products.hide_filters') : t('products.show_filters')}
+                    </button>
                 </div>
             </div>
-
-
-            <div className="rounded-2xl border border-gray-200 bg-white px-5 pb-5 pt-5 dark:border-gray-800 dark:bg-white/[0.03] sm:px-6 sm:pt-6">
-                {/* Updated Search Section */}
-                <div className="mb-4">
-                    <form onSubmit={handleSearch}>
-                        <div className="relative">
-                            <span className="absolute -translate-y-1/2 left-4 top-1/2 pointer-events-none">
-                                <Search className="h-5 w-5 text-gray-500 dark:text-gray-400" />
-                            </span>
-                            <input
-                                type="text"
-                                placeholder="Search product name, id, SKU..."
-                                value={searchKeyword}
-                                onChange={(e) => setSearchKeyword(e.target.value)}
-                                className="dark:bg-dark-900 h-11 w-full rounded-lg border border-gray-200 bg-transparent py-2.5 pl-12 pr-24 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-800 dark:bg-gray-900 dark:bg-white/[0.03] dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800 xl:w-[430px]"
-                                disabled={isLoading || isSearching}
-                            />
-                            <button
-                                type="submit"
-                                disabled={isLoading || isSearching}
-                                className="absolute right-2.5 top-1/2 inline-flex -translate-y-1/2 items-center gap-1 rounded-lg border border-gray-200 bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed dark:border-gray-600 dark:bg-blue-700 dark:hover:bg-blue-800"
-                            >
-                                {isSearching ? (
-                                    <Loader2 className="h-3 w-3 animate-spin" />
-                                ) : (
-                                    <Search className="h-3 w-3" />
-                                )}
-                                Search
-                            </button>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                {[
+                    { label: t('products.stats.total'), value: stats.total, icon: Package, color: 'text-indigo-600' },
+                    { label: t('products.stats.active'), value: stats.active, icon: Calendar, color: 'text-green-600' },
+                    { label: t('products.stats.seller_deactivated'), value: stats.sellerDeact, icon: RefreshCw, color: 'text-yellow-600' },
+                    { label: t('products.stats.platform_deactivated'), value: stats.platformDeact, icon: User, color: 'text-red-600' },
+                ].map(card => (
+                    <div key={card.label} className="bg-white rounded-xl p-5 border shadow-sm dark:border-gray-800 dark:bg-white/[0.04] flex items-center gap-4">
+                        <div className={`h-12 w-12 rounded-lg bg-gray-50 dark:bg-gray-900 flex items-center justify-center ${card.color}`}>
+                            <card.icon className="h-6 w-6" />
                         </div>
-                    </form>
-                </div>
+                        <div>
+                            <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">{card.label}</p>
+                            <p className="mt-1 text-2xl font-semibold text-gray-900 dark:text-white/90">{card.value}</p>
+                        </div>
+                    </div>
+                ))}
+            </div>
 
-                <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                    <div className="col-span-1">
-                        <label className="block text-sm font-medium text-gray-700 mb-2 dark:text-gray-400">Shop</label>
-                        <ShopSelector
-                            onChange={(shopId: string | null, shop: any | null) => handleFilterChange('shopId', shopId ?? '')}
+            <div className="rounded-2xl border border-gray-200 bg-white px-5 pb-5 pt-6 dark:border-gray-800 dark:bg-white/[0.03] sm:px-6">
+                {/* Search + Filters Toggle */}
+                <div className="flex flex-col gap-4 mb-4 md:flex-row md:items-center md:justify-between">
+                    <div className="relative max-w-xl w-full">
+                        <span className="absolute -translate-y-1/2 left-4 top-1/2 pointer-events-none">
+                            <Search className="h-5 w-5 text-gray-500 dark:text-gray-400" />
+                        </span>
+                        <input
+                            type="text"
+                            placeholder={t('products.search_placeholder')}
+                            value={searchKeyword}
+                            onChange={(e) => setSearchKeyword(e.target.value)}
+                            className="dark:bg-dark-900 h-11 w-full rounded-lg border border-gray-200 bg-transparent py-2.5 pl-12 pr-4 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-indigo-400 focus:outline-hidden focus:ring-3 focus:ring-indigo-500/10 dark:border-gray-800 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30"
+                            disabled={isLoading}
                         />
-                    </div>
-                    <div className="col-span-1">
-                        <Label>Status</Label>
-                        <div className="relative">
-                            <Select
-                                options={optionStatus}
-                                onChange={(val) => handleFilterChange('status', val)}
-                                enablePlaceholder={false}
-                                className="dark:bg-dark-900"
-                            />
-                            <span className="absolute text-gray-500 -translate-y-1/2 pointer-events-none right-3 top-1/2 dark:text-gray-400">
-                                <ChevronDownIcon />
-                            </span>
-                        </div>
-                    </div>
-                    {/* <div className="col-span-1">
-                        <Label>Listing Quality</Label>
-                        <div className="relative">
-                            <Select
-                                options={optionsListing}
-                                onChange={(val) => handleFilterChange('listingQuality', val)}
-                                enablePlaceholder={false}
-                                className="dark:bg-dark-900"
-                            />
-                            <span className="absolute text-gray-500 -translate-y-1/2 pointer-events-none right-3 top-1/2 dark:text-gray-400">
-                                <ChevronDownIcon />
-                            </span>
-                        </div>
-                    </div> */}
-                    <div className="col-span-1">
-                        <div className="grid grid-cols-2 gap-1">
-                            <div className="col-span-1">
-                                <DatePicker
-                                    id="start-date-picker"
-                                    label="Start Date"
-                                    value={filters.startDate ?? undefined}
-                                    placeholder="dd/MM/yyyy"
-                                    onChange={(_, dateStr) => handleFilterChange('startDate', dateStr)}
-                                />
-                            </div>
-                            <div className="col-span-1">
-                                <DatePicker
-                                    id="end-date-picker"
-                                    label="End Date"
-                                    value={filters.endDate ?? undefined}
-                                    placeholder="dd/MM/yyyy"
-                                    onChange={(_, dateStr) => handleFilterChange('endDate', dateStr)}
-                                />
-                            </div>
-                        </div>
+                        {searchKeyword && (
+                            <button
+                                onClick={() => setSearchKeyword("")}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                            >{t('products.clear')}</button>
+                        )}
                     </div>
                 </div>
-                <div className="max-w-full overflow-x-auto mt-6">
+                {showFilters && (
+                    <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-2">
+                        <div className="col-span-1">
+                            <label className="block text-xs font-medium text-gray-600 mb-2 dark:text-gray-400 uppercase tracking-wide">{t('products.filter.shop')}</label>
+                            <ShopSelector onChange={(shopId: string | null) => handleFilterChange('shopId', shopId ?? '')} />
+                        </div>
+                        <div className="col-span-1">
+                            <Label>{t('products.filter.status')}</Label>
+                            <div className="relative">
+                                <Select
+                                    options={optionStatus}
+                                    onChange={(val) => handleFilterChange('status', val)}
+                                    enablePlaceholder={false}
+                                    className="dark:bg-dark-900"
+                                />
+                                <span className="absolute text-gray-500 -translate-y-1/2 pointer-events-none right-3 top-1/2 dark:text-gray-400">
+                                    <ChevronDownIcon />
+                                </span>
+                            </div>
+                        </div>
+                        <div className="col-span-1">
+                            <Label>{t('products.filter.listing_quality')}</Label>
+                            <div className="relative">
+                                <Select
+                                    options={optionsListing}
+                                    onChange={(val) => handleFilterChange('listingQuality', val)}
+                                    enablePlaceholder={false}
+                                    className="dark:bg-dark-900"
+                                />
+                                <span className="absolute text-gray-500 -translate-y-1/2 pointer-events-none right-3 top-1/2 dark:text-gray-400">
+                                    <ChevronDownIcon />
+                                </span>
+                            </div>
+                        </div>
+                        <div className="col-span-1">
+                            <DatePicker
+                                id="start-date-picker"
+                                label={t('products.filter.from_date')}
+                                value={filters.startDate ?? undefined}
+                                placeholder="dd/MM/yyyy"
+                                onChange={(_, dateStr) => handleFilterChange('startDate', dateStr)}
+                            />
+                        </div>
+                        <div className="col-span-1">
+                            <DatePicker
+                                id="end-date-picker"
+                                label={t('products.filter.to_date')}
+                                value={filters.endDate ?? undefined}
+                                placeholder="dd/MM/yyyy"
+                                onChange={(_, dateStr) => handleFilterChange('endDate', dateStr)}
+                            />
+                        </div>
+                    </div>
+                )}
+
+                <div className="max-w-full overflow-x-auto mt-4">
                     <Table>
                         {/* Updated Table Header */}
-                        <TableHeader className="border-gray-100 dark:border-gray-800 border-y">
+                        <TableHeader className="border-gray-100 dark:border-gray-800 border-y sticky top-0 bg-white/95 backdrop-blur dark:bg-gray-950/80 z-10">
                             <TableRow>
                                 <TableCell
                                     isHeader
                                     className="py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400"
                                 >
-                                    Product Images
+                                    {t('products.table.images')}
                                 </TableCell>
                                 <TableCell
                                     isHeader
                                     className="py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400"
                                 >
-                                    Product Information
+                                    {t('products.table.info')}
                                 </TableCell>
                                 <TableCell
                                     isHeader
                                     className="py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400"
                                 >
-                                    Retail Price
+                                    {t('products.table.listing_quality')}
                                 </TableCell>
                                 <TableCell
                                     isHeader
                                     className="py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400"
                                 >
-                                    Status
+                                    {t('products.table.price')}
                                 </TableCell>
                                 <TableCell
                                     isHeader
                                     className="py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400"
                                 >
-                                    Create Date
+                                    {t('products.table.status')}
                                 </TableCell>
                                 <TableCell
                                     isHeader
                                     className="py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400"
                                 >
-                                    Action
+                                    {t('products.table.created_at')}
+                                </TableCell>
+                                <TableCell
+                                    isHeader
+                                    className="py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400"
+                                >
+                                    {t('products.table.updated_at')}
+                                </TableCell>
+                                <TableCell
+                                    isHeader
+                                    className="py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400"
+                                >
+                                    {t('products.table.actions')}
                                 </TableCell>
                             </TableRow>
                         </TableHeader>
 
                         {/* Updated Table Body */}
                         <TableBody className="divide-y divide-gray-100 dark:divide-gray-800">
-                            {isLoading ? (
-                                <TableRow>
-                                    <TableCell colSpan={6} className="py-8 text-center">
-                                        <div className="flex items-center justify-center gap-2">
-                                            <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
-                                            <span className="text-gray-500">Loading products...</span>
-                                        </div>
-                                    </TableCell>
-                                </TableRow>
-                            ) : error ? (
-                                <TableRow><TableCell colSpan={6} className="py-5 text-center text-red-500">Error: {error}</TableCell></TableRow>
+                            {isLoading ? skeletonRows : error ? (
+                                <TableRow><TableCell colSpan={8} className="py-5 text-center text-red-500">{error}</TableCell></TableRow>
                             ) : products.length === 0 ? (
-                                <TableRow><TableCell colSpan={6} className="py-5 text-center text-gray-500">No products found with the selected filters.</TableCell></TableRow>
+                                <TableRow><TableCell colSpan={8} className="py-5 text-center text-gray-500">{t('products.no_results')}</TableCell></TableRow>
                             ) : (
                                 products.map((product) => {
                                     const productImages = product.images?.slice(0, 4) || []; // Show max 4 images
+                                    const listingQuality = (product as any).listingQualityTier || (product as any).listing_quality_tier || 'UNKNOWN';
+                                    const qualityMap: Record<string, string> = {
+                                        GOOD: t('products.listing_quality.good'),
+                                        FAIR: t('products.listing_quality.fair'),
+                                        POOR: t('products.listing_quality.poor'),
+                                        UNKNOWN: t('products.listing_quality.unknown')
+                                    };
+                                    const listingQualityLabel = qualityMap[listingQuality] || listingQuality;
+                                    const qualityColor = listingQuality === 'GOOD' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                                        : listingQuality === 'FAIR' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
+                                            : listingQuality === 'POOR' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                                                : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300';
                                     return (
                                         <TableRow key={product.id}>
                                             {/* Product Images - Grid Layout - Increased Size */}
@@ -573,10 +623,6 @@ export default function ProductPage() {
                                                                 <span className="font-mono text-xs text-gray-800 dark:text-gray-200">{product.skus?.[0]?.skuId || 'N/A'}</span>
                                                             </div>
                                                             <div className="flex items-center gap-1">
-                                                                <span className="font-medium text-gray-600 dark:text-gray-300 min-w-[50px]">Profile:</span>
-                                                                <span className="text-xs text-gray-800 dark:text-gray-200 truncate">{product.skus?.[0]?.id || 'N/A'}</span>
-                                                            </div>
-                                                            <div className="flex items-center gap-1">
                                                                 <span className="font-medium text-gray-600 dark:text-gray-300 min-w-[50px]">P-ID:</span>
                                                                 <span className="font-mono text-xs text-gray-800 dark:text-gray-200 truncate">{product.id}</span>
                                                             </div>
@@ -586,9 +632,18 @@ export default function ProductPage() {
                                                                     {product.shop?.shopName || 'N/A'}
                                                                 </span>
                                                             </div>
+                                                            <div className="flex items-center gap-1">
+                                                                <span className="font-medium text-gray-600 dark:text-gray-300 min-w-[50px]">SKU:</span>
+                                                                <span className="font-mono text-[10px] text-gray-700 dark:text-gray-300 truncate" title={product.skus?.[0]?.skuId}>{product.skus?.[0]?.skuId || 'N/A'}</span>
+                                                            </div>
                                                         </div>
                                                     </div>
                                                 </div>
+                                            </TableCell>
+
+                                            {/* Listing Quality */}
+                                            <TableCell className="py-3">
+                                                <span className={`inline-flex items-center px-2 py-1 rounded-md text-[10px] font-medium tracking-wide ${qualityColor}`}>{listingQualityLabel}</span>
                                             </TableCell>
 
                                             {/* Retail Price */}
@@ -624,18 +679,33 @@ export default function ProductPage() {
                                             </TableCell>
 
                                             {/* Create Date */}
-                                            <TableCell className="py-3 text-gray-500 text-sm dark:text-gray-400">
+                                            <TableCell className="py-3 text-gray-500 text-xs dark:text-gray-400">
                                                 {formatDate(product.createTime)}
+                                            </TableCell>
+                                            {/* Updated */}
+                                            <TableCell className="py-3 text-gray-500 text-xs dark:text-gray-400">
+                                                {formatDate((product as any).updateTime || (product as any).updatedAt || product.createTime)}
                                             </TableCell>
 
                                             {/* Action */}
-                                            <TableCell className="py-3">
+                                            <TableCell className="py-3 space-x-1 whitespace-nowrap">
                                                 <button
                                                     onClick={() => handleViewProduct(product)}
-                                                    className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 hover:text-blue-700 dark:bg-blue-900/20 dark:text-blue-400 dark:hover:bg-blue-900/30 transition-colors"
+                                                    className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-blue-600 bg-blue-50 rounded-md hover:bg-blue-100 dark:bg-blue-900/20 dark:text-blue-400"
                                                 >
-                                                    <Eye className="w-3 h-3" />
-                                                    View
+                                                    <Eye className="w-3 h-3" /> {t('products.actions.view')}
+                                                </button>
+                                                <button
+                                                    onClick={() => copyToClipboard(product.productId)}
+                                                    className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-gray-600 bg-gray-50 rounded-md hover:bg-gray-100 dark:bg-gray-800/60 dark:text-gray-300"
+                                                >
+                                                    <Copy className="w-3 h-3" /> {t('products.actions.copy_id')}
+                                                </button>
+                                                <button
+                                                    onClick={() => syncSingleProduct(product.productId, (product as any).shop?.shopId || (product as any).shop?.id)}
+                                                    className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-green-600 bg-green-50 rounded-md hover:bg-green-100 dark:bg-green-900/20 dark:text-green-400"
+                                                >
+                                                    <RefreshCw className="w-3 h-3" /> {t('products.actions.sync')}
                                                 </button>
                                             </TableCell>
                                         </TableRow>
@@ -647,9 +717,9 @@ export default function ProductPage() {
                 </div>
 
                 {/* Updated Pagination controls */}
-                <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex items-center gap-2">
-                        <span className="text-sm text-gray-600 dark:text-gray-400">Rows per page:</span>
+                        <span className="text-sm text-gray-600 dark:text-gray-400">{t('products.pagination.rows_per_page')}</span>
                         <div className="w-28">
                             <Select
                                 options={[
@@ -668,7 +738,7 @@ export default function ProductPage() {
 
                     <div className="flex items-center justify-between gap-3 w-full sm:w-auto">
                         <span className="text-sm text-gray-600 dark:text-gray-400">
-                            Showing {pagination.totalItems === 0 ? 0 : ((pagination.currentPage - 1) * pagination.pageSize) + 1}-{Math.min(pagination.currentPage * pagination.pageSize, pagination.totalItems)} of {pagination.totalItems}
+                            {t('products.pagination.range', { from: (pagination.totalItems === 0 ? 0 : ((pagination.currentPage - 1) * pagination.pageSize) + 1).toString(), to: Math.min(pagination.currentPage * pagination.pageSize, pagination.totalItems).toString(), total: pagination.totalItems.toString() })}
                         </span>
 
                         <div className="flex items-center gap-2">
@@ -677,17 +747,15 @@ export default function ProductPage() {
                                 disabled={!pagination.hasPreviousPage || isLoading}
                                 className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-theme-sm font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 disabled:opacity-50 disabled:hover:bg-white disabled:cursor-not-allowed dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200"
                             >
-                                Prev
+                                {t('products.pagination.prev')}
                             </button>
-                            <span className="text-sm text-gray-600 dark:text-gray-400">
-                                Page {pagination.currentPage} of {pagination.totalPages}
-                            </span>
+                            <span className="text-sm text-gray-600 dark:text-gray-400">Page {pagination.currentPage} of {pagination.totalPages}</span>
                             <button
                                 onClick={() => handlePageChange(pagination.currentPage + 1)}
                                 disabled={!pagination.hasNextPage || isLoading}
                                 className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-theme-sm font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 disabled:opacity-50 disabled:hover:bg-white disabled:cursor-not-allowed dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200"
                             >
-                                Next
+                                {t('products.pagination.next')}
                             </button>
                         </div>
                     </div>
