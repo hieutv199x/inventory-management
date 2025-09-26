@@ -132,31 +132,6 @@ async function handleOrderStatusChange(webhookData: TikTokWebhookData) {
             });
 
             if (updatedOrder) {
-                if (credentials.id) {
-                    await NotificationService.createOrderNotification(
-                        NotificationType.ORDER_STATUS_CHANGE,
-                        updatedOrder,
-                        credentials.id,
-                        {
-                            previousStatus,
-                            newStatus: order_status,
-                            webhookTimestamp: webhookData.timestamp,
-                            isOnHold: is_on_hold_order,
-                            notificationId: webhookData.tts_notification_id,
-                            syncTriggered: true
-                        }
-                    );
-                }
-
-                try {
-                    // Sync order attributes
-                    await syncOrderCanSplitOrNot(prisma, {
-                        shop_id: credentials.shopId,
-                        order_ids: [updatedOrder.orderId]
-                    });
-                } catch (attributeError) {
-                    console.error(`Failed to sync order attributes for order ${updatedOrder.orderId}:`, attributeError);
-                }
 
                 await handleSpecificStatusChanges(
                     updatedOrder.id,
@@ -181,18 +156,6 @@ async function handleSpecificStatusChanges(orderId: string, newStatus: string, w
     switch (newStatus.toLowerCase()) {
         case 'awaiting_shipment':
             console.log(`Order ${webhookData.data.order_id} is awaiting shipment`);
-
-            try {
-                // Sync unsettled transactions to ensure payment status is up to date
-                await syncUnsettledTransactions(prisma, {
-                    shop_id: shopId,
-                    search_time_ge: new Date(createTime * 1000).setHours(0, 0, 0, 0) / 1000,
-                    search_time_lt: Math.floor(new Date().setHours(23, 59, 59, 999) / 1000),
-                    page_size: 10
-                });
-            } catch (syncError) {
-                console.error(`Failed to sync unsettled transactions for order ${orderId}:`, syncError);
-            }
 
             // Create specific notification for awaiting shipment
             await NotificationService.createNotification({

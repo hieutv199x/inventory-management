@@ -455,6 +455,7 @@ export class TikTokOrderSync {
                         shopId: shopId,
                         ttsSlaTime: order.ttsSlaTime || null,
                         rtsSlaTime: order.rtsSlaTime || null,
+                        cancelOrderSlaTime: order.cancelOrderSlaTime || null,
                         deliverySlaTime: order.deliverySlaTime || null,
                         deliveryDueTime: order.deliveryDueTime || null,
                         collectionDueTime: order.collectionDueTime || null,

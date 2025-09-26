@@ -1015,8 +1015,8 @@ export default function OrdersPage() {
                     </form>
                 </div>
 
-                {/* Filters Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
+                {/* Filters Grid - responsive: 1 col (mobile) → 2 (sm) → 3 (lg) → 6 (xl) */}
+                <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2 dark:text-gray-400">{t('orders.shop')}</label>
                         <ShopSelector

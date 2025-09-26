@@ -201,7 +201,6 @@ async function processBatch(orders: any[], shopId: string, client: any, credenti
         for (const order of orders) {
             const createTime = order.createTime || Math.floor(Date.now() / 1000);
             const channelData = {
-                cancelOrderSlaTime: order.cancelOrderSlaTime,
                 collectionTime: order.collectionTime,
                 commercePlatform: order.commercePlatform,
                 deliveryOptionId: order.deliveryOptionId,
@@ -240,6 +239,7 @@ async function processBatch(orders: any[], shopId: string, client: any, credenti
                 channelData: JSON.stringify(channelData),
                 ttsSlaTime: order.ttsSlaTime || null,
                 rtsSlaTime: order.rtsSlaTime || null,
+                cancelOrderSlaTime: order.cancelOrderSlaTime || null,
                 deliverySlaTime: order.deliverySlaTime || null,
                 deliveryDueTime: order.deliveryDueTime || null,
                 collectionDueTime: order.collectionDueTime || null,
