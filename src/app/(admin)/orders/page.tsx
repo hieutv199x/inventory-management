@@ -162,6 +162,7 @@ export default function OrdersPage() {
     const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
     const [showOrderModal, setShowOrderModal] = useState(false);
     const [copiedCustomer, setCopiedCustomer] = useState<string | null>(null);
+    const [copiedOrderId, setCopiedOrderId] = useState<string | null>(null);
     const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
     const [showTrackingModal, setShowTrackingModal] = useState(false);
     const [selectedOrderForTracking, setSelectedOrderForTracking] = useState<Order | null>(null);
@@ -664,12 +665,16 @@ export default function OrdersPage() {
 
         let streetAddress = '';
         let cityStateCountry = '';
-
-        if (addressParts.length >= 2) {
-            // First part is usually street address (house number, street name)
+        
+        if (addressParts.length >= 3) {
+            // Gộp 2 phần đầu: số nhà/tên đường + thành phố đầu tiên
+            streetAddress = addressParts.slice(0, 2).join(', ');
+            // Phần còn lại: vùng/tỉnh/quốc gia
+            cityStateCountry = addressParts.slice(2).join(', ');
+        } else if (addressParts.length === 2) {
+            // Nếu chỉ có 2 phần thì tách như cũ
             streetAddress = addressParts[0];
-            // Rest is city, state, country
-            cityStateCountry = addressParts.slice(1).join(', ');
+            cityStateCountry = addressParts[1];
         } else {
             streetAddress = fullAddress;
         }
@@ -693,6 +698,16 @@ export default function OrdersPage() {
             setTimeout(() => setCopiedCustomer(null), 2000);
         } catch (err) {
             console.error('Failed to copy customer info: ', err);
+        }
+    };
+
+    const copyOrderId = async (orderId: string) => {
+        try {
+            await navigator.clipboard.writeText(orderId);
+            setCopiedOrderId(orderId);
+            setTimeout(() => setCopiedOrderId(null), 2000);
+        } catch (err) {
+            console.error('Failed to copy order ID: ', err);
         }
     };
 
@@ -1182,8 +1197,24 @@ export default function OrdersPage() {
                                             {/* Order - Mã đơn hàng tiktok, thời gian đặt hàng, trạng thái đơn hàng */}
                                             <td className="px-6 py-4">
                                                 <div className="flex flex-col space-y-1">
-                                                    <div className="font-mono text-sm font-medium text-gray-900 dark:text-gray-400">
-                                                        {order.orderId}
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="font-mono text-sm font-medium text-gray-900 dark:text-gray-400">
+                                                            {order.orderId}
+                                                        </div>
+                                                        <button
+                                                            onClick={() => copyOrderId(order.orderId)}
+                                                            className="p-1 text-gray-500 hover:text-blue-600 transition-colors"
+                                                            title="Copy Order ID"
+                                                        >
+                                                            {copiedOrderId === order.orderId ? (
+                                                                <Check className="h-3 w-3 text-green-600" />
+                                                            ) : (
+                                                                <Copy className="h-3 w-3" />
+                                                            )}
+                                                        </button>
+                                                    </div>
+                                                    <div className="flex items-center space-x-2">
+                                                        {order.shop.managedName || t('common.na')}
                                                     </div>
                                                     <div className="flex items-center space-x-2">
                                                         {order.shop.managedName || t('common.na')}
