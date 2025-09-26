@@ -238,7 +238,6 @@ async function processBatch(orders: any[], shopId: string, client: any, credenti
                 paidTime: order.paidTime,
                 deliveryTime: order.deliveryTime,
                 channelData: JSON.stringify(channelData),
-                shopId: shopId,
                 ttsSlaTime: order.ttsSlaTime || null,
                 rtsSlaTime: order.rtsSlaTime || null,
                 deliverySlaTime: order.deliverySlaTime || null,
@@ -251,7 +250,7 @@ async function processBatch(orders: any[], shopId: string, client: any, credenti
             };
 
             if (existingOrderMap.has(order.id)) {
-                updateOrders.push({ ...orderData, dbId: existingOrderMap.get(order.id) });
+                updateOrders.push({ orderData: {...orderData}, dbId: existingOrderMap.get(order.id) });
             } else {
                 newOrders.push(orderData);
             }
@@ -278,14 +277,7 @@ async function processBatch(orders: any[], shopId: string, client: any, credenti
                     prisma.order.update({
                         where: { id: o.dbId },
                         data: {
-                            status: o.status,
-                            updateTime: o.updateTime,
-                            deliveryTime: o.deliveryTime,
-                            paidTime: o.paidTime,
-                            totalAmount: o.totalAmount,
-                            currency: o.currency,
-                            buyerMessage: o.buyerMessage,
-                            channelData: o.channelData
+                            ...o.orderData
                         }
                     })
                 )

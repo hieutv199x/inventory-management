@@ -30,6 +30,25 @@ export async function GET(req: NextRequest) {
     const sortOrder = (searchParams.get('sortOrder') || 'desc').toLowerCase();
     const alert = searchParams.get('alert'); // custom alert filter
 
+    // SLA / deadline & milestone time filters (accept *Ge, *Gt, *Lt, *Le, *Eq suffixes)
+    const numericTimeFields = [
+      'shippingDueTime',
+      'collectionDueTime',
+      'deliveryDueTime',
+      'cancelOrderSlaTime',
+      'ttsSlaTime',
+      'rtsSlaTime',
+      'deliverySlaTime',
+      'fastDispatchSlaTime',
+      'pickUpCutOffTime',
+      'deliveryOptionRequiredDeliveryTime',
+      'cancelTime',
+      'requestCancelTime',
+      'rtsTime',
+      'collectionTime',
+      'releaseDate'
+    ] as const;
+
     // Build where clause
     let where: any = {};
 
@@ -97,6 +116,24 @@ export async function GET(req: NextRequest) {
         where.createTime.lte = parseInt(createTimeLt);
       } else if (dateTo) {
         where.createTime.lte = Math.floor(new Date(dateTo).getTime() / 1000);
+      }
+    }
+
+    // Generic numeric range filters for SLA/milestone fields
+    for (const field of numericTimeFields) {
+      const base = field;
+      const ge = searchParams.get(`${base}Ge`);
+      const gt = searchParams.get(`${base}Gt`);
+      const lt = searchParams.get(`${base}Lt`);
+      const le = searchParams.get(`${base}Le`);
+      const eq = searchParams.get(`${base}Eq`);
+      if (ge || gt || lt || le || eq) {
+        where[base] = {};
+        if (ge) where[base].gte = parseInt(ge);
+        if (gt) where[base].gt = parseInt(gt);
+        if (lt) where[base].lt = parseInt(lt);
+        if (le) where[base].lte = parseInt(le);
+        if (eq) where[base].equals = parseInt(eq);
       }
     }
 

@@ -166,7 +166,7 @@ async function processProductBatch(products: any[], shopObjectId: string, client
                     continue;
                 }
 
-                const result = await client.api.ProductV202309Api.ProductsProductIdGet(
+                const result = await client.api.ProductV202502Api.ProductsProductIdGet(
                     productId, 
                     credentials.accessToken, 
                     "application/json", 

@@ -303,7 +303,7 @@ export class TikTokOrderSync {
                 const batch = orderIds.slice(i, i + batchSize);
                 console.log(`Fetching batch ${Math.floor(i / batchSize) + 1}: ${batch.length} orders`);
                 const result = await this.apiCallWithRetry(
-                    () => this.client.api.OrderV202309Api.OrdersGet(
+                    () => this.client.api.OrderV202507Api.OrdersGet(
                         batch,
                         this.credentials.accessToken,
                         "application/json",
@@ -469,14 +469,7 @@ export class TikTokOrderSync {
                         await prisma.order.update({
                             where: { id: existingOrderMap.get(order.id) },
                             data: {
-                                status: orderData.status,
-                                updateTime: orderData.updateTime,
-                                deliveryTime: orderData.deliveryTime,
-                                paidTime: orderData.paidTime,
-                                totalAmount: orderData.totalAmount,
-                                currency: orderData.currency,
-                                buyerMessage: orderData.buyerMessage,
-                                channelData: orderData.channelData,
+                                ...orderData
                             }
                         });
 

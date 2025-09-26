@@ -53,6 +53,23 @@ interface Order {
     lineItemsCount?: number;
     canSplitPackages?: boolean; // Added canSplitPackages field
     mustSplitPackages?: boolean; // Added mustSplitPackages field
+    // SLA / deadline fields (optional on some channels)
+    cancelOrderSlaTime?: number;
+    ttsSlaTime?: number;
+    rtsSlaTime?: number;
+    deliverySlaTime?: number;
+    deliveryDueTime?: number;
+    collectionDueTime?: number;
+    shippingDueTime?: number;
+    fastDispatchSlaTime?: number;
+    pickUpCutOffTime?: number;
+    deliveryOptionRequiredDeliveryTime?: number;
+    // Milestone / event timestamps
+    cancelTime?: number;
+    requestCancelTime?: number;
+    rtsTime?: number;
+    collectionTime?: number;
+    releaseDate?: number;
 }
 
 interface LineItem {
@@ -558,6 +575,66 @@ export default function OrdersPage() {
         }
     };
 
+    // Helper to format epoch seconds to UI and relative delta
+    const formatEpoch = (ts?: number) => ts ? formatTikTokTimestamp(ts, { includeSeconds: false }) : '—';
+    const formatRelative = (ts?: number) => {
+        if (!ts) return '';
+        const now = Math.floor(Date.now() / 1000);
+        const diff = ts - now; // seconds
+        const abs = Math.abs(diff);
+        const units: [number, string][] = [
+            [86400, 'd'],
+            [3600, 'h'],
+            [60, 'm'],
+            [1, 's']
+        ];
+        for (const [sec, label] of units) {
+            if (abs >= sec) {
+                const val = Math.floor(abs / sec);
+                return diff >= 0 ? `in ${val}${label}` : `${val}${label} ago`;
+            }
+        }
+        return diff >= 0 ? 'soon' : 'just now';
+    };
+
+    interface SlaItem { key: string; label: string; value?: number; type: 'deadline' | 'event'; }
+    const buildSlaItems = (order: Order): SlaItem[] => {
+        // Fallback to channelData if some fields missing
+        const cd = parseChannelData(order.channelData ?? '');
+        const pick = (field: keyof Order, snake?: string): number | undefined => {
+            const direct = (order as any)[field];
+            if (direct) return direct;
+            if (snake && typeof cd === 'object' && cd && cd[snake] && typeof cd[snake] === 'number') return cd[snake];
+            return undefined;
+        };
+        return [
+            { key: 'shippingDueTime', label: 'Ship Due', value: pick('shippingDueTime', 'shipping_due_time'), type: 'deadline' as const },
+            { key: 'collectionDueTime', label: 'Collection Due', value: pick('collectionDueTime', 'collection_due_time'), type: 'deadline' as const },
+            { key: 'deliveryDueTime', label: 'Delivery Due', value: pick('deliveryDueTime', 'delivery_due_time'), type: 'deadline' as const },
+            { key: 'cancelOrderSlaTime', label: 'Cancel SLA', value: pick('cancelOrderSlaTime', 'cancel_order_sla_time'), type: 'deadline' as const },
+            { key: 'ttsSlaTime', label: 'TTS SLA', value: pick('ttsSlaTime', 'tts_sla_time'), type: 'deadline' as const },
+            { key: 'rtsSlaTime', label: 'RTS SLA', value: pick('rtsSlaTime', 'rts_sla_time'), type: 'deadline' as const },
+            { key: 'deliverySlaTime', label: 'Delivery SLA', value: pick('deliverySlaTime', 'delivery_sla_time'), type: 'deadline' as const },
+            { key: 'fastDispatchSlaTime', label: 'Fast Dispatch', value: pick('fastDispatchSlaTime', 'fast_dispatch_sla_time'), type: 'deadline' as const },
+            { key: 'pickUpCutOffTime', label: 'Pickup Cutoff', value: pick('pickUpCutOffTime', 'pick_up_cut_off_time'), type: 'deadline' as const },
+            { key: 'deliveryOptionRequiredDeliveryTime', label: 'Req. Delivery', value: pick('deliveryOptionRequiredDeliveryTime', 'delivery_option_required_delivery_time'), type: 'deadline' as const },
+            // Events
+            { key: 'rtsTime', label: 'RTS At', value: pick('rtsTime', 'rts_time'), type: 'event' as const },
+            { key: 'collectionTime', label: 'Collected At', value: pick('collectionTime', 'collection_time'), type: 'event' as const },
+            { key: 'cancelTime', label: 'Cancelled At', value: pick('cancelTime', 'cancel_time'), type: 'event' as const },
+            { key: 'requestCancelTime', label: 'Req. Cancel At', value: pick('requestCancelTime', 'request_cancel_time'), type: 'event' as const },
+            { key: 'releaseDate', label: 'Release Date', value: pick('releaseDate', 'release_date'), type: 'event' as const },
+        ].filter(i => !!i.value);
+    };
+    const classifyDeadline = (ts?: number) => {
+        if (!ts) return 'text-gray-400';
+        const now = Math.floor(Date.now() / 1000);
+        const diff = ts - now;
+        if (diff < 0) return 'text-red-600';
+        if (diff < 86400) return 'text-orange-600';
+        return 'text-green-600';
+    };
+
     const getLineItemImages = (order: Order) => {
         return order.lineItems?.map(item => {
             const itemChannelData = parseChannelData(item.channelData ?? '');
@@ -671,12 +748,12 @@ export default function OrdersPage() {
     // Backend-driven status counts (exclude keyword to avoid counting non-persisted search results)
     const ALERT_DEFS = [
         // key maps to property returned from /api/orders/alert
-        { key: 'countShipingWithin24', label: 'Ship within 24h', Icon: Truck, color: 'text-orange-600', tooltip: 'Orders waiting >48h but still AWAITING_SHIPMENT (need action).' },
-        { key: 'countAutoCancelled', label: 'Auto-cancelling <24h', Icon: Calendar, color: 'text-red-600', tooltip: 'Orders approaching collection due time in next 24h.' },
-        { key: 'countShippingOverdue', label: 'Shipping overdue', Icon: Package, color: 'text-pink-600', tooltip: 'AWAITING_SHIPMENT orders past shipping_due_time.' },
-        { key: 'countBuyerCancelled', label: 'Cancellation requested', Icon: X, color: 'text-yellow-600', tooltip: 'Buyer has requested cancellation (isBuyerRequestCancel=true).' },
-        { key: 'countLogisticsIssue', label: 'Logistics issue', Icon: RefreshCw, color: 'text-purple-600', tooltip: 'Detected logistics exceptions (placeholder – implement logic).' },
-        { key: 'countReturnRefund', label: 'Return/Refund', Icon: CreditCard, color: 'text-indigo-600', tooltip: 'Orders with return/refund request (placeholder).' },
+        { key: 'countShipingWithin24', labelKey: 'orders.alert.ship_within_24h', Icon: Truck, color: 'text-orange-600', tooltip: 'Orders waiting >48h but still AWAITING_SHIPMENT (need action).' },
+        { key: 'countAutoCancelled', labelKey: 'orders.alert.auto_cancelling_24h', Icon: Calendar, color: 'text-red-600', tooltip: 'Orders approaching collection due time in next 24h.' },
+        { key: 'countShippingOverdue', labelKey: 'orders.alert.shipping_overdue', Icon: Package, color: 'text-pink-600', tooltip: 'AWAITING_SHIPMENT orders past shipping_due_time.' },
+        { key: 'countBuyerCancelled', labelKey: 'orders.alert.cancellation_requested', Icon: X, color: 'text-yellow-600', tooltip: 'Buyer has requested cancellation (isBuyerRequestCancel=true).' },
+        { key: 'countLogisticsIssue', labelKey: 'orders.alert.logistics_issue', Icon: RefreshCw, color: 'text-purple-600', tooltip: 'Detected logistics exceptions (placeholder – implement logic).' },
+        { key: 'countReturnRefund', labelKey: 'orders.alert.return_refund', Icon: CreditCard, color: 'text-indigo-600', tooltip: 'Orders with return/refund request (placeholder).' },
     ] as const;
 
     const [statusCounts, setStatusCounts] = useState<Record<string, number>>({});
@@ -849,7 +926,7 @@ export default function OrdersPage() {
                         </div>
                     </button>
 
-                    {ALERT_DEFS.map(({ key, label, Icon, color, tooltip }) => (
+                    {ALERT_DEFS.map(({ key, labelKey, Icon, color, tooltip }) => (
                         <button
                             key={key}
                             type="button"
@@ -868,7 +945,7 @@ export default function OrdersPage() {
                                 <Icon className={`h-8 w-8 ${color}`} />
                                 <div className="ml-4">
                                     <p className="text-sm font-medium text-gray-600 dark:text-gray-400 flex items-center gap-1">
-                                        {label}
+                                        {t(labelKey)}
                                     </p>
                                     <p className="text-2xl font-semibold text-gray-900 dark:text-white/90">
                                         {loadingAlerts ? '...' : (alertCounts[key] ?? 0)}
@@ -1064,6 +1141,7 @@ export default function OrdersPage() {
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('orders.items_images')}</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('orders.customer_info')}</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('orders.order_info')}</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('orders.sla_column')}</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('orders.price')}</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('common.actions')}</th>
                             </tr>
@@ -1222,6 +1300,23 @@ export default function OrdersPage() {
                                                             {t('orders.splitted')}
                                                         </div>
                                                     )}
+                                                </div>
+                                            </td>
+
+                                            {/* SLA / Due Times */}
+                                            <td className="px-6 py-4 align-top">
+                                                <div className="flex flex-col space-y-1 max-w-56">
+                                                    {buildSlaItems(order).length === 0 && (
+                                                        <div className="text-xs text-gray-400">—</div>
+                                                    )}
+                                                    {buildSlaItems(order).map(item => (
+                                                        <div key={item.key} className="flex justify-between gap-2 text-[11px] font-mono leading-snug">
+                                                            <span className="truncate text-gray-600 dark:text-gray-400 font-medium" title={item.label}>{item.label}</span>
+                                                            <span className={`text-right text-[11px] font-semibold ${item.type === 'deadline' ? classifyDeadline(item.value) : 'text-gray-700 dark:text-gray-300'}`} title={item.value ? `${item.label}: ${formatEpoch(item.value)}` : ''}>
+                                                                {formatRelative(item.value)}
+                                                            </span>
+                                                        </div>
+                                                    ))}
                                                 </div>
                                             </td>
 
