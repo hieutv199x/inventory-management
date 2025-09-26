@@ -532,13 +532,7 @@ export default function ProductPage() {
                                     isHeader
                                     className="py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400"
                                 >
-                                    {t('products.table.created_at')}
-                                </TableCell>
-                                <TableCell
-                                    isHeader
-                                    className="py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400"
-                                >
-                                    {t('products.table.updated_at')}
+                                    {t('products.table.timestamps')}
                                 </TableCell>
                                 <TableCell
                                     isHeader
@@ -572,8 +566,8 @@ export default function ProductPage() {
                                                 : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300';
                                     return (
                                         <TableRow key={product.id}>
-                                            {/* Product Images - Grid Layout - Increased Size */}
-                                            <TableCell className="py-3">
+                                            {/* Product Images */}
+                                            <TableCell className="py-3 align-top">
                                                 <div className="grid grid-cols-2 gap-2 w-36">
                                                     {productImages.length > 0 ? (
                                                         productImages.map((image, index) => (
@@ -606,39 +600,23 @@ export default function ProductPage() {
                                                 </div>
                                             </TableCell>
 
-                                            {/* Product Information */}
-                                            <TableCell className="py-3">
-                                                <div className="space-y-2 max-w-[300px]">
-                                                    <p className="font-semibold text-gray-900 dark:text-white text-sm truncate" title={product.title}>
-                                                        {product.title}
-                                                    </p>
-                                                    <div className="text-xs text-gray-500 dark:text-gray-400 space-y-1">
-                                                        <div className="grid grid-cols-1 gap-1">
-                                                            <div className="flex items-center gap-1">
-                                                                <span className="font-medium text-gray-600 dark:text-gray-300 min-w-[50px]">ID:</span>
-                                                                <span className="font-mono text-xs text-gray-800 dark:text-gray-200">{product.productId}</span>
-                                                            </div>
-                                                            <div className="flex items-center gap-1">
-                                                                <span className="font-medium text-gray-600 dark:text-gray-300 min-w-[50px]">SKU:</span>
-                                                                <span className="font-mono text-xs text-gray-800 dark:text-gray-200">{product.skus?.[0]?.skuId || 'N/A'}</span>
-                                                            </div>
-                                                            <div className="flex items-center gap-1">
-                                                                <span className="font-medium text-gray-600 dark:text-gray-300 min-w-[50px]">P-ID:</span>
-                                                                <span className="font-mono text-xs text-gray-800 dark:text-gray-200 truncate">{product.id}</span>
-                                                            </div>
-                                                            <div className="flex items-center gap-1">
-                                                                <span className="font-medium text-gray-600 dark:text-gray-300 min-w-[50px]">Shop:</span>
-                                                                <span className="text-xs font-medium text-blue-600 dark:text-blue-400 truncate" title={product.shop?.shopName || 'N/A'}>
-                                                                    {product.shop?.shopName || 'N/A'}
-                                                                </span>
-                                                            </div>
-                                                            <div className="flex items-center gap-1">
-                                                                <span className="font-medium text-gray-600 dark:text-gray-300 min-w-[50px]">SKU:</span>
-                                                                <span className="font-mono text-[10px] text-gray-700 dark:text-gray-300 truncate" title={product.skus?.[0]?.skuId}>{product.skus?.[0]?.skuId || 'N/A'}</span>
+                                            {/* Product Information (condensed) */}
+                                            <TableCell className="py-3 align-top">
+                                                {(() => {
+                                                    const shop: any = (product as any).shop || {};
+                                                    const shopLabel = shop.managedName || shop.shopName || 'N/A';
+                                                    return (
+                                                        <div className="space-y-1 max-w-[280px]">
+                                                            <p className="font-semibold text-gray-900 dark:text-white text-sm truncate" title={product.title}>{product.title}</p>
+                                                            <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-gray-600 dark:text-gray-400">
+                                                                <span className="font-mono" title="Product ID">ID:{product.productId}</span>
+                                                                {product.skus?.[0]?.skuId && <span className="font-mono" title="SKU">SKU:{product.skus[0].skuId}</span>}
+                                                                <span className="font-mono truncate" title="Internal ID">P:{product.id}</span>
+                                                                <span className="text-indigo-600 dark:text-indigo-400 truncate max-w-[120px]" title={shopLabel}>Shop:{shopLabel}</span>
                                                             </div>
                                                         </div>
-                                                    </div>
-                                                </div>
+                                                    );
+                                                })()}
                                             </TableCell>
 
                                             {/* Listing Quality */}
@@ -678,13 +656,14 @@ export default function ProductPage() {
                                                 </Badge>
                                             </TableCell>
 
-                                            {/* Create Date */}
-                                            <TableCell className="py-3 text-gray-500 text-xs dark:text-gray-400">
-                                                {formatDate(product.createTime)}
-                                            </TableCell>
-                                            {/* Updated */}
-                                            <TableCell className="py-3 text-gray-500 text-xs dark:text-gray-400">
-                                                {formatDate((product as any).updateTime || (product as any).updatedAt || product.createTime)}
+                                            {/* Timestamps */}
+                                            <TableCell className="py-3 text-gray-500 text-[11px] dark:text-gray-400 align-top whitespace-nowrap">
+                                                <div className="flex flex-col gap-1">
+                                                    <span title={t('products.table.created_at')}>{formatDate(product.createTime)}</span>
+                                                    <span className="text-[10px] text-gray-400" title={t('products.table.updated_at')}>
+                                                        {formatDate((product as any).updateTime || (product as any).updatedAt || product.createTime)}
+                                                    </span>
+                                                </div>
                                             </TableCell>
 
                                             {/* Action */}
