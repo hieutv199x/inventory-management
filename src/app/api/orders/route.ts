@@ -140,7 +140,11 @@ export async function GET(req: NextRequest) {
     // Get total count for pagination
     // Apply alert-specific filters AFTER base filters so pagination reflects narrowed set
     if (alert) {
-      where = {};
+      if (!isAdmin && !shopId) {
+        where.shopId = { in: accessibleShopIds };
+      } else if (shopId) {
+        where.shopId = shopId;
+      }
       const now = Math.floor(Date.now() / 1000);
       const twentyFourHoursFromNow = now + 24 * 60 * 60;
       switch (alert) {
