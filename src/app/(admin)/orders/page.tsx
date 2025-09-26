@@ -162,6 +162,7 @@ export default function OrdersPage() {
     const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
     const [showOrderModal, setShowOrderModal] = useState(false);
     const [copiedCustomer, setCopiedCustomer] = useState<string | null>(null);
+    const [copiedOrderId, setCopiedOrderId] = useState<string | null>(null);
     const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
     const [showTrackingModal, setShowTrackingModal] = useState(false);
     const [selectedOrderForTracking, setSelectedOrderForTracking] = useState<Order | null>(null);
@@ -700,6 +701,16 @@ export default function OrdersPage() {
         }
     };
 
+    const copyOrderId = async (orderId: string) => {
+        try {
+            await navigator.clipboard.writeText(orderId);
+            setCopiedOrderId(orderId);
+            setTimeout(() => setCopiedOrderId(null), 2000);
+        } catch (err) {
+            console.error('Failed to copy order ID: ', err);
+        }
+    };
+
     const updateCustomStatus = async (orderId: string, customStatus: string) => {
         try {
             setUpdatingStatus(orderId);
@@ -1201,8 +1212,21 @@ export default function OrdersPage() {
                                             {/* Order - Mã đơn hàng tiktok, thời gian đặt hàng, trạng thái đơn hàng */}
                                             <td className="px-6 py-4">
                                                 <div className="flex flex-col space-y-1">
-                                                    <div className="font-mono text-sm font-medium text-gray-900 dark:text-gray-400">
-                                                        {order.orderId}
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="font-mono text-sm font-medium text-gray-900 dark:text-gray-400">
+                                                            {order.orderId}
+                                                        </div>
+                                                        <button
+                                                            onClick={() => copyOrderId(order.orderId)}
+                                                            className="p-1 text-gray-500 hover:text-blue-600 transition-colors"
+                                                            title="Copy Order ID"
+                                                        >
+                                                            {copiedOrderId === order.orderId ? (
+                                                                <Check className="h-3 w-3 text-green-600" />
+                                                            ) : (
+                                                                <Copy className="h-3 w-3" />
+                                                            )}
+                                                        </button>
                                                     </div>
                                                     <div className="text-xs text-gray-600 dark:text-gray-400">
                                                         {formatTimestamp(order.createTime)}
