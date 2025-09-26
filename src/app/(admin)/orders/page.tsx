@@ -610,7 +610,7 @@ export default function OrdersPage() {
         };
         return [
             { key: 'shippingDueTime', label: t('orders.sla.ship_due'), desc: t('orders.sla.desc.ship_due'), value: pick('shippingDueTime', 'shipping_due_time'), type: 'deadline' as const },
-            { key: 'collectionDueTime', label: t('orders.sla.collection_due'), desc: t('orders.sla.desc.collection_due'), value: pick('collectionDueTime', 'collection_due_time'), type: 'deadline' as const },
+            // { key: 'collectionDueTime', label: t('orders.sla.collection_due'), desc: t('orders.sla.desc.collection_due'), value: pick('collectionDueTime', 'collection_due_time'), type: 'deadline' as const },
             { key: 'deliveryDueTime', label: t('orders.sla.delivery_due'), desc: t('orders.sla.desc.delivery_due'), value: pick('deliveryDueTime', 'delivery_due_time'), type: 'deadline' as const },
             { key: 'cancelOrderSlaTime', label: t('orders.sla.cancel_sla'), desc: t('orders.sla.desc.cancel_sla'), value: pick('cancelOrderSlaTime', 'cancel_order_sla_time'), type: 'deadline' as const },
             { key: 'ttsSlaTime', label: t('orders.sla.tts_sla'), desc: t('orders.sla.desc.tts_sla'), value: pick('ttsSlaTime', 'tts_sla_time'), type: 'deadline' as const },
