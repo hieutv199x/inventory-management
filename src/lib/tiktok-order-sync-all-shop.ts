@@ -226,7 +226,16 @@ async function processBatch(orders: any[], shopId: string) {
                 paidTime: order.paidTime,
                 deliveryTime: order.deliveryTime,
                 channelData: JSON.stringify(channelData), // Store TikTok-specific fields
-                shopId: shopId, // This should be the ObjectId from ShopAuthorization
+                ttsSlaTime: order.ttsSlaTime || null,
+                rtsSlaTime: order.rtsSlaTime || null,
+                cancelOrderSlaTime: order.cancelOrderSlaTime || null,
+                deliverySlaTime: order.deliverySlaTime || null,
+                deliveryDueTime: order.deliveryDueTime || null,
+                collectionDueTime: order.collectionDueTime || null,
+                shippingDueTime: order.shippingDueTime || null,
+                fastDispatchSlaTime: order.fastDispatchSlaTime || null,
+                pickUpCutOffTime: order.pickUpCutOffTime || null,
+                deliveryOptionRequiredDeliveryTime: order.deliveryOptionRequiredDeliveryTime || null
             };
 
             if (existingOrderMap.has(order.id)) {
@@ -235,7 +244,7 @@ async function processBatch(orders: any[], shopId: string) {
                     dbId: existingOrderMap.get(order.id)
                 });
             } else {
-                newOrders.push(orderData);
+                newOrders.push({...orderData, shopId });
             }
         }
 
