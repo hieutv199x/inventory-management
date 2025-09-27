@@ -168,19 +168,19 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({ order, isOpen, onCl
 
     const formatDeliveryAddress = () => {
         const fullAddress = order.recipientAddress?.fullAddress || '';
-        // Tách địa chỉ: mặc định lấy 3 phần cuối làm county/state/country, phần còn lại làm địa chỉ
+        // Tách địa chỉ: mặc định luôn lấy 3 phần cuối làm county/state/country, phần còn lại gộp vào dòng 1
         const addressParts = fullAddress.split(',').map((part: string) => part.trim());
         
         let streetAddress = '';
         let cityStateCountry = '';
         
-        if (addressParts.length >= 4) {
-            // Lấy 3 phần cuối làm county/state/country
+        if (addressParts.length > 3) {
+            // Luôn lấy 3 phần cuối làm county/state/country
             cityStateCountry = addressParts.slice(-3).join(', ');
-            // Phần còn lại làm địa chỉ
+            // Tất cả phần còn lại gộp vào dòng 1
             streetAddress = addressParts.slice(0, -3).join(', ');
         } else if (addressParts.length === 3) {
-            // Nếu có 3 phần: lấy 2 phần cuối
+            // Nếu có đúng 3 phần: lấy 2 phần cuối
             streetAddress = addressParts[0];
             cityStateCountry = addressParts.slice(1).join(', ');
         } else if (addressParts.length === 2) {
