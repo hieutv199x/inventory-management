@@ -168,17 +168,21 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({ order, isOpen, onCl
 
     const formatDeliveryAddress = () => {
         const fullAddress = order.recipientAddress?.fullAddress || '';
-        // Tách địa chỉ thông minh: 2 phần đầu gộp lại, phần còn lại tách riêng
+        // Tách địa chỉ: mặc định luôn lấy 3 phần cuối làm county/state/country, phần còn lại gộp vào dòng 1
         const addressParts = fullAddress.split(',').map((part: string) => part.trim());
         
         let streetAddress = '';
         let cityStateCountry = '';
         
-        if (addressParts.length >= 3) {
-            // Gộp 2 phần đầu: số nhà/tên đường + thành phố đầu tiên
-            streetAddress = addressParts.slice(0, 2).join(', ');
-            // Phần còn lại: vùng/tỉnh/quốc gia
-            cityStateCountry = addressParts.slice(2).join(', ');
+        if (addressParts.length > 3) {
+            // Luôn lấy 3 phần cuối làm county/state/country
+            cityStateCountry = addressParts.slice(-3).join(', ');
+            // Tất cả phần còn lại gộp vào dòng 1
+            streetAddress = addressParts.slice(0, -3).join(', ');
+        } else if (addressParts.length === 3) {
+            // Nếu có đúng 3 phần: lấy 2 phần cuối
+            streetAddress = addressParts[0];
+            cityStateCountry = addressParts.slice(1).join(', ');
         } else if (addressParts.length === 2) {
             // Nếu chỉ có 2 phần thì tách như cũ
             streetAddress = addressParts[0];

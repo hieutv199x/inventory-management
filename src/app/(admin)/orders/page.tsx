@@ -673,24 +673,26 @@ export default function OrdersPage() {
         // Parse fullAddress to separate street address from city/state/country
         const fullAddress = address.fullAddress || '';
         const addressParts = fullAddress.split(',').map(part => part.trim());
-
+        
         let streetAddress = '';
         let cityStateCountry = '';
         
-        if (addressParts.length >= 3) {
-            // Gộp 2 phần đầu: số nhà/tên đường + thành phố đầu tiên
-            streetAddress = addressParts.slice(0, 2).join(', ');
-            // Phần còn lại: vùng/tỉnh/quốc gia
-            cityStateCountry = addressParts.slice(2).join(', ');
+        if (addressParts.length > 3) {
+            // Luôn lấy 3 phần cuối làm county/state/country
+            cityStateCountry = addressParts.slice(-3).join(', ');
+            // Tất cả phần còn lại gộp vào dòng 1
+            streetAddress = addressParts.slice(0, -3).join(', ');
+        } else if (addressParts.length === 3) {
+            // Nếu có đúng 3 phần: lấy 2 phần cuối
+            streetAddress = addressParts[0];
+            cityStateCountry = addressParts.slice(1).join(', ');
         } else if (addressParts.length === 2) {
             // Nếu chỉ có 2 phần thì tách như cũ
             streetAddress = addressParts[0];
             cityStateCountry = addressParts[1];
         } else {
             streetAddress = fullAddress;
-        }
-
-        const customerInfo = [
+        }        const customerInfo = [
             `${address.name || 'N/A'}`,
             `${address.phoneNumber || 'N/A'}`,
             `${streetAddress || 'N/A'}`,
