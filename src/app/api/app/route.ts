@@ -1,6 +1,6 @@
-import {NextRequest, NextResponse} from "next/server";
-import {checkRole, validateToken} from "@/lib/auth-middleware";
-import {prisma} from "@/lib/prisma";
+import { NextRequest, NextResponse } from "next/server";
+import { validateToken } from "@/lib/auth-middleware";
+import { prisma } from "@/lib/prisma";
 
 export async function GET(request: NextRequest) {
     try {
@@ -24,20 +24,22 @@ export async function GET(request: NextRequest) {
             where: {
                 isActive: true
             },
-            include:{
+            include: {
                 // Count of shops using this app
                 _count: {
                     select: { authorizations: true }
                 }
             },
-            orderBy: {
-                appName: 'asc'
-            }
+            // Prisma MongoDB does not support relation count ordering directly; fetch and sort in JS below
         });
 
-        return NextResponse.json({ app });
+        // Sort by authorizations count ascending in JS
+        const sortedApp = app.sort(
+            (a, b) => (a._count?.authorizations ?? 0) - (b._count?.authorizations ?? 0)
+        );
+
+        return NextResponse.json({ app: sortedApp });
     } catch (error) {
-        console.error('Error fetching app:', error);
         return NextResponse.json(
             { error: 'Failed to fetch app' },
             { status: 500 }
