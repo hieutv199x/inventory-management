@@ -19,9 +19,9 @@ interface App {
   appName: string | null;
   createdAt: string;
   isActive: boolean;
-  _count?: {
-    authorizations: number;
-  };
+  // API may return a JSON string or an object
+  config: { country?: string } | string;
+  _count?: { authorizations: number };
 }
 
 interface AppListModalProps {
@@ -35,7 +35,7 @@ interface AppListModalProps {
   onSaveAppSecret: (id: string) => void;
   onCancelEdit: () => void;
   onDeleteApp: (app: App) => void;
-  onCopyAuthUrl: (serviceId: string, appName: string) => void;
+  onCopyAuthUrl: (serviceId: string, appName: string, country?: string) => void;
   onEditSecretChange: (value: string) => void;
 }
 
@@ -72,6 +72,9 @@ const AppListModal: React.FC<AppListModalProps> = ({
                 Tên App
               </TableCell>
               <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
+                Quốc gia
+              </TableCell>
+              <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
                 Service ID
               </TableCell>
               <TableCell isHeader className="py-3 font-medium text-gray-500 text-start text-xs dark:text-gray-400">
@@ -97,13 +100,20 @@ const AppListModal: React.FC<AppListModalProps> = ({
           <TableBody className="divide-y divide-gray-100 dark:divide-gray-800">
             {appList.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="py-12 text-center text-gray-500 dark:text-gray-400">
+                <TableCell colSpan={10} className="py-12 text-center text-gray-500 dark:text-gray-400">
                   Không có app nào
                 </TableCell>
               </TableRow>
             ) : (
               appList.map((app, idx) => {
                 const isEditing = editingAppId === app.id;
+                let parsedConfig: { country?: string } = {};
+                if (typeof app.config === 'string') {
+                  try { parsedConfig = JSON.parse(app.config); } catch { parsedConfig = {}; }
+                } else {
+                  parsedConfig = app.config;
+                }
+                const country = (parsedConfig.country || '').toUpperCase();
                 return (
                   <TableRow key={app.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
                     <TableCell className="py-3 text-gray-700 dark:text-gray-300">
@@ -111,6 +121,9 @@ const AppListModal: React.FC<AppListModalProps> = ({
                     </TableCell>
                     <TableCell className="py-3 text-gray-700 dark:text-gray-300 font-medium">
                       {app.appName || 'N/A'}
+                    </TableCell>
+                    <TableCell className="py-3 text-gray-700 dark:text-gray-300 font-medium">
+                      {country || 'N/A'}
                     </TableCell>
                     <TableCell className="py-3 text-gray-700 dark:text-gray-300 font-mono text-sm">
                       {app.appId}
@@ -154,7 +167,7 @@ const AppListModal: React.FC<AppListModalProps> = ({
                     <TableCell className="py-3">
                       <div className="flex items-center space-x-2">
                         <button
-                          onClick={() => onCopyAuthUrl(app.appId, app.appName || 'Unknown App')}
+                          onClick={() => onCopyAuthUrl(app.appId, app.appName || 'Unknown App', country || 'US')}
                           className="text-blue-600 hover:text-blue-800 dark:text-blue-400 transition-colors"
                           title="Sao chép URL ủy quyền"
                         >

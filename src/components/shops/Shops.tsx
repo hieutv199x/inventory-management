@@ -42,6 +42,8 @@ interface App {
   appName: string | null;
   createdAt: string;
   isActive: boolean;
+  config: { country?: string } | string; // ensure compatibility with AppListModal
+  _count?: { authorizations: number };
 }
 
 export default function Shops() {
@@ -254,8 +256,10 @@ export default function Shops() {
     }
   };
 
-  const handleCopyAuthUrl = async (serviceId: string, appName: string) => {
-    const authUrl = `https://services.tiktokshop.com/open/authorize?service_id=${serviceId}`;
+  const handleCopyAuthUrl = async (serviceId: string, appName: string, country?: string) => {
+    const isUS = (country || '').toUpperCase() === 'US';
+    const base = isUS ? 'https://services.us.tiktokshop.com' : 'https://services.tiktokshop.com';
+    const authUrl = `${base}/open/authorize?service_id=${serviceId}`;
 
     try {
       await navigator.clipboard.writeText(authUrl);
