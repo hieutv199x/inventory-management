@@ -278,6 +278,7 @@ async function processProductBatch(products: any[], shopObjectId: string, client
                         }),
                         brandId: brandRecord?.id ?? null,
                         auditId: auditRecord?.id ?? null,
+                        orgId: credentials.orgId,
                     }
                 });
 

@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 import { getUserWithShopAccess } from "@/lib/auth";
+import { resolveOrgContext, requireOrg, withOrgScope } from '@/lib/tenant-context';
 
 const prisma = new PrismaClient();
 
 export async function GET(req: NextRequest) {
   try {
-    const { user, accessibleShopIds, isAdmin } = await getUserWithShopAccess(req, prisma);
+  const { user, accessibleShopIds, isAdmin } = await getUserWithShopAccess(req, prisma);
+  const orgResult = await resolveOrgContext(req, prisma);
+  const org = requireOrg(orgResult);
     const { searchParams } = new URL(req.url);
 
     // Pagination parameters
@@ -46,12 +49,13 @@ export async function GET(req: NextRequest) {
     }
 
     // Get total count for pagination
-    const totalItems = await prisma.statement.count({ where });
+  const scopedWhere = withOrgScope(org.id, where);
+  const totalItems = await prisma.statement.count({ where: scopedWhere });
     const totalPages = Math.ceil(totalItems / limit);
 
     // Get statements with pagination
     const statements = await prisma.statement.findMany({
-      where,
+      where: scopedWhere,
       include: {
         shop: {
           select: {

@@ -105,7 +105,7 @@ export class TikTokUnsettledTransactionSync {
                         for (const transaction of body.data.transactions) {
                             try {
                                 processedCount++;
-                                await this.saveTransaction(options.shop_id, transaction);
+                                await this.saveTransaction(options.shop_id, transaction, shop.orgId);
                                 successCount++;
                             } catch (error: any) {
                                 errors.push(`Failed to save transaction ${transaction.id}: ${error.message}`);
@@ -152,7 +152,7 @@ export class TikTokUnsettledTransactionSync {
         }
     }
 
-    private async saveTransaction(shopId: string, transaction: any): Promise<void> {
+    private async saveTransaction(shopId: string, transaction: any, orgId: string): Promise<void> {
         await this.prisma.tiktokUnsettledTransaction.upsert({
             where: {
                 transactionId: transaction.id || ''
@@ -198,7 +198,8 @@ export class TikTokUnsettledTransactionSync {
                 shippingCostBreakdown: transaction.shippingCostBreakdown ? JSON.parse(JSON.stringify(transaction.shippingCostBreakdown)) : {},
                 status: transaction.status,
                 type: transaction.type,
-                unsettledReason: transaction.unsettledReason
+                unsettledReason: transaction.unsettledReason,
+                orgId: orgId,
             }
         });
     }

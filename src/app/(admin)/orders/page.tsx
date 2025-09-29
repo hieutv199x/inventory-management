@@ -650,10 +650,16 @@ export default function OrdersPage() {
     const getLineItemImages = (order: Order) => {
         return order.lineItems?.map(item => {
             const itemChannelData = parseChannelData(item.channelData ?? '');
+            // Prefer the explicit skuName field; fall back to possible locations in channelData
+            const skuName = (item as any).skuName
+                || itemChannelData?.skuName
+                || itemChannelData?.sku?.name
+                || itemChannelData?.name;
             return {
                 image: itemChannelData.skuImage,
                 productName: item.productName,
-                id: item.id
+                id: item.id,
+                skuName: typeof skuName === 'string' ? skuName : undefined
             };
         }).filter(item => item.image) || [];
     };
@@ -1267,30 +1273,38 @@ export default function OrdersPage() {
 
                                             {/* Items Images - Product images from line items */}
                                             <td className="px-6 py-4">
-                                                <div className="flex flex-wrap gap-1 max-w-32">
+                                                <div className="flex flex-wrap gap-2 max-w-40">
                                                     {itemImages.length > 0 ? (
                                                         itemImages.slice(0, 4).map((item, imgIndex) => (
                                                             <div
                                                                 key={`${item.id}-${imgIndex}`}
-                                                                className="relative w-12 h-12 bg-gray-100 dark:bg-gray-700 rounded overflow-hidden"
+                                                                className="flex flex-col items-center w-14"
+                                                                title={item.productName + (item.skuName ? ` / ${item.skuName}` : '')}
                                                             >
-                                                                <Image
-                                                                    src={item.image}
-                                                                    alt={item.productName}
-                                                                    width={48}
-                                                                    height={48}
-                                                                    className="w-full h-full object-cover"
-                                                                    unoptimized
-                                                                />
+                                                                <div className="relative w-14 h-14 bg-gray-100 dark:bg-gray-700 rounded overflow-hidden ring-1 ring-gray-200 dark:ring-gray-600">
+                                                                    <Image
+                                                                        src={item.image}
+                                                                        alt={item.productName}
+                                                                        width={56}
+                                                                        height={56}
+                                                                        className="w-full h-full object-cover"
+                                                                        unoptimized
+                                                                    />
+                                                                </div>
+                                                                {item.skuName && (
+                                                                    <span className="mt-1 text-[10px] leading-tight text-center text-gray-600 dark:text-gray-400 line-clamp-2 w-full" style={{ WebkitLineClamp: 2 }}>
+                                                                        {item.skuName}
+                                                                    </span>
+                                                                )}
                                                             </div>
                                                         ))
                                                     ) : (
-                                                        <div className="w-12 h-12 bg-gray-100 dark:bg-gray-700 rounded flex items-center justify-center">
+                                                        <div className="w-14 h-14 bg-gray-100 dark:bg-gray-700 rounded flex items-center justify-center">
                                                             <Package className="h-4 w-4 text-gray-400" />
                                                         </div>
                                                     )}
                                                     {itemImages.length > 4 && (
-                                                        <div className="w-12 h-12 bg-gray-200 dark:bg-gray-600 rounded flex items-center justify-center">
+                                                        <div className="w-14 h-14 bg-gray-200 dark:bg-gray-600 rounded flex items-center justify-center">
                                                             <span className="text-xs font-medium text-gray-600 dark:text-gray-300">
                                                                 +{itemImages.length - 4}
                                                             </span>

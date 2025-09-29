@@ -70,6 +70,9 @@ model User {
   // Scheduler relations
   createdJobs     SchedulerJob[]
   schedulerConfigs SchedulerConfig[]
+  // Organization memberships (multi-tenant)
+  organizationMemberships OrganizationMember[]
+  auditLogs AuditLog[]
 }
 
 enum UserRole {
@@ -78,6 +81,7 @@ enum UserRole {
   RESOURCE
   ACCOUNTANT
   SELLER
+  SUPER_ADMIN
 }
 
 model Session {
@@ -86,6 +90,8 @@ model Session {
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   expires      DateTime
   sessionToken String   @unique
+  // Active organization (tenant) context; nullable until user selects when multi-org
+  activeOrgId  String?  @db.ObjectId
 }
  
 // Restored ChannelApp model (previously corrupted by patch)
@@ -173,8 +179,12 @@ model ShopAuthorization {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  // Organization ownership (tenant) - nullable during migration
+  orgId String @db.ObjectId
+  organization Organization @relation(fields: [orgId], references: [id])
   
   @@map("shop_authorizations")
+  @@index([orgId])
 }
 
 // Update Product model to be channel-agnostic
@@ -233,6 +243,9 @@ model Product {
 
   createdAt                  DateTime @default(now())
   updatedAt                  DateTime @updatedAt
+  // Organization scope
+  orgId String @db.ObjectId
+  organization Organization @relation(fields: [orgId], references: [id])
 }
 
 model Brand {
@@ -376,7 +389,12 @@ model BankAccount {
 
   historyActions BankHistory[]
 
+  // Organization scope
+  orgId String @db.ObjectId
+  organization Organization @relation(fields: [orgId], references: [id])
+
   @@map("bank_accounts")
+  @@index([orgId])
 }
 
 model BankHistory {
@@ -393,6 +411,10 @@ model BankHistory {
   bank      BankAccount? @relation(fields: [bankId], references: [id])
 
   @@map("bank_history")
+  // Organization scope (denormalized via bank/user)
+  orgId String @db.ObjectId
+  organization Organization @relation(fields: [orgId], references: [id])
+  @@index([orgId])
 }
 
 enum BankStatus {
@@ -433,8 +455,12 @@ model Payment {
 
   createdAt                      DateTime @default(now())
   updatedAt                      DateTime @updatedAt
+  // Organization scope
+  orgId String @db.ObjectId
+  organization Organization @relation(fields: [orgId], references: [id])
   
   @@map("payments")
+  @@index([orgId])
 }
 
 // Rename and unify Statement model
@@ -464,8 +490,12 @@ model Statement {
 
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
+  // Organization scope
+  orgId String @db.ObjectId
+  organization Organization @relation(fields: [orgId], references: [id])
   
   @@map("statements")
+  @@index([orgId])
 }
 
 // Rename and unify Withdrawal model
@@ -489,8 +519,12 @@ model Withdrawal {
   
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+  // Organization scope
+  orgId String @db.ObjectId
+  organization Organization @relation(fields: [orgId], references: [id])
   
   @@map("withdrawals")
+  @@index([orgId])
 }
 
 // Rename and unify Order model
@@ -579,6 +613,10 @@ model Order {
   splitAttributesRaw      String?                          // Raw JSON for full split_attributes entry
 
   @@map("orders")
+  // Organization scope
+  orgId String @db.ObjectId
+  organization Organization @relation(fields: [orgId], references: [id])
+  @@index([orgId])
 }
 
 // Rename TikTokOrderLineItem to OrderLineItem (universal)
@@ -613,6 +651,10 @@ model OrderLineItem {
   updatedAt             DateTime @updatedAt
   
   @@map("order_line_items")
+  // Organization scope (denormalized for query performance)
+  orgId String @db.ObjectId
+  organization Organization @relation(fields: [orgId], references: [id])
+  @@index([orgId])
 }
 
 // Rename and keep other order-related models with channel support
@@ -728,6 +770,10 @@ model OrderPackage {
   @@index([trackingNumber])
   @@index([status])
   @@map("order_packages")
+  // Organization scope (denormalized)
+  orgId String @db.ObjectId
+  organization Organization @relation(fields: [orgId], references: [id])
+  @@index([orgId])
 }
 
 // Rename and unify Conversation model
@@ -760,6 +806,10 @@ model Conversation {
   updatedAt         DateTime @updatedAt
   
   @@map("conversations")
+  // Organization scope
+  orgId String @db.ObjectId
+  organization Organization @relation(fields: [orgId], references: [id])
+  @@index([orgId])
 }
 
 model ConversationParticipant {
@@ -820,6 +870,10 @@ model ConversationMessage {
   updatedAt         DateTime @updatedAt
   
   @@map("conversation_messages")
+  // Organization scope (denormalized)
+  orgId String @db.ObjectId
+  organization Organization @relation(fields: [orgId], references: [id])
+  @@index([orgId])
 }
 
 // New notification models
@@ -850,6 +904,10 @@ model Notification {
   updatedAt   DateTime          @updatedAt
   
   @@map("notifications")
+  // Organization scope
+  orgId String @db.ObjectId
+  organization Organization @relation(fields: [orgId], references: [id])
+  @@index([orgId])
 }
 
 enum NotificationType {
@@ -911,6 +969,10 @@ model TikTokTransaction {
   @@index([type])
   @@index([reserveStatus])
   @@map("tiktok_transactions")
+  // Organization scope (derived from shop/order) - denormalized
+  orgId String @db.ObjectId
+  organization Organization @relation(fields: [orgId], references: [id])
+  @@index([orgId])
 }
 
 model TiktokUnsettledTransaction {
@@ -955,6 +1017,10 @@ model TiktokUnsettledTransaction {
   @@index([orderCreateTime])
   @@index([orderId])
   @@index([adjustmentId])
+  // Organization scope (derived from shop/order) - denormalized
+  orgId String @db.ObjectId
+  organization Organization @relation(fields: [orgId], references: [id])
+  @@index([orgId])
 }
 
 // Scheduler models
@@ -1029,8 +1095,12 @@ model SchedulerJob {
   // Relations
   executions      JobExecution[]
   logs            JobLog[]
+  // Organization scope (nullable for global/system jobs)
+  orgId String @db.ObjectId
+  organization Organization @relation(fields: [orgId], references: [id])
   
   @@map("scheduler_jobs")
+  @@index([orgId])
 }
 
 model JobExecution {
@@ -1064,6 +1134,10 @@ model JobExecution {
   updatedAt       DateTime        @updatedAt
   
   @@map("job_executions")
+  // Organization scope (denormalized from job)
+  orgId String @db.ObjectId
+  organization Organization @relation(fields: [orgId], references: [id])
+  @@index([orgId])
 }
 
 model JobLog {
@@ -1081,6 +1155,10 @@ model JobLog {
   timestamp       DateTime        @default(now())
   
   @@map("job_logs")
+  // Organization scope (denormalized from job)
+  orgId String @db.ObjectId
+  organization Organization @relation(fields: [orgId], references: [id])
+  @@index([orgId])
 }
 
 enum LogLevel {
@@ -1142,4 +1220,99 @@ model TikTokWebhook {
 
   @@index([shopId, orderId])
   @@index([createdAt])
+  // Organization scope (derived from shop) - denormalized
+  orgId String? @db.ObjectId
+  organization Organization? @relation(fields: [orgId], references: [id])
+  @@index([orgId])
 }
+
+// ===================== Multi-Tenancy (SaaS) Additions =====================
+
+enum OrganizationStatus {
+  ACTIVE
+  SUSPENDED
+  CLOSED
+}
+
+enum OrganizationRole {
+  OWNER
+  ADMIN
+  OPERATOR
+  ACCOUNTANT
+  VIEWER
+  DEV
+}
+
+model Organization {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  name      String
+  slug      String   @unique
+  status    OrganizationStatus @default(ACTIVE)
+  planId    String?
+  featureOverrides String? // JSON string
+  metadata  String? // JSON string
+  primaryContactUserId String? @db.ObjectId
+  members   OrganizationMember[]
+  // Reverse relations for tenant-scoped entities
+  shopAuthorizations      ShopAuthorization[]
+  products                Product[]
+  bankAccounts            BankAccount[]
+  bankHistories           BankHistory[]
+  payments                Payment[]
+  statements              Statement[]
+  withdrawals             Withdrawal[]
+  orders                  Order[]
+  orderLineItems          OrderLineItem[]
+  orderPackages           OrderPackage[]
+  conversations           Conversation[]
+  conversationMessages    ConversationMessage[]
+  notifications           Notification[]
+  tiktokTransactions      TikTokTransaction[]
+  tiktokUnsettledTransactions TiktokUnsettledTransaction[]
+  schedulerJobs           SchedulerJob[]
+  jobExecutions           JobExecution[]
+  jobLogs                 JobLog[]
+  tiktokWebhooks          TikTokWebhook[]
+  auditLogs               AuditLog[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model OrganizationMember {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  orgId     String   @db.ObjectId
+  userId    String   @db.ObjectId
+  role      OrganizationRole
+  invitedBy String?  @db.ObjectId
+  inviteStatus String @default("ACCEPTED") // PENDING | ACCEPTED | DECLINED | EXPIRED
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization Organization @relation(fields: [orgId], references: [id])
+  user         User         @relation(fields: [userId], references: [id])
+
+  @@unique([orgId, userId])
+  @@index([userId])
+  @@index([orgId])
+}
+
+// ===================== Audit Logging =====================
+model AuditLog {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  orgId     String   @db.ObjectId
+  organization Organization @relation(fields: [orgId], references: [id])
+  userId    String?  @db.ObjectId
+  user      User?    @relation(fields: [userId], references: [id])
+  action    String
+  entityId  String?  @db.ObjectId
+  entityType String?
+  metadata  String?  // JSON string
+  level     String   @default("INFO")
+  createdAt DateTime @default(now())
+
+  @@index([orgId])
+  @@index([userId])
+  @@index([action])
+  @@map("audit_logs")
+}
+

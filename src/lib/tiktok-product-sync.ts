@@ -20,7 +20,7 @@ interface CreateSyncClientResult {
 async function createClientForShop(shopId: string): Promise<CreateSyncClientResult> {
     const credentials = await prisma.shopAuthorization.findUnique({
         where: { shopId, status: 'ACTIVE' },
-        include: { app: true }
+        include: { app: true, organization: true },
     });
     if (!credentials) throw new Error('Shop not found or inactive');
     if (credentials.app?.channel !== 'TIKTOK') throw new Error('Not a TikTok shop');

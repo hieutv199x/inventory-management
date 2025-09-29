@@ -53,6 +53,7 @@ export async function syncStatements(
       accessToken: shop.accessToken,
       shopCipher: shopCipher,
       app: shop.app,
+      orgId: shop.orgId
     };
 
     if (!credentials.accessToken || !credentials.shopCipher) {
@@ -87,7 +88,7 @@ export async function syncStatements(
     // Process each statement
     for (const statement of statements) {
       try {
-        await upsertStatement(prisma, shop.id, statement);
+        await upsertStatement(prisma, shop.id, statement, shop.orgId);
         statementsSynced++;
       } catch (err: any) {
         errors.push(`Statement ${statement.id}: ${err.message}`);
@@ -211,7 +212,7 @@ async function fetchAllStatements(
   return allStatements;
 }
 
-async function upsertStatement(prisma: PrismaClient, shopId: string, statement: any) {
+async function upsertStatement(prisma: PrismaClient, shopId: string, statement: any, orgId: string) {
   const statementData = {
     statementId: statement.id,
     channel: Channel.TIKTOK,
@@ -221,6 +222,7 @@ async function upsertStatement(prisma: PrismaClient, shopId: string, statement: 
     paymentStatus: statement.paymentStatus,
     paymentId: statement.paymentId,
     shopId: shopId,
+    orgId: orgId,
     channelData: JSON.stringify({
       revenueAmount: statement.revenueAmount,
       feeAmount: statement.feeAmount,
@@ -310,7 +312,7 @@ async function fetchAndStoreStatementTransactions(
     let savedTransactions = 0;
     for (const transaction of allTransactions) {
       try {
-        await upsertTikTokTransaction(prisma, shopId, statementId, transaction);
+        await upsertTikTokTransaction(prisma, shopId, statementId, transaction, credentials.orgId);
         savedTransactions++;
       } catch (transactionErr) {
         console.error(`Failed to save transaction ${transaction.transactionId}:`, transactionErr);
@@ -329,7 +331,8 @@ async function upsertTikTokTransaction(
   prisma: PrismaClient,
   shopId: string,
   statementId: string,
-  transaction: any
+  transaction: any,
+  orgId: string
 ) {
   const transactionData = {
     transactionId: transaction.id,
@@ -364,6 +367,7 @@ async function upsertTikTokTransaction(
     shippingCostBreakdown: transaction.shippingCostBreakdown ? JSON.parse(JSON.stringify(transaction.shippingCostBreakdown)) : null,
     feeTaxBreakdown: transaction.feeTaxBreakdown ? JSON.parse(JSON.stringify(transaction.feeTaxBreakdown)) : null,
     supplementaryComponent: transaction.supplementaryComponent ? JSON.parse(JSON.stringify(transaction.supplementaryComponent)) : null,
+    orgId: orgId,
   };
 
   // Check if transaction already exists

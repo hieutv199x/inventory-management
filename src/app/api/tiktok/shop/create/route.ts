@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 import { getUserWithShopAccess } from '@/lib/auth';
+import { requireOrg, resolveOrgContext } from '@/lib/tenant-context';
 
 const prisma = new PrismaClient();
 
@@ -13,28 +14,31 @@ export async function POST(request: NextRequest) {
   try {
     const { user, isAdmin } = await getUserWithShopAccess(request, prisma);
 
+    const orgResult = await resolveOrgContext(request, prisma);
+    const org = requireOrg(orgResult);
+
     // Only admins can create shop authorizations
     if (!isAdmin) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     const body = await request.json();
-    const { 
-      shopId, 
-      shopName, 
+    const {
+      shopId,
+      shopName,
       shopCipher,
       region,
-      appId, 
-      accessToken, 
-      refreshToken, 
-      expiresIn, 
-      scope 
+      appId,
+      accessToken,
+      refreshToken,
+      expiresIn,
+      scope
     } = body;
 
     // Validate required fields
     if (!shopId || !appId || !accessToken) {
       return NextResponse.json(
-        { error: 'Missing required fields: shopId, appId, accessToken' }, 
+        { error: 'Missing required fields: shopId, appId, accessToken' },
         { status: 400 }
       );
     }
@@ -46,7 +50,7 @@ export async function POST(request: NextRequest) {
 
     if (!app || app.channel !== 'TIKTOK') {
       return NextResponse.json(
-        { error: 'Invalid TikTok app' }, 
+        { error: 'Invalid TikTok app' },
         { status: 400 }
       );
     }
@@ -67,14 +71,15 @@ export async function POST(request: NextRequest) {
         expiresIn,
         scope,
         channelData: JSON.stringify(channelData),
-        status: 'ACTIVE'
+        status: 'ACTIVE',
+        orgId: org.id,
       },
       include: {
         app: true
       }
     });
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       shop: {
         ...shop,
         channelData: shop.channelData ? JSON.parse(shop.channelData) : null

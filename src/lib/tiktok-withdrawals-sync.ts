@@ -86,7 +86,7 @@ export async function syncWithdrawals(
     // Process each withdrawal
     for (const withdrawal of withdrawals) {
       try {
-        await upsertWithdrawal(prisma, shop.id, withdrawal);
+        await upsertWithdrawal(prisma, shop.id, withdrawal, shop.orgId);
         withdrawalsSynced++;
       } catch (err: any) {
         errors.push(`Withdrawal ${withdrawal.withdrawalId}: ${err.message}`);
@@ -180,7 +180,7 @@ async function fetchAllWithdrawals(
   return allWithdrawals;
 }
 
-async function upsertWithdrawal(prisma: PrismaClient, shopId: string, withdrawal: any) {
+async function upsertWithdrawal(prisma: PrismaClient, shopId: string, withdrawal: any, orgId: string) {
   const withdrawalData = {
     withdrawalId: withdrawal.withdrawalId,
     channel: Channel.TIKTOK,
@@ -190,6 +190,7 @@ async function upsertWithdrawal(prisma: PrismaClient, shopId: string, withdrawal
     type: withdrawal.type,
     createTime: withdrawal.createTime,
     shopId: shopId,
+    orgId: orgId,
     channelData: JSON.stringify({
       originalWithdrawal: withdrawal,
       syncedAt: Date.now(),

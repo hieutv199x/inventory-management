@@ -49,7 +49,8 @@ export const getUserWithShopAccess = async (request: NextRequest, prisma: Prisma
                         }
                     }
                 }
-            }
+            },
+            organizationMemberships: true
         }
     });
 

@@ -2,168 +2,129 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 import { verifyToken } from "@/lib/auth";
+import { resolveOrgContext } from '@/lib/tenant-context';
 
 // Get all users (Admin and Manager only)
 export async function GET(request: NextRequest) {
   try {
-    const decoded = verifyToken(request);
+    // Resolve organization context (also authenticates)
+    const orgResult = await resolveOrgContext(request, prisma as any);
 
-    // Get current user
-    const currentUser = await prisma.user.findUnique({
-      where: { id: decoded.userId },
-    });
-
-    if (!currentUser) {
-      return NextResponse.json(
-        { error: "User not found" },
-        { status: 404 }
-      );
+    // Super admin must still have an active organization selected to view scoped users
+    if (orgResult.superAdmin && !orgResult.org) {
+      return NextResponse.json({ error: 'ACTIVE_ORG_REQUIRED' }, { status: 409 });
     }
 
-    // Check if user has permission (Admin or Manager only)
-    if (!["ADMIN", "MANAGER"].includes(currentUser.role)) {
-      return NextResponse.json(
-        { error: "Insufficient permissions" },
-        { status: 403 }
-      );
+    if (!orgResult.org) {
+      return NextResponse.json({ error: 'ORGANIZATION_CONTEXT_REQUIRED' }, { status: 409 });
+    }
+
+    // Check membership role (only OWNER / ADMIN of the active org can list users)
+    if (!orgResult.superAdmin) {
+      const activeMembership = orgResult.memberships.find(m => m.orgId === orgResult.org!.id);
+      if (!activeMembership || !['OWNER', 'ADMIN'].includes(activeMembership.role)) {
+        return NextResponse.json({ error: 'FORBIDDEN' }, { status: 403 });
+      }
     }
 
     const { searchParams } = new URL(request.url);
-    const page = parseInt(searchParams.get("page") || "1", 10);
-    const limit = parseInt(searchParams.get("limit") || "10", 10);
-    const search = searchParams.get("search") || "";
-    const role = searchParams.get("role") || "";
+    const page = parseInt(searchParams.get('page') || '1', 10);
+    const limit = parseInt(searchParams.get('limit') || '10', 10);
+    const search = searchParams.get('search') || '';
+    const role = searchParams.get('role') || '';
 
     const skip = (page - 1) * limit;
 
-    // Build where clause
-    const where: any = {};
-
+    // Build membership-scoped where clause referencing user fields
+    const membershipWhere: any = { orgId: orgResult.org.id };
     if (search) {
-      where.OR = [
-        { name: { contains: search, mode: "insensitive" } },
-        { email: { contains: search, mode: "insensitive" } },
-      ];
+      membershipWhere.user = {
+        ...(membershipWhere.user || {}),
+        OR: [
+          { name: { contains: search, mode: 'insensitive' } },
+          { username: { contains: search, mode: 'insensitive' } },
+        ]
+      };
     }
-
     if (role) {
-      where.role = role;
+      membershipWhere.user = {
+        ...(membershipWhere.user || {}),
+        role
+      };
     }
 
-    // Role-based filtering
-    if (!["ADMIN", "MANAGER"].includes(currentUser.role)) {
-      // Non-admin users can only see users they created or themselves
-      where.OR = [
-        { id: currentUser.id },
-        { createdBy: currentUser.id },
-      ];
-    }
-
-    // Get paginated users without shop relations first
-    const users = await prisma.user.findMany({
-      where,
-      select: {
-        id: true,
-        name: true,
-        username: true,
-        role: true,
-        isActive: true,
-        createdAt: true,
-        updatedAt: true,
-        createdBy: true,
-        // Include creator information
-        creator: {
+    // Query organization members with included user data
+    const memberships = await prisma.organizationMember.findMany({
+      where: membershipWhere,
+      include: {
+        user: {
           select: {
             id: true,
             name: true,
             username: true,
-          },
-        },
+            role: true,
+            isActive: true,
+            createdAt: true,
+            updatedAt: true,
+            createdBy: true,
+            creator: {
+              select: { id: true, name: true, username: true }
+            }
+          }
+        }
       },
-      orderBy: {
-        createdAt: "desc",
-      },
+      orderBy: { createdAt: 'desc' }, // membership creation time
       skip,
-      take: limit,
+      take: limit
     });
 
-    // Get total count
-    const totalCount = await prisma.user.count({ where });
+    const totalCount = await prisma.organizationMember.count({ where: membershipWhere });
     const totalPages = Math.ceil(totalCount / limit);
 
-    // Manually fetch user shop roles with proper error handling
+    // Extract users and then load shop roles (keeping previous behavior)
+    const baseUsers = memberships.map(m => ({ ...m.user, organizationRole: m.role }));
+
     const usersWithShopRoles = await Promise.all(
-      users.map(async (user) => {
+      baseUsers.map(async (user) => {
         try {
-          // Get user shop roles separately
           const userShopRoles = await prisma.userShopRole.findMany({
             where: { userId: user.id },
-            select: {
-              id: true,
-              role: true,
-              shopId: true,
-            },
+            select: { id: true, role: true, shopId: true }
           });
 
-          // For each role, try to get the shop data
-          const rolesWithShops = await Promise.all(
-            userShopRoles.map(async (role) => {
-              try {
-                const shop = await prisma.shopAuthorization.findUnique({
-                  where: { id: role.shopId },
-                  select: {
-                    id: true,
-                    shopId: true,
-                    shopName: true,
-                    status: true,
-                    app: {
-                      select: {
-                        channel: true,
-                        appName: true,
-                      },
-                    },
-                  },
-                });
-
-                return {
-                  id: role.id,
-                  role: role.role,
-                  shop:
-                    shop !== null
-                      ? {
-                          ...shop,
-                          channelName: shop.app?.channel || "UNKNOWN",
-                          appName: shop.app?.appName || "Unknown App",
-                        }
-                      : null,
-                };
-              } catch (error) {
-                console.warn(
-                  `Could not fetch shop for role ${role.id}:`,
-                  error
-                );
-                return {
-                  id: role.id,
-                  role: role.role,
-                  shop: null,
-                };
-              }
-            })
-          );
-
-          // Filter out roles with null shops
-          const validRoles = rolesWithShops.filter((role) => role.shop !== null);
-
-          return {
-            ...user,
-            userShopRoles: validRoles,
-          };
-        } catch (error) {
-          console.warn(`Could not fetch shop roles for user ${user.id}:`, error);
-          return {
-            ...user,
-            userShopRoles: [],
-          };
+            const rolesWithShops = await Promise.all(
+              userShopRoles.map(async (usrRole) => {
+                try {
+                  const shop = await prisma.shopAuthorization.findUnique({
+                    where: { id: usrRole.shopId },
+                    select: {
+                      id: true,
+                      shopId: true,
+                      shopName: true,
+                      status: true,
+                      app: { select: { channel: true, appName: true } }
+                    }
+                  });
+                  return {
+                    id: usrRole.id,
+                    role: usrRole.role,
+                    shop: shop ? {
+                      ...shop,
+                      channelName: shop.app?.channel || 'UNKNOWN',
+                      appName: shop.app?.appName || 'Unknown App'
+                    } : null
+                  };
+                } catch (e) {
+                  console.warn(`Could not fetch shop for role ${usrRole.id}:`, e);
+                  return { id: usrRole.id, role: usrRole.role, shop: null };
+                }
+              })
+            );
+            const validRoles = rolesWithShops.filter(r => r.shop !== null);
+            return { ...user, userShopRoles: validRoles };
+        } catch (e) {
+          console.warn(`Could not fetch shop roles for user ${user.id}:`, e);
+          return { ...user, userShopRoles: [] };
         }
       })
     );
@@ -175,21 +136,15 @@ export async function GET(request: NextRequest) {
         limit,
         total: totalCount,
         totalPages,
-        hasMore: page < totalPages,
-      },
+        hasMore: page < totalPages
+      }
     });
   } catch (error) {
-    console.error("Error fetching users:", error);
-    if (error instanceof Error && error.message === "Authentication required") {
-      return NextResponse.json(
-        { error: "Authentication required" },
-        { status: 401 }
-      );
+    console.error('Error fetching users (org scoped):', error);
+    if (error instanceof Error && error.message === 'Authentication required') {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
     }
-    return NextResponse.json(
-      { error: "Failed to fetch users" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to fetch users' }, { status: 500 });
   } finally {
     await prisma.$disconnect();
   }

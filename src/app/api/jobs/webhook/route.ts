@@ -138,6 +138,7 @@ async function handleOrderStatusChange(webhookData: TikTokWebhookData) {
                     order_status ?? '',
                     webhookData,
                     credentials.id,
+                    credentials.orgId,
                     updatedOrder.createTime ? new Date(updatedOrder.createTime * 1000).setHours(0, 0, 0, 0) / 1000 : Date.now() / 1000
                 );
             }
@@ -151,7 +152,7 @@ async function handleOrderStatusChange(webhookData: TikTokWebhookData) {
     }
 }
 
-async function handleSpecificStatusChanges(orderId: string, newStatus: string, webhookData: TikTokWebhookData, shopId: string, createTime: number) {
+async function handleSpecificStatusChanges(orderId: string, newStatus: string, webhookData: TikTokWebhookData, shopId: string, orgId: string, createTime: number) {
     // Handle specific business logic for different status changes
     switch (newStatus.toLowerCase()) {
         case 'awaiting_shipment':
@@ -165,6 +166,7 @@ async function handleSpecificStatusChanges(orderId: string, newStatus: string, w
                 userId: shopId, // Will be distributed to shop users
                 orderId: orderId,
                 shopId: shopId,
+                orgId,
                 data: {
                     priority: 'high',
                     actionRequired: true,
@@ -183,6 +185,7 @@ async function handleSpecificStatusChanges(orderId: string, newStatus: string, w
                 userId: shopId,
                 orderId: orderId,
                 shopId: shopId,
+                orgId: orgId,
                 data: {
                     trackingAvailable: true,
                     statusChange: 'in_transit'
@@ -204,6 +207,7 @@ async function handleSpecificStatusChanges(orderId: string, newStatus: string, w
                     NotificationType.ORDER_DELIVERED,
                     order,
                     shopId,
+                    orgId,
                     {
                         celebratory: true,
                         completionStatus: 'DELIVERED',
@@ -227,6 +231,7 @@ async function handleSpecificStatusChanges(orderId: string, newStatus: string, w
                 userId: shopId,
                 orderId: orderId,
                 shopId: shopId,
+                orgId: orgId,
                 data: {
                     priority: 'high',
                     refundRequired: true,
@@ -245,6 +250,7 @@ async function handleSpecificStatusChanges(orderId: string, newStatus: string, w
                 userId: shopId,
                 orderId: orderId,
                 shopId: shopId,
+                orgId: orgId,
                 data: {
                     paymentPending: true,
                     statusChange: 'unpaid',
@@ -263,6 +269,7 @@ async function handleSpecificStatusChanges(orderId: string, newStatus: string, w
                 userId: shopId,
                 orderId: orderId,
                 shopId: shopId,
+                orgId: orgId,
                 data: {
                     statusChange: newStatus,
                     generic: true
@@ -295,19 +302,6 @@ async function handleCancellationStatusChange(webhookData: TikTokWebhookData) {
         });
 
         if (!credentials) {
-            // Create system alert for missing shop
-            await NotificationService.createNotification({
-                type: NotificationType.SYSTEM_ALERT,
-                title: 'Lỗi webhook hủy đơn',
-                message: `Nhận webhook hủy đơn cho shop không xác định ${shop_id}`,
-                userId: 'system',
-                data: {
-                    webhookType: 'CANCELLATION_STATUS_CHANGE',
-                    orderId: order_id,
-                    cancellationId: cancellation_id,
-                    shopId: shop_id
-                }
-            });
             return;
         }
 
@@ -329,6 +323,7 @@ async function handleCancellationStatusChange(webhookData: TikTokWebhookData) {
                 message: `Nhận thông tin hủy cho đơn ${order_id} chưa có trong hệ thống, đang đồng bộ từ API`,
                 userId: credentials.id,
                 shopId: credentials.id,
+                orgId: credentials.orgId,
                 data: {
                     orderId: order_id,
                     cancellationId: cancellation_id,
@@ -400,6 +395,7 @@ async function handleCancellationStatusChange(webhookData: TikTokWebhookData) {
             userId: credentials.id,
             orderId: existingOrder.id,
             shopId: credentials.id,
+            orgId: credentials.orgId,
             data: {
                 cancellationId: cancellation_id,
                 cancellationStatus: cancellation_status,
@@ -412,35 +408,15 @@ async function handleCancellationStatusChange(webhookData: TikTokWebhookData) {
         });
 
         // Handle specific cancellation status changes
-        await handleSpecificCancellationStatusChanges(existingOrder.id, cancellation_status ?? "", webhookData, credentials.id);
+        await handleSpecificCancellationStatusChanges(existingOrder.id, cancellation_status ?? "", webhookData, credentials.id, credentials.orgId);
 
     } catch (error) {
         console.error('Error handling cancellation status change:', error);
-
-        // Create error notification
-        try {
-            await NotificationService.createNotification({
-                type: NotificationType.WEBHOOK_ERROR,
-                title: 'Xử lý hủy đơn thất bại',
-                message: `Không thể xử lý hủy cho đơn ${webhookData.data.order_id}: ${error instanceof Error ? error.message : String(error)}`,
-                userId: 'system',
-                data: {
-                    webhookType: 'CANCELLATION_STATUS_CHANGE',
-                    orderId: webhookData.data.order_id,
-                    cancellationId: webhookData.data.cancellation_id,
-                    shopId: webhookData.shop_id,
-                    error: error instanceof Error ? error.message : String(error)
-                }
-            });
-        } catch (notificationError) {
-            console.error('Failed to create error notification:', notificationError);
-        }
-
         throw error;
     }
 }
 
-async function handleSpecificCancellationStatusChanges(orderId: string, cancellationStatus: string, webhookData: TikTokWebhookData, shopId: string) {
+async function handleSpecificCancellationStatusChanges(orderId: string, cancellationStatus: string, webhookData: TikTokWebhookData, shopId: string, orgId: string) {
     const { data } = webhookData;
 
     switch (cancellationStatus?.toLowerCase()) {
@@ -453,6 +429,7 @@ async function handleSpecificCancellationStatusChanges(orderId: string, cancella
                 userId: shopId,
                 orderId: orderId,
                 shopId: shopId,
+                orgId: orgId,
                 data: {
                     priority: 'high',
                     cancelledBy: 'buyer',
@@ -471,6 +448,7 @@ async function handleSpecificCancellationStatusChanges(orderId: string, cancella
                 userId: shopId,
                 orderId: orderId,
                 shopId: shopId,
+                orgId: orgId,
                 data: {
                     priority: 'medium',
                     cancelledBy: 'seller',
@@ -489,6 +467,7 @@ async function handleSpecificCancellationStatusChanges(orderId: string, cancella
                 userId: shopId,
                 orderId: orderId,
                 shopId: shopId,
+                orgId: orgId,
                 data: {
                     priority: 'high',
                     cancelledBy: 'system',
@@ -515,6 +494,7 @@ async function handleSpecificCancellationStatusChanges(orderId: string, cancella
                     NotificationType.ORDER_CANCELLED,
                     order,
                     shopId,
+                    orgId,
                     {
                         cancellationReason: data.cancel_reason,
                         cancelledBy: data.cancel_user,
@@ -539,6 +519,7 @@ async function handleSpecificCancellationStatusChanges(orderId: string, cancella
                 userId: shopId,
                 orderId: orderId,
                 shopId: shopId,
+                orgId: orgId,
                 data: {
                     priority: 'medium',
                     partial: true,
@@ -558,6 +539,7 @@ async function handleSpecificCancellationStatusChanges(orderId: string, cancella
                 userId: shopId,
                 orderId: orderId,
                 shopId: shopId,
+                orgId: orgId,
                 data: {
                     unknownStatus: cancellationStatus,
                     reviewRequired: true
@@ -607,6 +589,7 @@ async function handleSyncProductById(webhookData: TikTokWebhookData) {
             message: `Đã đồng bộ sản phẩm ${data.product_id} (created=${syncResult.created} updated=${syncResult.updated})`,
             userId: shop_id,
             shopId: shop_id,
+            orgId: webhookData.orgId,
             data: {
                 productId: data.product_id,
                 updated: syncResult.updated,
@@ -618,19 +601,6 @@ async function handleSyncProductById(webhookData: TikTokWebhookData) {
         });
     } catch (error) {
         console.error('Error handling product sync webhook:', error);
-        try {
-            await NotificationService.createNotification({
-                type: NotificationType.WEBHOOK_ERROR,
-                title: 'Lỗi xử lý webhook sản phẩm',
-                message: `Không thể xử lý webhook sản phẩm: ${error instanceof Error ? error.message : String(error)}`,
-                userId: 'system',
-                data: {
-                    webhookType: 'PRODUCT_CHANGE',
-                    error: error instanceof Error ? error.message : String(error)
-                }
-            });
-        } catch (notifyErr) {
-            console.error('Failed to create error notification for product webhook:', notifyErr);
-        }
+        throw error;
     }
 }

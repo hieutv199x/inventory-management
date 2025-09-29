@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 import { getUserWithShopAccess } from '@/lib/auth';
+import { resolveOrgContext, requireOrg, withOrgScope } from '@/lib/tenant-context';
+import { audit } from '@/lib/audit';
 
 const prisma = new PrismaClient();
 
 export async function GET(req: NextRequest) {
   try {
     const { user, accessibleShopIds, isAdmin } = await getUserWithShopAccess(req, prisma);
+    const orgResult = await resolveOrgContext(req, prisma);
+    const org = requireOrg(orgResult);
     const { searchParams } = new URL(req.url);
 
     // Pagination parameters
@@ -46,12 +50,14 @@ export async function GET(req: NextRequest) {
     }
 
     // Get total count for pagination
-    const totalItems = await prisma.withdrawal.count({ where });
+    where.orgId = org.id;
+    const scopedWhere = where;
+    const totalItems = await prisma.withdrawal.count({ where: scopedWhere });
     const totalPages = Math.ceil(totalItems / limit);
 
     // Get withdrawals with pagination
     const withdrawals = await prisma.withdrawal.findMany({
-      where,
+      where: scopedWhere,
       include: {
         shop: {
           select: {
@@ -65,6 +71,13 @@ export async function GET(req: NextRequest) {
       },
       skip: offset,
       take: limit
+    });
+
+    await audit(prisma, {
+      orgId: org.id,
+      userId: user.id,
+      action: 'WITHDRAWAL_LIST',
+      metadata: { page, limit, totalItems }
     });
 
     return NextResponse.json({
@@ -82,9 +95,9 @@ export async function GET(req: NextRequest) {
 
   } catch (err: any) {
     console.error('Error fetching withdrawals:', err);
-    return NextResponse.json({ 
+    return NextResponse.json({
       success: false,
-      error: err.message || 'Internal error' 
+      error: err.message || 'Internal error'
     }, { status: 500 });
   } finally {
     await prisma.$disconnect();

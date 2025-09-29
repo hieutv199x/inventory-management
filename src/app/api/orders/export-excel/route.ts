@@ -2,20 +2,26 @@ import { NextRequest, NextResponse } from 'next/server';
 import ExcelJS from 'exceljs';
 import { prisma } from '@/lib/prisma';
 import path from 'path';
+import { requireOrg, resolveOrgContext } from '@/lib/tenant-context';
 
 export async function POST(request: NextRequest) {
   try {
     const { filters, selectedOrderIds } = await request.json();
 
+    const orgResult = await resolveOrgContext(request, prisma);
+    const org = requireOrg(orgResult);
+
     // Build filters for orders table
-    const whereOrder: any = {};
+    const whereOrder: any = {
+      orgId: org.id,
+    };
 
     // If specific order IDs are selected, use them
     if (selectedOrderIds && Array.isArray(selectedOrderIds) && selectedOrderIds.length > 0) {
       whereOrder.id = { in: selectedOrderIds };
     } else {
       // Otherwise, use filters (fallback for backward compatibility)
-      
+
       // Optional shop filter
       if (filters?.shopId) {
         whereOrder.shopId = filters.shopId;

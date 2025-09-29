@@ -95,6 +95,7 @@ export async function POST(req: NextRequest) {
                     scope: granted_scopes.join(','),
                     status: 'ACTIVE',
                     appId: credential.id, // Link to ChannelApp
+                    orgId: user.organizationMemberships?.[0]?.orgId,
                 },
             });
 

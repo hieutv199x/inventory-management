@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { verifyToken } from '@/lib/auth';
+import { requireOrg, resolveOrgContext } from '@/lib/tenant-context';
 
 export async function PUT(
   request: NextRequest,
@@ -9,6 +10,8 @@ export async function PUT(
   try {
     const decoded = verifyToken(request);
     const { id } = await params;
+    const orgResult = await resolveOrgContext(request, prisma);
+    const org = requireOrg(orgResult);
     
     // Only ADMIN and ACCOUNTANT can assign shops
     // if (!['ADMIN', 'ACCOUNTANT'].includes(decoded.role)) {
@@ -23,6 +26,7 @@ export async function PUT(
     // Find shop by name in ShopAuthorization
     const shop = await prisma.shopAuthorization.findFirst({
       where: {
+        orgId: org.id,
         shopId: shopId,
         status: 'ACTIVE'
       }
@@ -76,7 +80,8 @@ export async function PUT(
         action: 'Assign shop',
         details: `Assigned ${updatedBank.shop?.shopName} to account ${updatedBank.accountNumber}`,
         userId: user.id,
-        bankId: updatedBank.id
+        bankId: updatedBank.id,
+        orgId: org.id
       }
     });
 

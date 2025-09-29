@@ -11,10 +11,11 @@ interface NotificationData {
   conversationId?: string;
   shopId?: string;
   data?: any; // Additional data as object (will be stringified)
+  orgId: string;
 }
 
 export class NotificationService {
-  
+
   static async createNotification(notificationData: NotificationData) {
     try {
       // 1. Always include all active admin / manager users
@@ -62,7 +63,8 @@ export class NotificationService {
         orderId: notificationData.orderId,
         conversationId: notificationData.conversationId,
         shopId: notificationData.shopId,
-        data: notificationData.data ? JSON.stringify(notificationData.data) : null
+        data: notificationData.data ? JSON.stringify(notificationData.data) : null,
+        orgId: notificationData.orgId
       };
 
       const created: any[] = [];
@@ -71,7 +73,7 @@ export class NotificationService {
           const n = await prisma.notification.create({
             data: { ...payload, userId }
           });
-            created.push(n);
+          created.push(n);
         } catch (e) {
           console.error('Failed creating notification for user', userId, e);
         }
@@ -90,6 +92,7 @@ export class NotificationService {
     type: 'NEW_ORDER' | 'ORDER_STATUS_CHANGE' | 'ORDER_CANCELLED' | 'ORDER_DELIVERED',
     order: any,
     shopId: string,
+    orgId: string,
     additionalData?: any
   ) {
     try {
@@ -135,7 +138,8 @@ export class NotificationService {
             currency: order.currency,
             customerEmail: order.buyerEmail,
             ...additionalData
-          }
+          },
+          orgId
         });
 
         notifications.push(notification);
@@ -160,7 +164,7 @@ export class NotificationService {
           readAt: new Date()
         }
       });
-      
+
       return notification;
     } catch (error) {
       console.error('Error marking notification as read:', error);
@@ -180,7 +184,7 @@ export class NotificationService {
           readAt: new Date()
         }
       });
-      
+
       return result;
     } catch (error) {
       console.error('Error marking all notifications as read:', error);
@@ -207,7 +211,7 @@ export class NotificationService {
         take: limit,
         skip: offset
       });
-      
+
       return notifications;
     } catch (error) {
       console.error('Error fetching user notifications:', error);
@@ -223,7 +227,7 @@ export class NotificationService {
           read: false
         }
       });
-      
+
       return count;
     } catch (error) {
       console.error('Error getting unread notification count:', error);

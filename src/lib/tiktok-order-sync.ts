@@ -54,7 +54,7 @@ export class TikTokOrderSync {
                 shopId: shop_id,
                 status: 'ACTIVE',
             },
-            include: { app: true },
+            include: { app: true, organization: true },
         });
 
         if (!credentials) {
@@ -181,45 +181,6 @@ export class TikTokOrderSync {
                 console.error("Error syncing orders:", error);
             }
             syncResults.error = error instanceof Error ? error.message : String(error);
-
-            // Create error notification
-            if (options.create_notifications !== false) {
-                try {
-                    await NotificationService.createNotification({
-                        type: NotificationType.WEBHOOK_ERROR,
-                        title: '❌ Order Sync Failed',
-                        message: `Failed to sync orders for shop ${options.shop_id}: ${syncResults.error}`,
-                        userId: this.credentials.id,
-                        shopId: this.credentials.id,
-                        data: {
-                            syncType: 'order_sync_utility',
-                            error: syncResults.error,
-                            timestamp: Date.now()
-                        }
-                    });
-                } catch (notificationError) {
-                    console.error('Failed to create error notification:', notificationError);
-                }
-            }
-            // Additional auth failure notification
-            if (authFailed && options.create_notifications !== false) {
-                try {
-                    await NotificationService.createNotification({
-                        type: NotificationType.WEBHOOK_ERROR,
-                        title: 'TikTok Reauthorization Needed',
-                        message: `Shop ${this.credentials.shopName || options.shop_id} TikTok authorization expired. Please re-connect the shop.`,
-                        userId: this.credentials.id,
-                        shopId: this.credentials.id,
-                        data: {
-                            authExpired: true,
-                            shopId: options.shop_id,
-                            hint: 'Trigger OAuth refresh / reauthorize'
-                        }
-                    });
-                } catch (nErr) {
-                    console.error('Failed to create auth failure notification', nErr);
-                }
-            }
         } finally {
             syncResults.executionTimeMs = Date.now() - startTime;
         }
@@ -378,7 +339,7 @@ export class TikTokOrderSync {
             // Remove transaction wrapper - process directly
             const orderIds = orders.map(o => o.id);
             const existingOrders = await prisma.order.findMany({
-                where: { orderId: { in: orderIds } },
+                where: { orderId: { in: orderIds }, orgId: this.credentials.organization?.id },
                 select: { id: true, orderId: true }
             });
 
@@ -462,7 +423,8 @@ export class TikTokOrderSync {
                         shippingDueTime: order.shippingDueTime || null,
                         fastDispatchSlaTime: order.fastDispatchSlaTime || null,
                         pickUpCutOffTime: order.pickUpCutOffTime || null,
-                        deliveryOptionRequiredDeliveryTime: order.deliveryOptionRequiredDeliveryTime || null
+                        deliveryOptionRequiredDeliveryTime: order.deliveryOptionRequiredDeliveryTime || null,
+                        orgId: this.credentials.organization?.id
                     };
 
                     if (existingOrderMap.has(order.id)) {
@@ -470,7 +432,8 @@ export class TikTokOrderSync {
                         await prisma.order.update({
                             where: { id: existingOrderMap.get(order.id) },
                             data: {
-                                ...orderData
+                                ...orderData,
+                                orgId: this.credentials.organization?.id
                             }
                         });
 
@@ -748,16 +711,16 @@ export class TikTokOrderSync {
             // Prepare data for upsert - separate update and create data
             const { orderId: _, packageId: __, ...updateData } = packageData;
 
-            await prisma.orderPackage.upsert({
-                where: {
-                    orderId_packageId: {
-                        orderId: orderId,
-                        packageId: pkg.id
-                    }
-                },
-                update: updateData,
-                create: packageData
-            });
+                    await prisma.orderPackage.upsert({
+                        where: {
+                            orderId_packageId: {
+                                orderId: orderId,
+                                packageId: pkg.id
+                            }
+                        },
+                        update: { ...updateData, orgId: this.credentials.organization?.id },
+                        create: { ...packageData, orgId: this.credentials.organization?.id }
+                    });
 
             console.log(`Upserted package ${pkg.id} for order ${orderId}`);
 
@@ -793,8 +756,8 @@ export class TikTokOrderSync {
                             packageId: pkg.id
                         }
                     },
-                    update: updateFallbackData,
-                    create: fallbackData
+                    update: { ...updateFallbackData, orgId: this.credentials.organization?.id },
+                    create: { ...fallbackData, orgId: this.credentials.organization?.id }
                 });
             } catch (fallbackError) {
                 console.error(`Failed to upsert fallback package ${pkg.id}:`, fallbackError);
@@ -887,6 +850,7 @@ export class TikTokOrderSync {
                 deliveryTime: order.deliveryTime,
                 channelData: JSON.stringify(channelData),
                 shopId: shopId,
+                orgId: this.credentials.organization?.id,
             },
             update: {
                 status: order.status || "UNKNOWN",
@@ -898,6 +862,7 @@ export class TikTokOrderSync {
                 totalAmount: order.payment?.totalAmount || null,
                 currency: order.payment?.currency || null,
                 channelData: JSON.stringify(channelData),
+                orgId: this.credentials.organization?.id
             }
         });
 
@@ -948,7 +913,8 @@ export class TikTokOrderSync {
                             currency: item.currency,
                             originalPrice: item.originalPrice,
                             salePrice: item.salePrice,
-                            channelData: JSON.stringify(itemChannelData)
+                            channelData: JSON.stringify(itemChannelData),
+                            orgId: this.credentials.organization?.id
                         }
                     });
                 } catch (itemError) {
@@ -1063,7 +1029,7 @@ export class TikTokOrderSync {
                     packageData.channelData = JSON.stringify(packageChannelData);
 
                     await prisma.orderPackage.create({
-                        data: packageData
+                        data: { ...packageData, orgId: this.credentials.organization?.id }
                     });
 
                     // Sync order attributes
@@ -1091,7 +1057,8 @@ export class TikTokOrderSync {
                                     fetchError: packageError instanceof Error ? packageError.message : String(packageError),
                                     fetchedAt: Date.now(),
                                     fetchSuccess: false
-                                })
+                                }),
+                                orgId: this.credentials.organization?.id
                             }
                         });
                     } catch (fallbackError) {

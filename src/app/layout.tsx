@@ -8,6 +8,7 @@ import { ThemeProvider } from '@/context/ThemeContext';
 import { AuthProvider } from "../context/authContext";
 import { LanguageProvider } from '@/context/LanguageContext';
 import { LoadingProvider } from "@/context/loadingContext";
+import { OrganizationProvider } from '@/context/OrganizationContext';
 
 // Configure Inter font with Vietnamese subset
 const inter = Inter({
@@ -50,7 +51,9 @@ export default function RootLayout({
           <AuthProvider>
             <LanguageProvider>
               <ThemeProvider>
-                <SidebarProvider>{children}</SidebarProvider>
+                <OrganizationProvider>
+                  <SidebarProvider>{children}</SidebarProvider>
+                </OrganizationProvider>
               </ThemeProvider>
             </LanguageProvider>
           </AuthProvider>

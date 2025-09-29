@@ -7,6 +7,20 @@ async function main() {
   console.log("Seeding database with demo users...");
 
   // Create admin user
+  const sadminPassword = await bcrypt.hash("1qazXSW@123", 12);
+  const sadmin = await prisma.user.upsert({
+    where: { username: "sadmin" },
+    update: {},
+    create: {
+      name: "Super Admin User",
+      username: "sadmin",
+      password: sadminPassword,
+      role: UserRole.SUPER_ADMIN,
+      isActive: true,
+    },
+  });
+
+  // Create admin user
   const adminPassword = await bcrypt.hash("admin@1234", 12);
   const admin = await prisma.user.upsert({
     where: { username: "admin" },

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { PrismaClient, Channel } from "@prisma/client";
 import { getUserWithShopAccess } from "@/lib/auth";
+import { resolveOrgContext, requireOrg, withOrgScope } from '@/lib/tenant-context';
 import { computeUKAddress } from "@/utils/common/functionFormat";
 
 const prisma = new PrismaClient();
@@ -8,6 +9,8 @@ const prisma = new PrismaClient();
 export async function GET(req: NextRequest) {
   try {
     const { user, accessibleShopIds, isAdmin } = await getUserWithShopAccess(req, prisma);
+    const orgResult = await resolveOrgContext(req, prisma);
+    const org = requireOrg(orgResult);
     const { searchParams } = new URL(req.url);
 
     // Pagination parameters
@@ -201,6 +204,8 @@ export async function GET(req: NextRequest) {
           break;
       }
     }
+    // Always enforce org scope
+    where = withOrgScope(org.id, where);
     const totalItems = await prisma.order.count({ where });
     const totalPages = Math.ceil(totalItems / limit);
 

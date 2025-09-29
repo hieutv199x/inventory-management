@@ -28,7 +28,7 @@ export async function syncPayments(
     // Load shop + app (original route prepared this externally)
     const shop = await prisma.shopAuthorization.findUnique({
       where: { id: options.shop_id },
-      include: { app: true },
+      include: { app: true, organization: true },
     });
     if (!shop) {
       throw new Error(`Shop ${options.shop_id} not found`);
@@ -56,6 +56,7 @@ export async function syncPayments(
         appSecret: shop.app.appSecret,
         BaseUrl: shop.app.BaseUrl,
       },
+      organization: shop.organization,
     };
 
     if (!credentials.accessToken || !credentials.shopCipher) {
@@ -87,7 +88,7 @@ export async function syncPayments(
     paymentsProcessed = allPayments.length;
 
     // Original DB sync (createMany) logic
-    paymentsSynced = await syncPaymentsToDatabase(prisma, allPayments, shop.id);
+    paymentsSynced = await syncPaymentsToDatabase(prisma, allPayments, shop.id, shop.organization.id);
 
     return {
       success: errors.length === 0,
@@ -175,7 +176,8 @@ async function fetchAllPayments(
 async function syncPaymentsToDatabase(
   prisma: PrismaClient,
   payments: any[],
-  shopObjectId: string
+  shopObjectId: string,
+  organizationId: string
 ) {
   const BATCH_SIZE = 100;
   let totalSynced = 0;
@@ -183,7 +185,7 @@ async function syncPaymentsToDatabase(
   // Process payments in batches
   for (let i = 0; i < payments.length; i += BATCH_SIZE) {
     const batch = payments.slice(i, i + BATCH_SIZE);
-    const syncedCount = await processPaymentBatch(prisma, batch, shopObjectId);
+    const syncedCount = await processPaymentBatch(prisma, batch, shopObjectId, organizationId);
     totalSynced += syncedCount;
   }
 
@@ -193,7 +195,8 @@ async function syncPaymentsToDatabase(
 async function processPaymentBatch(
   prisma: PrismaClient,
   payments: any[],
-  shopObjectId: string
+  shopObjectId: string,
+  organizationId: string
 ) {
   let syncedCount = 0;
 
@@ -242,6 +245,7 @@ async function processPaymentBatch(
           paidTime: payment.paidTime,
           bankAccount: payment.bankAccount ?? null,
           shopId: shopObjectId,
+          orgId: organizationId,
         };
 
         return paymentRecord;

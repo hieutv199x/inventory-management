@@ -165,7 +165,8 @@ export async function GET(req: NextRequest) {
                         deliveredTime: null,
                         inTransitTime: null,
                         channelData: JSON.stringify(raw),
-                        orderId: dbOrderId
+                        orderId: dbOrderId,
+                        orgId: credentials.orgId,
                     };
 
                     // Upsert by (orderId, packageId) – emulate composite with findFirst

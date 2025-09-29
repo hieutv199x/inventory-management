@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 import { verifyToken } from '@/lib/auth';
+import { resolveOrgContext, requireOrg, withOrgScope } from '@/lib/tenant-context';
 
 const prisma = new PrismaClient();
 
 export async function GET(request: NextRequest) {
   try {
-    const decoded = verifyToken(request);
+  const decoded = verifyToken(request);
+  const orgResult = await resolveOrgContext(request, prisma);
+  const org = requireOrg(orgResult);
     
     // Check permissions - only ADMIN and ACCOUNTANT can view banks
 
@@ -37,7 +40,7 @@ export async function GET(request: NextRequest) {
     const skip = (page - 1) * limit;
 
     // Build where clause for search
-    const whereClause = search ? {
+    let whereClause: any = search ? {
       OR: [
         {
           accountNumber: {
@@ -71,6 +74,9 @@ export async function GET(request: NextRequest) {
         },
       ],
     } : {};
+
+    // Enforce org scope
+    whereClause = withOrgScope(org.id, whereClause);
 
     // Get banks with search and pagination
     const [banks, totalCount] = await Promise.all([
@@ -147,7 +153,9 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const decoded = verifyToken(request);
+  const decoded = verifyToken(request);
+  const orgResult = await resolveOrgContext(request, prisma);
+  const org = requireOrg(orgResult);
     
     // Check permissions - only ADMIN can import banks
     const user = await prisma.user.findUnique({
@@ -181,7 +189,8 @@ export async function POST(request: NextRequest) {
             bankName: bank.bankName,
             accountHolder: bank.accountHolder,
             uploaderId: user.id,
-            status: 'UNUSED'
+            status: 'UNUSED',
+            orgId: org.id
           },
           include: {
             uploader: {
@@ -196,7 +205,8 @@ export async function POST(request: NextRequest) {
             action: 'Import bank',
             details: `Imported bank account ${bank.accountNumber}`,
             userId: user.id,
-            bankId: createdBank.id
+            bankId: createdBank.id,
+            orgId: org.id
           }
         });
 
@@ -209,7 +219,8 @@ export async function POST(request: NextRequest) {
       data: {
         action: 'Import bank',
         details: `Imported ${banks.length} bank accounts from CSV file`,
-        userId: user.id
+        userId: user.id,
+        orgId: org.id
       }
     });
 

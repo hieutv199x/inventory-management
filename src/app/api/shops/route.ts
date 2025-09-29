@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 import { getUserWithShopAccess } from "@/lib/auth";
+import { resolveOrgContext, requireOrg, withOrgScope } from '@/lib/tenant-context';
 
 const prisma = new PrismaClient();
 
 export async function GET(req: NextRequest) {
     try {
-        const { user, accessibleShopIds, isAdmin } = await getUserWithShopAccess(req, prisma);
+    const { user, accessibleShopIds, isAdmin } = await getUserWithShopAccess(req, prisma);
+    const orgResult = await resolveOrgContext(req, prisma);
+    const org = requireOrg(orgResult);
         
         const { searchParams } = new URL(req.url);
         const page = parseInt(searchParams.get('page') || '1');
@@ -90,16 +93,17 @@ export async function GET(req: NextRequest) {
             };
         }
 
-        // Get total count for pagination
+        // Always enforce org scope
+        const scopedWhere = withOrgScope(org.id, whereClause);
         const total = await prisma.shopAuthorization.count({
-            where: whereClause
+            where: scopedWhere
         });
 
         const totalPages = Math.ceil(total / limit);
 
         // Fetch shops with all necessary data
         const shops = await prisma.shopAuthorization.findMany({
-            where: whereClause,
+            where: scopedWhere,
             include: {
                 app: {
                     select: {

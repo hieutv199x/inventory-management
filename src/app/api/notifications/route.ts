@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 import { getUserWithShopAccess } from "@/lib/auth";
+import { resolveOrgContext } from '@/lib/tenant-context';
 
 const prisma = new PrismaClient();
 
@@ -20,8 +21,18 @@ export async function GET(req: NextRequest) {
         const dateFrom = searchParams.get('dateFrom');
         const dateTo = searchParams.get('dateTo');
 
-        // Build where clause
+        // Resolve organization context (multi-tenant scoping)
+        const orgResult = await resolveOrgContext(req as any, prisma);
+        const superAdmin = user.role === 'SUPER_ADMIN';
+        if (!orgResult.org && !superAdmin) {
+            return NextResponse.json({ error: 'ORGANIZATION_CONTEXT_REQUIRED' }, { status: 409 });
+        }
+
+        // Build where clause (always scope by orgId unless super admin wants cross-org for own notifications)
         const where: any = { userId: user.id };
+        if (orgResult.org) {
+            where.orgId = orgResult.org.id;
+        }
 
         if (type && type !== 'all') {
             where.type = type;
@@ -71,12 +82,9 @@ export async function GET(req: NextRequest) {
         });
 
         // Get unread count
-        const unreadCount = await prisma.notification.count({
-            where: { 
-                userId: user.id,
-                read: false 
-            }
-        });
+        const unreadWhere: any = { userId: user.id, read: false };
+        if (orgResult.org) unreadWhere.orgId = orgResult.org.id;
+        const unreadCount = await prisma.notification.count({ where: unreadWhere });
 
         // Transform notifications for the response
         const transformedNotifications = notifications.map(notification => ({

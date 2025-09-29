@@ -6,12 +6,16 @@ import {
 } from "@/nodejs_sdk";
 import { getUserWithShopAccess } from "@/lib/auth";
 import { syncOrderCanSplitOrNot } from "@/lib/tiktok-order-sync-fulfillment-state";
+import { OrgContext, requireOrg, resolveOrgContext } from "@/lib/tenant-context";
 
 const prisma = new PrismaClient();
 
 export async function POST(req: NextRequest) {
     try {
         const { user, accessibleShopIds, isAdmin } = await getUserWithShopAccess(req, prisma);
+
+        const orgResult = await resolveOrgContext(req, prisma);
+        const org = requireOrg(orgResult);
 
         const {
             shop_id,
@@ -146,7 +150,7 @@ export async function POST(req: NextRequest) {
             }
 
             console.log(`Total orders to sync: ${allOrders.length}`);
-            await syncOrdersToDatabase(allOrders, credentials.id, client, credentials, shopCipher); // Pass additional parameters
+            await syncOrdersToDatabase(allOrders, credentials.id, client, credentials, shopCipher, org); // Pass additional parameters
 
             // Return modified result with total count information
             return NextResponse.json({
@@ -170,21 +174,21 @@ export async function POST(req: NextRequest) {
     }
 }
 
-async function syncOrdersToDatabase(orders: any[], shopId: string, client: any, credentials: any, shopCipher: string | undefined) {
+async function syncOrdersToDatabase(orders: any[], shopId: string, client: any, credentials: any, shopCipher: string | undefined, org: OrgContext) {
     const BATCH_SIZE = 50;
     console.log(`Starting sync of ${orders.length} orders in batches of ${BATCH_SIZE}`);
 
     // Process orders in batches
     for (let i = 0; i < orders.length; i += BATCH_SIZE) {
         const batch = orders.slice(i, i + BATCH_SIZE);
-        await processBatch(batch, shopId, client, credentials, shopCipher);
+        await processBatch(batch, shopId, client, credentials, shopCipher, org);
         console.log(`Processed ${Math.min(i + BATCH_SIZE, orders.length)} of ${orders.length} orders`);
     }
 
     console.log('Sync completed');
 }
 
-async function processBatch(orders: any[], shopId: string, client: any, credentials: any, shopCipher: string | undefined) {
+async function processBatch(orders: any[], shopId: string, client: any, credentials: any, shopCipher: string | undefined, org: OrgContext) {
     try {
         // Removed prisma.$transaction (MongoDB setup - no relational transactions)
         // 1. Determine existing vs new orders
@@ -252,7 +256,10 @@ async function processBatch(orders: any[], shopId: string, client: any, credenti
             if (existingOrderMap.has(order.id)) {
                 updateOrders.push({ orderData: { ...orderData }, dbId: existingOrderMap.get(order.id) });
             } else {
-                newOrders.push({...orderData, shopId });
+                newOrders.push({
+                    ...orderData, shopId,
+                    orgId: org.id,
+                });
             }
 
             // Sync order attributes like can_split, must_split
@@ -328,7 +335,8 @@ async function processBatch(orders: any[], shopId: string, client: any, credenti
                         originalPrice: item.originalPrice,
                         salePrice: item.salePrice,
                         channelData: JSON.stringify(itemChannelData),
-                        orderId: dbOrderId
+                        orderId: dbOrderId,
+                        orgId: org.id
                     });
                 }
             }
@@ -391,7 +399,8 @@ async function processBatch(orders: any[], shopId: string, client: any, credenti
 
                         let packageData: any = {
                             orderId: dbOrderId,
-                            packageId: pkg.id
+                            packageId: pkg.id,
+                            orgId: org.id
                         };
 
                         let packageChannelData: any = {

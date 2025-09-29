@@ -1,11 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Finance202501GetTransactionsbyStatementResponseDataTransactions, TikTokShopNodeApiClient, Finance202501GetTransactionsbyStatementResponse } from "@/nodejs_sdk";
 import { PrismaClient, Channel } from "@prisma/client";
+import { resolveOrgContext, requireOrg } from '@/lib/tenant-context';
 
 const prisma = new PrismaClient();
 
 export async function GET(request: NextRequest) {
     try {
+        // Resolve active organization (required for multi-tenant isolation)
+        const orgResult = await resolveOrgContext(request, prisma);
+        const org = requireOrg(orgResult);
+
         const { searchParams } = new URL(request.url);
         const statementTimeGe = parseInt(searchParams.get("statementTimeGe") || "0", 10);
         const statementTimeLt = parseInt(searchParams.get("statementTimeLt") || "0", 10);
@@ -22,7 +27,8 @@ export async function GET(request: NextRequest) {
         // Build where clause for shop filtering
         const whereClause: any = {
             status: "ACTIVE",
-            app: { channel: 'TIKTOK' } // Only get TikTok shops
+            app: { channel: 'TIKTOK' }, // Only TikTok shops
+            orgId: org.id,
         };
 
         // Add shopId filter if provided
@@ -37,6 +43,18 @@ export async function GET(request: NextRequest) {
                 app: true,
             },
         });
+
+        if (shops.length === 0) {
+            return NextResponse.json({
+                success: true,
+                message: 'No TikTok shops found for organization',
+                orgId: org.id,
+                shopId: shopId || 'all',
+                totalStatementsSynced: 0,
+                totalTransactionsSynced: syncTransactions ? 0 : 'skipped',
+                shopResults: []
+            });
+        }
 
         // Log which shops will be synced
         console.log(`Syncing statements${syncTransactions ? ' and transactions' : ''} for ${shops.length} shop(s)${shopId ? ` (shopId: ${shopId})` : ''} from ${statementTimeGe} to ${statementTimeLt}`);
@@ -99,7 +117,7 @@ export async function GET(request: NextRequest) {
                 console.log(`Fetched ${allStatements.length} statements for shop ${shop.shopId}`);
 
                 // Sync statements in batches
-                const syncedCount = await syncStatementsToDatabase(allStatements, shop.id); // Use ObjectId instead of shopId
+                const syncedCount = await syncStatementsToDatabase(allStatements, shop.id, org.id); // Internal shop ObjectId & orgId
                 totalStatementsSynced += syncedCount;
 
                 let transactionsSynced = 0;
@@ -108,7 +126,7 @@ export async function GET(request: NextRequest) {
                     const allTransactions = await fetchTransactionsForStatements(client, credentials, allStatements);
                     console.log(`Fetched ${allTransactions.length} transactions for shop ${shop.shopId}`);
 
-                    transactionsSynced = await syncTransactionsToDatabase(allTransactions, shop.shopId);
+                    transactionsSynced = await syncTransactionsToDatabase(allTransactions, shop.shopId, org.id);
                     totalTransactionsSynced += transactionsSynced;
                 }
 
@@ -136,6 +154,7 @@ export async function GET(request: NextRequest) {
             totalTransactionsSynced: syncTransactions ? totalTransactionsSynced : 'skipped',
             syncedShops: shops.length,
             shopId: shopId || 'all',
+            orgId: org.id,
             shopResults
         });
     } catch (err: unknown) {
@@ -214,7 +233,7 @@ async function fetchAllStatements(client: any, credentials: any, statementTimeGe
     return allStatements;
 }
 
-async function syncStatementsToDatabase(statements: any[], shopObjectId: string) {
+async function syncStatementsToDatabase(statements: any[], shopObjectId: string, orgId: string) {
     const BATCH_SIZE = 100;
     let totalSynced = 0;
 
@@ -222,8 +241,8 @@ async function syncStatementsToDatabase(statements: any[], shopObjectId: string)
 
     // Process statements in batches
     for (let i = 0; i < statements.length; i += BATCH_SIZE) {
-        const batch = statements.slice(i, i + BATCH_SIZE);
-        const syncedCount = await processStatementBatch(batch, shopObjectId);
+    const batch = statements.slice(i, i + BATCH_SIZE);
+    const syncedCount = await processStatementBatch(batch, shopObjectId, orgId);
         totalSynced += syncedCount;
         console.log(`Processed ${Math.min(i + BATCH_SIZE, statements.length)} of ${statements.length} statements for shop ${shopObjectId}. Synced: ${syncedCount}`);
     }
@@ -232,14 +251,14 @@ async function syncStatementsToDatabase(statements: any[], shopObjectId: string)
     return totalSynced;
 }
 
-async function processStatementBatch(statements: any[], shopObjectId: string) {
+async function processStatementBatch(statements: any[], shopObjectId: string, orgId: string) {
     let syncedCount = 0;
 
     try {
         // Removed prisma.$transaction for MongoDB compatibility (non-atomic now)
         const statementIds = statements.map(s => s.id).filter(Boolean);
         const existingStatements = await prisma.statement.findMany({
-            where: { statementId: { in: statementIds } },
+            where: { statementId: { in: statementIds }, orgId },
             select: { statementId: true }
         });
 
@@ -268,7 +287,8 @@ async function processStatementBatch(statements: any[], shopObjectId: string) {
                 paymentStatus: statement.paymentStatus,
                 paymentId: statement.paymentId,
                 shopId: shopObjectId,
-            };
+                orgId,
+            } as const;
 
             if (existingStatementIds.has(statement.id)) {
                 updateStatements.push(statementData);
@@ -356,7 +376,7 @@ async function fetchTransactionsForStatements(client: any, credentials: any, sta
     return allTransactions;
 }
 
-async function syncTransactionsToDatabase(transactions: (Finance202501GetTransactionsbyStatementResponseDataTransactions & { statementId: string, currency: string, createdTime: number })[], shopId: string) {
+async function syncTransactionsToDatabase(transactions: (Finance202501GetTransactionsbyStatementResponseDataTransactions & { statementId: string, currency: string, createdTime: number })[], shopId: string, orgId: string) {
     const BATCH_SIZE = 100;
     let totalSynced = 0;
 
@@ -364,8 +384,8 @@ async function syncTransactionsToDatabase(transactions: (Finance202501GetTransac
 
     // Process transactions in batches
     for (let i = 0; i < transactions.length; i += BATCH_SIZE) {
-        const batch = transactions.slice(i, i + BATCH_SIZE);
-        const syncedCount = await processTransactionBatch(batch, shopId);
+    const batch = transactions.slice(i, i + BATCH_SIZE);
+    const syncedCount = await processTransactionBatch(batch, shopId, orgId);
         totalSynced += syncedCount;
         console.log(`Processed ${Math.min(i + BATCH_SIZE, transactions.length)} of ${transactions.length} transactions for shop ${shopId}. Synced: ${syncedCount}`);
     }
@@ -376,7 +396,8 @@ async function syncTransactionsToDatabase(transactions: (Finance202501GetTransac
 
 async function processTransactionBatch(
     transactions: (Finance202501GetTransactionsbyStatementResponseDataTransactions & { statementId: string, currency: string, createdTime: number })[],
-    shopId: string
+    shopId: string,
+    orgId: string
 ) {
     let syncedCount = 0;
 
@@ -387,7 +408,7 @@ async function processTransactionBatch(
             .filter((id): id is string => typeof id === 'string');
 
         const existingTransactions = await prisma.tikTokTransaction.findMany({
-            where: { transactionId: { in: transactionIds } },
+            where: { transactionId: { in: transactionIds }, orgId },
             select: { id: true, transactionId: true }
         });
 
@@ -423,7 +444,8 @@ async function processTransactionBatch(
                 shippingCostBreakdown: transaction.shippingCostBreakdown ? JSON.parse(JSON.stringify(transaction.shippingCostBreakdown)) : null,
                 feeTaxBreakdown: transaction.feeTaxBreakdown ? JSON.parse(JSON.stringify(transaction.feeTaxBreakdown)) : null,
                 supplementaryComponent: transaction.supplementaryComponent ? JSON.parse(JSON.stringify(transaction.supplementaryComponent)) : null,
-            };
+                orgId,
+            } as const;
 
             const existingId = existingTransactionMap.get(transaction.id);
             if (existingId) {

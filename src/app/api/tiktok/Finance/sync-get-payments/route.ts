@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 import { syncPayments } from "@/lib/tiktok-payments-sync";
+import { requireOrg, resolveOrgContext } from "@/lib/tenant-context";
 
 const prisma = new PrismaClient();
 
 export async function GET(request: NextRequest) {
     try {
+        const orgResult = await resolveOrgContext(request, prisma);
+        const org = requireOrg(orgResult);
+
         const { searchParams } = new URL(request.url);
 
         const statementTimeGe = parseInt(searchParams.get("statementTimeGe") || "0", 10);
@@ -19,7 +23,8 @@ export async function GET(request: NextRequest) {
         }
 
         const shops = await prisma.shopAuthorization.findMany({
-            where: { 
+            where: {
+                orgId: org.id,
                 status: 'ACTIVE',
                 app: { channel: 'TIKTOK' } // Only get TikTok shops
             },
@@ -58,7 +63,7 @@ export async function GET(request: NextRequest) {
             }
         }
 
-        return NextResponse.json({ 
+        return NextResponse.json({
             success: true,
             totalPaymentsSynced,
             shopResults

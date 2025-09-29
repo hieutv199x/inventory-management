@@ -65,7 +65,6 @@ export async function GET(request: NextRequest) {
             select: {
               id: true,
               name: true,
-              email: true,
               role: true
             }
           });
@@ -221,7 +220,6 @@ export async function POST(request: NextRequest) {
         user: {
           id: user.id,
           name: user.name,
-          email: user.email,
           role: user.role
         },
         shop: {

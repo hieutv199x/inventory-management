@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 import jwt from 'jsonwebtoken';
+import { resolveOrgContext, requireOrg, withOrgScope } from '@/lib/tenant-context';
+import { audit } from '@/lib/audit';
+import { enforceLimit } from '@/lib/limits';
 
 const prisma = new PrismaClient();
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
@@ -19,6 +22,8 @@ const verifyToken = (request: NextRequest) => {
 export async function GET(request: NextRequest) {
   try {
     const decoded = verifyToken(request);
+    const orgResult = await resolveOrgContext(request, prisma);
+    const org = requireOrg(orgResult);
 
     // Get current user
     const currentUser = await prisma.user.findUnique({
@@ -102,13 +107,17 @@ export async function GET(request: NextRequest) {
       };
     }
 
-    // Get total count for pagination
-    const totalItems = await prisma.payment.count({ where: whereClause });
+  // Always enforce org scope
+  const scopedWhere = withOrgScope(org.id, whereClause);
+
+  // Enforce plan limit (defensive: payments retrieval shouldn't exceed but we might log usage) - no hard block here.
+
+  const totalItems = await prisma.payment.count({ where: scopedWhere });
     const totalPages = Math.ceil(totalItems / limit);
 
     // Get payments with pagination
     const payments = await prisma.payment.findMany({
-      where: whereClause,
+      where: scopedWhere,
       include: {
         shop: {
           select: {
@@ -144,6 +153,13 @@ export async function GET(request: NextRequest) {
         shopId: payment.shop?.shopId || '',
       },
     }));
+
+    await audit(prisma, {
+      orgId: org.id,
+      userId: currentUser.id,
+      action: 'PAYMENT_LIST',
+      metadata: { page, limit, totalItems }
+    });
 
     return NextResponse.json({
       success: true,

@@ -22,7 +22,7 @@ export async function sync_all_shop_orders(page_size: number = 50, day_to_sync: 
             const shop = allShops[i];
             const delayMinutes = i * 2; // 2 minutes delay per shop
 
-            await scheduleShopSyncJob(shop, delayMinutes, page_size, day_to_sync);
+            await scheduleShopSyncJob(shop, delayMinutes, page_size, day_to_sync, shop.orgId);
         }
 
         return allShops.length;
@@ -33,7 +33,7 @@ export async function sync_all_shop_orders(page_size: number = 50, day_to_sync: 
     }
 }
 
-async function scheduleShopSyncJob(shop: any, delayMinutes: number, page_size: number, day_to_sync: number) {
+async function scheduleShopSyncJob(shop: any, delayMinutes: number, page_size: number, day_to_sync: number, orgId: string) {
     try {
         const scheduledAt = new Date(Date.now() + delayMinutes * 60 * 1000);
 
@@ -57,7 +57,8 @@ async function scheduleShopSyncJob(shop: any, delayMinutes: number, page_size: n
                 retryDelay: 120000, // 2 minutes
                 nextExecutionAt: scheduledAt,
                 tags: ['shop-sync', 'auto-generated'],
-                status: 'ACTIVE'
+                status: 'ACTIVE',
+                orgId: orgId
             }
         });
 
@@ -78,7 +79,7 @@ export async function processShop(shop_id: string, day_to_sync: number, page_siz
 
     const shop = await prisma.shopAuthorization.findUnique({
         where: { id: shop_id },
-        include: { app: true }
+        include: { app: true, organization: true }
     });
 
     if (!shop) {
@@ -150,26 +151,26 @@ export async function processShop(shop_id: string, day_to_sync: number, page_siz
         }
 
         console.log(`Total orders to sync: ${allOrders.length}`);
-        await syncOrdersToDatabase(allOrders, shop.id); // Use shop.id (ObjectId) instead of credentials.id
+        await syncOrdersToDatabase(allOrders, shop.id, shop.orgId); // Use shop.id (ObjectId) instead of credentials.id
 
     }
 }
 
-async function syncOrdersToDatabase(orders: any[], shopId: string) {
+async function syncOrdersToDatabase(orders: any[], shopId: string, orgId: string) {
     const BATCH_SIZE = 50;
     console.log(`Starting sync of ${orders.length} orders in batches of ${BATCH_SIZE}`);
 
     // Process orders in batches
     for (let i = 0; i < orders.length; i += BATCH_SIZE) {
         const batch = orders.slice(i, i + BATCH_SIZE);
-        await processBatch(batch, shopId);
+        await processBatch(batch, shopId, orgId);
         console.log(`Processed ${Math.min(i + BATCH_SIZE, orders.length)} of ${orders.length} orders`);
     }
 
     console.log('Sync completed');
 }
 
-async function processBatch(orders: any[], shopId: string) {
+async function processBatch(orders: any[], shopId: string, orgId: string) {
     try {
         // Collect existing order IDs to determine which are new vs updates
         const orderIds = orders.map(o => o.id);
@@ -235,7 +236,8 @@ async function processBatch(orders: any[], shopId: string) {
                 shippingDueTime: order.shippingDueTime || null,
                 fastDispatchSlaTime: order.fastDispatchSlaTime || null,
                 pickUpCutOffTime: order.pickUpCutOffTime || null,
-                deliveryOptionRequiredDeliveryTime: order.deliveryOptionRequiredDeliveryTime || null
+                deliveryOptionRequiredDeliveryTime: order.deliveryOptionRequiredDeliveryTime || null,
+                orgId: orgId
             };
 
             if (existingOrderMap.has(order.id)) {
@@ -244,7 +246,7 @@ async function processBatch(orders: any[], shopId: string) {
                     dbId: existingOrderMap.get(order.id)
                 });
             } else {
-                newOrders.push({...orderData, shopId });
+                newOrders.push({ ...orderData, shopId });
             }
         }
 
@@ -322,6 +324,7 @@ async function processBatch(orders: any[], shopId: string) {
                         salePrice: item.salePrice,
                         channelData: JSON.stringify(itemChannelData),
                         orderId: dbOrderId,
+                        orgId: orgId
                     });
                 }
             }
@@ -379,6 +382,7 @@ async function processBatch(orders: any[], shopId: string) {
             if (order.packages) {
                 for (const pkg of order.packages) {
                     allPackages.push({
+                        orgId: orgId,
                         orderId: dbOrderId,
                         packageId: pkg.id,
                         channelData: JSON.stringify({}), // Can store package-specific data if needed

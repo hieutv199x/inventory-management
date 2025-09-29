@@ -14,11 +14,11 @@ export default async function handler(
   switch (method) {
     case "POST":
       try {
-        const { email, password } = req.body;
-        const user = await prisma.user.findUnique({ where: { email } });
+        const { username, password } = req.body;
+        const user = await prisma.user.findUnique({ where: { username } });
 
         if (!user || !bcrypt.compareSync(password, user.password)) {
-          return res.status(401).json({ error: "Invalid email or password" });
+          return res.status(401).json({ error: "Invalid username or password" });
         }
 
         const token = generateToken(user.id);

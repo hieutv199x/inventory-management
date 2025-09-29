@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 import { getUserWithShopAccess, getActiveShopIds } from "@/lib/auth";
+import { resolveOrgContext, requireOrg, withOrgScope } from '@/lib/tenant-context';
 
 const prisma = new PrismaClient();
 
 export async function GET(req: NextRequest) {
     try {
-        const { user, accessibleShopIds, isAdmin } = await getUserWithShopAccess(req, prisma);
+    const { user, accessibleShopIds, isAdmin } = await getUserWithShopAccess(req, prisma);
+    const orgResult = await resolveOrgContext(req, prisma);
+    const org = requireOrg(orgResult);
         const activeShopIds = await getActiveShopIds(prisma);
 
         // Extract query parameters
@@ -118,13 +121,15 @@ export async function GET(req: NextRequest) {
         }
 
         // Get total count for pagination
-        const totalItems = await prisma.product.count({
-            where: whereCondition
-        });
+    // Always enforce org scope
+    const scopedWhere = withOrgScope(org.id, whereCondition);
+    const totalItems = await prisma.product.count({
+      where: scopedWhere
+    });
 
         // Get paginated products
-        const products = await prisma.product.findMany({
-            where: whereCondition,
+    const products = await prisma.product.findMany({
+      where: scopedWhere,
             include: {
                 shop: {
                     select: {
@@ -167,14 +172,16 @@ export async function GET(req: NextRequest) {
             return NextResponse.json({ error: err.message }, { status: 401 });
         }
         return NextResponse.json({ error: err.message || "Internal error" }, { status: 500 });
-    } finally {
-        await prisma.$disconnect();
-    }
+  } finally {
+    await prisma.$disconnect();
+  }
 }
 
 export async function POST(request: NextRequest) {
   try {
     const { user, isAdmin, accessibleShopIds } = await getUserWithShopAccess(request, prisma);
+    const orgResult = await resolveOrgContext(request, prisma);
+    const org = requireOrg(orgResult);
 
     const body = await request.json();
     const { 
@@ -207,6 +214,11 @@ export async function POST(request: NextRequest) {
       if (!shopAuth) {
         return NextResponse.json({ error: 'Shop not found' }, { status: 404 });
       }
+
+      // Enforce shop belongs to active org
+      if (shopAuth.orgId && shopAuth.orgId !== org.id) {
+        return NextResponse.json({ error: 'Shop does not belong to active organization' }, { status: 403 });
+      }
       
       shopObjectId = shopAuth.id;
     } catch (error) {
@@ -231,7 +243,8 @@ export async function POST(request: NextRequest) {
           status,
           price,
           currency,
-          channelData: channelData ? JSON.stringify(channelData) : null
+          channelData: channelData ? JSON.stringify(channelData) : null,
+          orgId: org.id
         },
         include: {
           shop: {
