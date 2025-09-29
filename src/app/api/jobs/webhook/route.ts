@@ -581,24 +581,6 @@ async function handleSyncProductById(webhookData: TikTokWebhookData) {
             // });
             return;
         }
-
-        // Create success notification (optional informational)
-        await NotificationService.createNotification({
-            type: NotificationType.SYSTEM_ALERT,
-            title: 'Cập nhật sản phẩm',
-            message: `Đã đồng bộ sản phẩm ${data.product_id} (created=${syncResult.created} updated=${syncResult.updated})`,
-            userId: shop_id,
-            shopId: shop_id,
-            orgId: webhookData.orgId,
-            data: {
-                productId: data.product_id,
-                updated: syncResult.updated,
-                created: syncResult.created,
-                changeSource: data.change_source,
-                changedFields: data.changed_fields,
-                webhookTimestamp: webhookData.timestamp
-            }
-        });
     } catch (error) {
         console.error('Error handling product sync webhook:', error);
         throw error;

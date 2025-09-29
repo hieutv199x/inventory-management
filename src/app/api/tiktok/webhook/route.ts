@@ -8,7 +8,6 @@ export interface TikTokWebhookData {
     type: number;
     tts_notification_id: string;
     shop_id: string;
-    orgId: string;
     timestamp: number;
     data: {
         is_on_hold_order?: boolean;

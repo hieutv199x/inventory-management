@@ -1220,10 +1220,6 @@ model TikTokWebhook {
 
   @@index([shopId, orderId])
   @@index([createdAt])
-  // Organization scope (derived from shop) - denormalized
-  orgId String? @db.ObjectId
-  organization Organization? @relation(fields: [orgId], references: [id])
-  @@index([orgId])
 }
 
 // ===================== Multi-Tenancy (SaaS) Additions =====================
@@ -1272,7 +1268,6 @@ model Organization {
   schedulerJobs           SchedulerJob[]
   jobExecutions           JobExecution[]
   jobLogs                 JobLog[]
-  tiktokWebhooks          TikTokWebhook[]
   auditLogs               AuditLog[]
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
