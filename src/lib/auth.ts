@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import jwt from 'jsonwebtoken';
 import { PrismaClient } from "@prisma/client";
+import { resolveOrgContext } from "./tenant-context";
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 
@@ -35,6 +36,7 @@ export const verifyToken = (request: NextRequest) => {
 
 export const getUserWithShopAccess = async (request: NextRequest, prisma: PrismaClient) => {
     const decoded = verifyToken(request);
+    const orgContext = await resolveOrgContext(request, prisma);
 
     // Get current user
     const currentUser = await prisma.user.findUnique({
@@ -56,6 +58,20 @@ export const getUserWithShopAccess = async (request: NextRequest, prisma: Prisma
 
     if (!currentUser) {
         throw new Error('User not found');
+    }
+
+    if (currentUser.role === 'ADMIN') {
+        // Admin has access to all shops
+        const allShops = await prisma.shopAuthorization.findMany({
+            where: { status: 'ACTIVE', orgId: orgContext.org?.id },
+            select: { id: true }
+        });
+        const allShopIds = allShops.map(shop => shop.id);
+        return {
+            user: currentUser,
+            accessibleShopIds: allShopIds,
+            isAdmin: true
+        };
     }
 
     // Get accessible shop IDs (now using the unified shopId field)

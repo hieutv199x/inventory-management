@@ -1374,7 +1374,7 @@ export default function OrdersPage() {
                                             </td>
 
                                             {/* SLA / Due Times */}
-                                            <td className="px-6 py-4 align-top w-[260px]">
+                                            <td className="px-6 py-4 w-[260px]">
                                                 <div className="flex flex-col gap-1 max-w-64">
                                                     {buildSlaItems(order).length === 0 && (
                                                         <div className="text-xs text-gray-400">—</div>

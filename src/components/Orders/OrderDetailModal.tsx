@@ -107,14 +107,13 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({ order, isOpen, onCl
         // Group similar items within this package
         const itemGroups: Record<string, any> = {};
         items.forEach(item => {
-            // Create grouping key based on item characteristics
+            // Create grouping key based on item characteristics (IGNORE salePrice differences)
             const groupKey = JSON.stringify({
                 productId: item.productId,
                 skuId: item.skuId,
                 skuName: item.skuName,
                 sellerSku: item.sellerSku,
                 packageId: item.mergedChannelData.packageId,
-                salePrice: item.salePrice,
                 isCancelled: item.isCancelled
             });
 
@@ -123,12 +122,21 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({ order, isOpen, onCl
                     ...item,
                     count: 1,
                     lineItemIds: [item.lineItemId],
-                    totalQuantity: parseInt(item.mergedChannelData.quantity || 1)
+                    totalQuantity: parseInt(item.mergedChannelData.quantity || 1),
+                    // Collect unique sale prices for this group to show all price variants
+                    salePrices: item.salePrice ? [String(item.salePrice)] : []
                 };
             } else {
                 itemGroups[groupKey].count += 1;
                 itemGroups[groupKey].lineItemIds.push(item.lineItemId);
                 itemGroups[groupKey].totalQuantity += parseInt(item.mergedChannelData.quantity || 1);
+                // Track unique sale prices
+                if (item.salePrice) {
+                    const priceStr = String(item.salePrice);
+                    if (!itemGroups[groupKey].salePrices.includes(priceStr)) {
+                        itemGroups[groupKey].salePrices.push(priceStr);
+                    }
+                }
             }
         });
 
@@ -170,10 +178,10 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({ order, isOpen, onCl
         const fullAddress = order.recipientAddress?.fullAddress || '';
         // Tách địa chỉ: mặc định luôn lấy 3 phần cuối làm county/state/country, phần còn lại gộp vào dòng 1
         const addressParts = fullAddress.split(',').map((part: string) => part.trim());
-        
+
         let streetAddress = '';
         let cityStateCountry = '';
-        
+
         if (addressParts.length > 3) {
             // Luôn lấy 3 phần cuối làm county/state/country
             cityStateCountry = addressParts.slice(-3).join(', ');
@@ -190,7 +198,7 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({ order, isOpen, onCl
         } else {
             streetAddress = fullAddress;
         }
-        
+
         const address = [
             `${addressChannelData.firstName} ${addressChannelData.lastName || order.recipientAddress?.name}`,
             `${order.recipientAddress?.phoneNumber}`,
@@ -438,31 +446,28 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({ order, isOpen, onCl
                                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm">
                                         <div>
                                             <p className="text-gray-500 dark:text-gray-400">Can Split</p>
-                                            <p className={`mt-1 inline-flex px-2 py-0.5 rounded-full text-xs font-semibold ${
-                                                splitAttributes.canSplit
+                                            <p className={`mt-1 inline-flex px-2 py-0.5 rounded-full text-xs font-semibold ${splitAttributes.canSplit
                                                     ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-400'
                                                     : 'bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300'
-                                            }`}>
+                                                }`}>
                                                 {splitAttributes.canSplit ? 'YES' : 'NO'}
                                             </p>
                                         </div>
                                         <div>
                                             <p className="text-gray-500 dark:text-gray-400">Must Split</p>
-                                            <p className={`mt-1 inline-flex px-2 py-0.5 rounded-full text-xs font-semibold ${
-                                                splitAttributes.mustSplit
+                                            <p className={`mt-1 inline-flex px-2 py-0.5 rounded-full text-xs font-semibold ${splitAttributes.mustSplit
                                                     ? 'bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-400'
                                                     : 'bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300'
-                                            }`}>
+                                                }`}>
                                                 {splitAttributes.mustSplit ? 'YES' : 'NO'}
                                             </p>
                                         </div>
                                         <div>
                                             <p className="text-gray-500 dark:text-gray-400">Has Split Packages</p>
-                                            <p className={`mt-1 inline-flex px-2 py-0.5 rounded-full text-xs font-semibold ${
-                                                splitAttributes.hasSplit
+                                            <p className={`mt-1 inline-flex px-2 py-0.5 rounded-full text-xs font-semibold ${splitAttributes.hasSplit
                                                     ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'
                                                     : 'bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300'
-                                            }`}>
+                                                }`}>
                                                 {splitAttributes.hasSplit ? 'YES' : 'NO'}
                                             </p>
                                         </div>
@@ -582,11 +587,10 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({ order, isOpen, onCl
                                             return (
                                                 <div
                                                     key={item.id}
-                                                    className={`border rounded-lg p-4 transition ${
-                                                        isCancelled
+                                                    className={`border rounded-lg p-4 transition ${isCancelled
                                                             ? 'border-red-200 dark:border-red-600 bg-red-50 dark:bg-red-900/10'
                                                             : 'border-gray-200 dark:border-gray-600'
-                                                    }`}
+                                                        }`}
                                                 >
                                                     {isCancelled && (
                                                         <div className="mb-3 p-2 bg-red-100 dark:bg-red-900/20 rounded border border-red-200 dark:border-red-800">
@@ -664,7 +668,9 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({ order, isOpen, onCl
                                                                 <div>
                                                                     <dt className="text-xs font-medium text-gray-500 dark:text-gray-400">Sale Price</dt>
                                                                     <dd className="text-lg font-semibold text-green-600">
-                                                                        {formatCurrency(item.salePrice, item.currency)}
+                                                                        {Array.isArray(item.salePrices) && item.salePrices.length > 0
+                                                                            ? item.salePrices.map((p: string) => formatCurrency(p, item.currency)).join(', ')
+                                                                            : formatCurrency(item.salePrice, item.currency)}
                                                                     </dd>
                                                                 </div>
                                                                 {(itemChannelData.sellerDiscount || itemChannelData.platformDiscount) && (
@@ -771,7 +777,7 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({ order, isOpen, onCl
                                         {order.paidTime ? formatTimestamp(order.paidTime) : 'N/A'}
                                     </dd>
                                 </div>
-                                
+
                                 {/* Traditional payment fields */}
                                 <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
                                     <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Subtotal</dt>
@@ -802,7 +808,7 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({ order, isOpen, onCl
                                         {formatCurrency(order.payment?.tax || '0', order.currency)}
                                     </dd>
                                 </div>
-                                
+
                                 <div className="md:col-span-2 bg-green-50 dark:bg-green-900/20 p-4 rounded-lg border border-green-200 dark:border-green-800">
                                     <div className="flex justify-between items-center">
                                         <div>
