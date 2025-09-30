@@ -34,7 +34,7 @@ export const verifyToken = (request: NextRequest) => {
     }
 };
 
-export const getUserWithShopAccess = async (request: NextRequest, prisma: PrismaClient) => {
+export const getUserWithShopAccess = async (request: NextRequest, prisma: PrismaClient, includeShopIds: boolean = false) => {
     const decoded = verifyToken(request);
     const orgContext = await resolveOrgContext(request, prisma);
 
@@ -60,7 +60,7 @@ export const getUserWithShopAccess = async (request: NextRequest, prisma: Prisma
         throw new Error('User not found');
     }
 
-    if (currentUser.role === 'ADMIN') {
+    if (currentUser.role === 'ADMIN' && includeShopIds) {
         // Admin has access to all shops
         const allShops = await prisma.shopAuthorization.findMany({
             where: { status: 'ACTIVE', orgId: orgContext.org?.id },

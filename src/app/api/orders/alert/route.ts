@@ -2,6 +2,7 @@ import { getUserWithShopAccess } from "@/lib/auth";
 import { PrismaClient } from "@prisma/client";
 import { NextRequest } from "next/server";
 import { resolveOrgContext, requireOrg } from '@/lib/tenant-context';
+import fa from "zod/v4/locales/fa.cjs";
 
 const prisma = new PrismaClient();
 
@@ -13,8 +14,8 @@ export async function GET(req: NextRequest) {
 
         const url = new URL(req.url);
         const shopId = url.searchParams.get('shopId') || '';
-        const { accessibleShopIds } = await getUserWithShopAccess(req, prisma);
-        
+        const { accessibleShopIds, user } = await getUserWithShopAccess(req, prisma, true);
+
         // Calculate the Unix timestamp for the current moment
         const now = Math.floor(Date.now() / 1000);
         // Calculate the Unix timestamp for 24 hours from now
@@ -32,20 +33,22 @@ export async function GET(req: NextRequest) {
         }
 
         const scopedShopIds = accessibleShopIds; // already internal shop IDs
+        const baseShopWhere: any = { orgId: org.id };
+        if (user.role !== 'ADMIN') {
+            baseShopWhere.shopId = { in: scopedShopIds };
+        }
 
         const countShipingWithin24 = await prisma.order.count({
             where: {
-                orgId: org.id,
+                ...baseShopWhere,
                 status: "AWAITING_SHIPMENT",
-                shopId: { in: scopedShopIds },
                 createTime: { lt: deadline },
             }
         });
 
         const countAutoCancelled = await prisma.order.count({
             where: {
-                orgId: org.id,
-                shopId: { in: scopedShopIds },
+                ...baseShopWhere,
                 OR: [
                     {
                         shippingDueTime: { gt: now, lt: twentyFourHoursFromNow },
@@ -66,18 +69,16 @@ export async function GET(req: NextRequest) {
 
         const countShippingOverdue = await prisma.order.count({
             where: {
-                orgId: org.id,
+                ...baseShopWhere,
                 status: "AWAITING_SHIPMENT",
                 shippingDueTime: { gte: now },
-                shopId: { in: scopedShopIds },
             }
         });
 
         const countBuyerCancelled = await prisma.order.count({
             where: {
-                orgId: org.id,
+                ...baseShopWhere,
                 status: { not: "CANCELLED" },
-                shopId: { in: scopedShopIds },
                 channelData: { contains: '"isBuyerRequestCancel":"true"' },
             }
         });
