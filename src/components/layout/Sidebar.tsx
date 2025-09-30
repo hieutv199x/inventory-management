@@ -12,13 +12,13 @@ import {
   LogoutIcon,
   GroupIcon
 } from '@/icons';
-import { FaUsersCog } from "react-icons/fa";
 
+type AppRole = 'ADMIN' | 'MANAGER' | 'ACCOUNTANT' | 'SELLER' | 'RESOURCE' | 'OWNER' | 'SUPER_ADMIN';
 interface MenuItem {
   name: string;
   href: string;
   icon: React.ComponentType<{ className?: string }>;
-  roles?: ('ADMIN' | 'MANAGER' | 'ACCOUNTANT' | 'SELLER' | 'RESOURCE' | 'OWNER')[];
+  roles?: AppRole[];
 }
 
 const menuItems: MenuItem[] = [
@@ -51,6 +51,12 @@ const menuItems: MenuItem[] = [
     roles: ['ADMIN']
   },
   {
+    name: 'Organizations',
+    href: '/organizations',
+    icon: GroupIcon,
+    roles: ['ADMIN', 'OWNER', 'SUPER_ADMIN']
+  },
+  {
     name: 'Cài đặt',
     href: '/settings',
     icon: SettingsIcon,
@@ -61,7 +67,7 @@ export default function Sidebar() {
   const pathname = usePathname();
   const { user, logout } = useAuth();
 
-  const hasAccess = (roles?: string[]) => {
+  const hasAccess = (roles?: AppRole[]) => {
     if (!roles) return true;
     return user && roles.includes(user.role);
   };
@@ -75,7 +81,7 @@ export default function Sidebar() {
       {/* Logo */}
       <div className="flex items-center h-16 px-6 border-b border-gray-200 dark:border-gray-700">
         <h1 className="text-xl font-bold text-gray-900 dark:text-white">
-          TikCRM
+          9Connect
         </h1>
       </div>
 

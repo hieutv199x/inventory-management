@@ -1,7 +1,6 @@
 "use client";
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import Link from "next/link";
-import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useSidebar } from "../context/SidebarContext";
 import { useAuth } from "../context/authContext";
@@ -14,7 +13,7 @@ import {
   BankIcon,
   GroupIcon,
 } from "../icons/index";
-import { FaMoneyCheckAlt, FaUsersCog } from "react-icons/fa";
+import { FaMoneyCheckAlt, FaUsersCog, FaAppStore } from "react-icons/fa";
 import { AiOutlineShopping } from "react-icons/ai";
 import { MessageCircle, Grid2X2Plus, AlertTriangle } from "lucide-react";
 import { LanguageSwitcher } from '@/components/ui/LanguageSwitcher';
@@ -96,6 +95,13 @@ const accountItems: NavItem[] = [
     name: "nav.shop_permissions",
     path: "/permissions",
     roles: ["ADMIN", "MANAGER"]
+  },
+
+  {
+    icon: <FaAppStore size={24}/>,
+    name: "nav.organizations",
+    path: "/organizations",
+    roles: ["ADMIN", "SUPER_ADMIN", "OWNER"]
   }
 ];
 

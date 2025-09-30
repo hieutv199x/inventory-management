@@ -27,6 +27,7 @@ const translations: Record<Language, TranslationMap> = {
         'nav.shop_permissions': 'Shop Permissions',
         'nav.dashboard': 'Dashboard',
         'nav.fraud_alert': 'Fraud Alert',
+        'nav.organizations': 'Organizations',
 
         // Dashboard
         'dashboard.title': 'Dashboard',
@@ -399,6 +400,7 @@ const translations: Record<Language, TranslationMap> = {
         'nav.shop_permissions': 'Phân quyền shop',
         'nav.dashboard': 'Bảng điều khiển',
         'nav.fraud_alert': 'Cảnh báo gian lận',
+        'nav.organizations': 'Quản lý ứng dụng',
 
         // Dashboard
         'dashboard.title': 'Bảng điều khiển',

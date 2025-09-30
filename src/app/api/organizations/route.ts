@@ -28,19 +28,33 @@ async function ensureUniqueSlug(base: string): Promise<string> {
 export async function GET(req: NextRequest) {
   try {
     const { user } = await getUserWithShopAccess(req, prisma);
-    // We can leverage membership join directly
+    const ctx = await resolveOrgContext(req, prisma);
+    const activeOrgId = ctx.org?.id || null;
+
+    if (user.role === 'SUPER_ADMIN') {
+      // List all organizations for super admin
+      const orgs = await prisma.organization.findMany({ orderBy: { createdAt: 'asc' } });
+      await audit(prisma, { orgId: activeOrgId || 'none', userId: user.id, action: 'ORG_LIST_ALL' });
+      return NextResponse.json({
+        data: orgs.map(o => ({
+          orgId: o.id,
+            membershipId: null,
+            role: 'SUPER_ADMIN',
+            name: o.name,
+            slug: o.slug,
+            status: o.status,
+            active: o.id === activeOrgId
+        }))
+      });
+    }
+
+    // Non super admin: restrict to memberships
     const memberships = await prisma.organizationMember.findMany({
       where: { userId: user.id },
       include: { organization: true },
       orderBy: { createdAt: 'asc' }
     });
-
-    // Also resolve active context for convenience
-    const ctx = await resolveOrgContext(req, prisma);
-    const activeOrgId = ctx.org?.id || null;
-
     await audit(prisma, { orgId: activeOrgId || 'none', userId: user.id, action: 'ORG_MEMBERSHIPS_LIST' });
-
     return NextResponse.json({
       data: memberships.map(m => ({
         orgId: m.orgId,
@@ -60,6 +74,9 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const { user } = await getUserWithShopAccess(req, prisma);
+    if (user.role !== 'SUPER_ADMIN') {
+      return NextResponse.json({ error: 'Forbidden: only SUPER_ADMIN may create organizations' }, { status: 403 });
+    }
     const body = await req.json().catch(()=>({}));
     const { name } = body;
     if (!name || name.length < 2) {

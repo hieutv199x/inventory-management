@@ -181,15 +181,17 @@ export default function OrganizationsMembersPage() {
                         <button onClick={loadOrgs} className="inline-flex items-center gap-2 text-sm px-3 py-2 border rounded hover:bg-gray-50"><RefreshCw size={16} /> Refresh</button>
                     </div>
 
-                    <form onSubmit={createOrg} className="bg-white p-4 border rounded flex flex-col md:flex-row gap-3 items-start md:items-end">
-                        <div className="flex-1 w-full">
-                            <label className="block text-sm font-medium mb-1">New Organization Name</label>
-                            <input value={newOrgName} onChange={e => setNewOrgName(e.target.value)} required className="w-full border rounded px-3 py-2 text-sm" placeholder="e.g. Acme Inc" />
-                        </div>
-                        <button disabled={creatingOrg} className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded text-sm shadow hover:bg-blue-700 disabled:opacity-50">
-                            {creatingOrg ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />} Create
-                        </button>
-                    </form>
+                    {isSuperAdmin && (
+                        <form onSubmit={createOrg} className="bg-white p-4 border rounded flex flex-col md:flex-row gap-3 items-start md:items-end">
+                            <div className="flex-1 w-full">
+                                <label className="block text-sm font-medium mb-1">New Organization Name</label>
+                                <input value={newOrgName} onChange={e => setNewOrgName(e.target.value)} required className="w-full border rounded px-3 py-2 text-sm" placeholder="e.g. Acme Inc" />
+                            </div>
+                            <button disabled={creatingOrg} className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded text-sm shadow hover:bg-blue-700 disabled:opacity-50">
+                                {creatingOrg ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />} Create
+                            </button>
+                        </form>
+                    )}
 
                     <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
                         {orgLoadingList && <div className="col-span-full text-sm text-gray-500"><Loader2 className="animate-spin inline mr-2" />Loading organizations...</div>}
