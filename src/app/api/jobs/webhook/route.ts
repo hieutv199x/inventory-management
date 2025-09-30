@@ -4,8 +4,6 @@ import { TikTokWebhookData } from "../../tiktok/webhook/route";
 import { NotificationService } from "@/lib/notification-service";
 import { syncOrderById } from "@/lib/tiktok-order-sync";
 import { syncTikTokProductById } from "@/lib/tiktok-product-sync";
-import { syncUnsettledTransactions } from "@/lib/tiktok-unsettled-transactions-sync";
-import { syncOrderCanSplitOrNot } from "@/lib/tiktok-order-sync-fulfillment-state";
 
 const prisma = new PrismaClient();
 
