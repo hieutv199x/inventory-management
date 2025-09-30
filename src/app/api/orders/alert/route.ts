@@ -54,14 +54,14 @@ export async function GET(req: NextRequest) {
                         shippingDueTime: { gt: now, lt: twentyFourHoursFromNow },
                         status: { notIn: ["AWAITING_COLLECTION", "IN_TRANSIT", "DELIVERED", "COMPLETED", "CANCELLED"] }
                     },
-                    {
-                        collectionDueTime: { gt: now, lt: twentyFourHoursFromNow },
-                        status: { notIn: ["IN_TRANSIT", "DELIVERED", "COMPLETED", "CANCELLED"] }
-                    },
-                    {
-                        deliveryDueTime: { gt: now, lt: twentyFourHoursFromNow },
-                        status: { notIn: ["DELIVERED", "COMPLETED", "CANCELLED"] }
-                    }
+                    // {
+                    //     collectionDueTime: { gt: now, lt: twentyFourHoursFromNow },
+                    //     status: { notIn: ["IN_TRANSIT", "DELIVERED", "COMPLETED", "CANCELLED"] }
+                    // },
+                    // {
+                    //     deliveryDueTime: { gt: now, lt: twentyFourHoursFromNow },
+                    //     status: { notIn: ["DELIVERED", "COMPLETED", "CANCELLED"] }
+                    // }
                 ]
             }
         });
