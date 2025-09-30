@@ -126,7 +126,7 @@ async function handleOrderStatusChange(webhookData: TikTokWebhookData) {
         try {
             const syncResult = await syncOrderById(shop_id, order_id, {
                 create_notifications: false,
-                timeout_seconds: 120
+                sync_all: false
             });
             console.log(`Webhook order sync completed:`, syncResult);
 
