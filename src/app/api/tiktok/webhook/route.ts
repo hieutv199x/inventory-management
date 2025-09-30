@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Prisma } from "@prisma/client";
+import { PrismaClient, Prisma } from "@prisma/client";
 import crypto from 'crypto';
-import { prisma } from '../../../../../prisma/client';
+
+const prisma = new PrismaClient();
 
 export interface TikTokWebhookData {
     type: number;
@@ -49,78 +50,102 @@ export async function POST(request: NextRequest) {
         const signature = request.headers.get('x-tts-signature');
         const timestamp = request.headers.get('x-tts-timestamp');
 
+        // Parse the webhook data
         let webhookData: TikTokWebhookData;
         try {
             webhookData = JSON.parse(body);
         } catch (error) {
             console.error('Invalid JSON in webhook body:', error);
-            return NextResponse.json({ code: 40001, message: 'Invalid JSON format', data: null }, { status: 400 });
+            return NextResponse.json({
+                code: 40001,
+                message: 'Invalid JSON format',
+                data: null
+            }, { status: 400 });
         }
 
-        // Lookup shop (for org + signature secret)
-        const shop = await prisma.shopAuthorization.findUnique({ where: { shopId: webhookData.shop_id }, include: { app: true } });
-        let verified = false;
-        if (signature && timestamp && shop?.app?.appSecret) {
-            verified = verifySignature(body, signature, shop.app.appSecret, timestamp);
-            if (!verified) {
-                return NextResponse.json({ code: 40003, message: 'Invalid signature', data: null }, { status: 401 });
+        // Verify webhook signature if signature is provided
+        if (signature && timestamp) {
+            const isValid = await verifyWebhookSignature(body, signature, webhookData.shop_id, timestamp);
+            if (!isValid) {
+                console.error('Invalid webhook signature');
+                return NextResponse.json({
+                    code: 40003,
+                    message: 'Invalid signature',
+                    data: null
+                }, { status: 401 });
             }
         }
 
-        const baseData = {
-            type: webhookData.type,
-            ttsNotificationId: webhookData.tts_notification_id,
-            shopId: webhookData.shop_id,
-            timestamp: webhookData.timestamp,
-            signature: signature ?? null,
-            verified,
-            rawBody: body,
-            data: webhookData.data as unknown as Prisma.InputJsonValue,
-            headers: Object.fromEntries(request.headers) as unknown as Prisma.InputJsonValue,
-            orderId: webhookData.data?.order_id ?? null,
-            orderStatus: webhookData.data?.order_status ?? null,
-            cancellationId: webhookData.data?.cancellation_id ?? null,
-            cancellationStatus: webhookData.data?.cancellation_status ?? null,
-            status: 'RECEIVED',
-            orgId: shop?.orgId
-        } as const;
-
-        try {
-            await prisma.tikTokWebhook.create({ data: baseData });
-        } catch (err: any) {
-            // Fallback: raw insert when deployment Mongo does not support transactions (P2010 scenario)
-            if (err?.code === 'P2010' && /Transactions are not supported/i.test(err?.message || '')) {
-                console.warn('Falling back to raw Mongo insert for TikTokWebhook due to transaction limitation');
-                try {
-                    // Mongo collection name: model name (TikTokWebhook) unless @@map applied (not present)
-                        // Use Mongo insert command via runCommandRaw
-                    await (prisma as any).$runCommandRaw({
-                        insert: 'TikTokWebhook',
-                        documents: [baseData]
-                    });
-                } catch (rawErr) {
-                    console.error('Raw insert fallback failed:', rawErr);
-                    throw err; // rethrow original
-                }
-            } else {
-                throw err;
+        await prisma.tikTokWebhook.create({
+            data: {
+                type: webhookData.type,
+                ttsNotificationId: webhookData.tts_notification_id,
+                shopId: webhookData.shop_id,
+                timestamp: webhookData.timestamp,
+                signature: signature ?? null,
+                verified: true,
+                rawBody: body,
+                data: webhookData.data as unknown as Prisma.InputJsonValue,
+                headers: Object.fromEntries(request.headers) as unknown as Prisma.InputJsonValue,
+                orderId: webhookData.data?.order_id ?? null,
+                orderStatus: webhookData.data?.order_status ?? null,
+                cancellationId: webhookData.data?.cancellation_id ?? null,
+                cancellationStatus: webhookData.data?.cancellation_status ?? null,
+                status: 'RECEIVED'
             }
-        }
+        });
 
-        return NextResponse.json({ code: 0, message: 'success', data: null }, { status: 200 });
+        // Return success response as required by TikTok
+        return NextResponse.json({
+            code: 0,
+            message: 'success',
+            data: null
+        }, { status: 200 });
+
     } catch (error) {
         console.error('Error processing TikTok webhook:', error);
-        return NextResponse.json({ code: 50000, message: 'Internal server error', data: null }, { status: 500 });
+        return NextResponse.json({
+            code: 50000,
+            message: 'Internal server error',
+            data: null
+        }, { status: 500 });
     }
 }
 
-function verifySignature(body: string, signature: string, secret: string, timestamp: string): boolean {
-  const expected = crypto.createHmac('sha256', secret).update(body + timestamp).digest('hex');
-  const ok = signature === expected;
-  if (!ok) {
-    console.warn('Signature mismatch', { provided: signature, expected });
-  }
-  return ok;
+async function verifyWebhookSignature(body: string, signature: string, shopId: string, timestamp: string): Promise<boolean> {
+    try {
+        // Get shop credentials to get the app secret for signature verification
+        const credentials = await prisma.shopAuthorization.findUnique({
+            where: { shopId },
+            include: { app: true }
+        });
+
+        if (!credentials || !credentials.app) {
+            console.error('Shop credentials not found for signature verification');
+            return false;
+        }
+
+        const appSecret = credentials.app.appSecret;
+
+        // TikTok webhook signature verification
+        // The signature is HMAC-SHA256 of the request body + timestamp using app secret
+        const expectedSignature = crypto
+            .createHmac('sha256', appSecret)
+            .update(body + timestamp)
+            .digest('hex');
+
+        const isValid = signature === expectedSignature;
+        console.log('Signature verification:', {
+            provided: signature,
+            expected: expectedSignature,
+            isValid
+        });
+
+        return isValid;
+    } catch (error) {
+        console.error('Error verifying webhook signature:', error);
+        return false;
+    }
 }
 
 
