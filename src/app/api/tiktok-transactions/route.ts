@@ -112,7 +112,7 @@ export async function GET(req: NextRequest) {
     const tikTokTransactions = await prisma.tikTokTransaction.findMany({
       where,
       orderBy: {
-        createdAt: 'desc'
+        orderCreateTime: 'desc'
       },
       skip: offset,
       take: limit

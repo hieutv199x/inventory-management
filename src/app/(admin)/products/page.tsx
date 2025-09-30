@@ -567,7 +567,7 @@ export default function ProductPage() {
                                     return (
                                         <TableRow key={product.id}>
                                             {/* Product Images */}
-                                            <TableCell className="py-3 align-top">
+                                            <TableCell className="py-3">
                                                 <div className="grid grid-cols-2 gap-2 w-36">
                                                     {productImages.length > 0 ? (
                                                         productImages.map((image, index) => (
@@ -601,7 +601,7 @@ export default function ProductPage() {
                                             </TableCell>
 
                                             {/* Product Information (condensed) */}
-                                            <TableCell className="py-3 align-top">
+                                            <TableCell className="py-3">
                                                 {(() => {
                                                     const shop: any = (product as any).shop || {};
                                                     const shopLabel = shop.managedName || shop.shopName || 'N/A';
@@ -657,7 +657,7 @@ export default function ProductPage() {
                                             </TableCell>
 
                                             {/* Timestamps */}
-                                            <TableCell className="py-3 text-gray-500 text-[11px] dark:text-gray-400 align-top whitespace-nowrap">
+                                            <TableCell className="py-3 text-gray-500 text-[11px] dark:text-gray-400 whitespace-nowrap">
                                                 <div className="flex flex-col gap-1">
                                                     <span title={t('products.table.created_at')}>{formatDate(product.createTime)}</span>
                                                     <span className="text-[10px] text-gray-400" title={t('products.table.updated_at')}>
