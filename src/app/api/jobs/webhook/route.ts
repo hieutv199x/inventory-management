@@ -53,7 +53,13 @@ export async function GET(req: NextRequest) {
                         case 11: // CANCELLATION_STATUS_CHANGE
                             await handleCancellationStatusChange(webhookData);
                             break;
+                        case 5:
+                            await handleSyncProductById(webhookData);
+                            break;
                         case 15:
+                            await handleSyncProductById(webhookData);
+                            break;
+                        case 16:
                             await handleSyncProductById(webhookData);
                             break;
                         default:

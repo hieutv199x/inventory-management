@@ -13,7 +13,7 @@
         "src/app/api/tiktok/Orders/sync-recent-orders/route.ts": { "maxDuration": 60, "memory": 1024 },
         "src/app/api/jobs/**/*.ts": { "maxDuration": 600, "memory": 1024 },
         "src/app/api/**/*.ts": {
-            "maxDuration": 30
+            "maxDuration": 60
         }
     },
     "crons": [
