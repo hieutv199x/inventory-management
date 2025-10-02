@@ -363,7 +363,6 @@ export default function PermissionsPage() {
       {/* Pagination Controls */}
       <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
         <div className="flex items-center space-x-2">
-          <span className="text-sm text-gray-700 dark:text-gray-300">{t('permissions.pagination_show')}</span>
           <select
             value={pagination.limit}
             onChange={(e) => handlePageSizeChange(Number(e.target.value))}
