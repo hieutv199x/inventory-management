@@ -7,11 +7,14 @@ import DatePicker from "@/components/form/date-picker";
 import { Table, TableBody, TableCell, TableHeader, TableRow } from "@/components/ui/table";
 import Image from "next/image";
 import { httpClient } from "@/lib/http-client";
-import { RefreshCw, Package, Calendar, User, Eye, Search, Loader2, Sparkles, Layers, Copy, RefreshCcw } from 'lucide-react';
+import { RefreshCw, Package, Calendar, User, Eye, Search, Loader2, Sparkles, Layers, Copy, RefreshCcw, Plus, Upload } from 'lucide-react';
 import { useLanguage } from '@/context/LanguageContext';
 import Badge from "@/components/ui/badge/Badge";
 import ProductDetailModal from "@/components/Products/ProductDetailModal";
 import SyncProductModal from "@/components/Products/SyncProductModal";
+import CreateProductModal from "@/components/Products/CreateProductModal";
+import SyncProductButton from "@/components/Products/SyncProductButton";
+import SyncSingleProductModal from "@/components/Products/SyncSingleProductModal";
 import { Product } from "@/types/product";
 import { formatCurrency, formatDate } from "@/utils/common/functionFormat";
 import { toast } from "react-hot-toast";
@@ -94,6 +97,11 @@ export default function ProductPage() {
     });
 
     const [exporting, setExporting] = useState<boolean>(false);
+    const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+    const [showProductModal, setShowProductModal] = useState(false);
+    const [showSyncModal, setShowSyncModal] = useState(false);
+    const [showCreateModal, setShowCreateModal] = useState(false);
+    const [selectedSyncProduct, setSelectedSyncProduct] = useState<any>(null);
 
     const handleFilterChange = (field: keyof typeof filters, value: string | null) => {
         setFilters(prev => ({ ...prev, [field]: value }));
@@ -155,6 +163,13 @@ export default function ProductPage() {
 
     useEffect(() => { fetchProducts(); }, [fetchProducts]);
         
+    const handleCreateSuccess = (newProduct: any) => {
+        // Refresh products list
+        fetchProducts();
+        setShowCreateModal(false);
+        toast.success('Product created successfully!');
+    };
+
     const handlerSyncProduct = async (shopId: string, status: string) => {
         try {
             const response = await fetch('/api/tiktok/Products/search-product', {
@@ -190,7 +205,7 @@ export default function ProductPage() {
         if (currentPage !== 1) {
             setCurrentPage(1);
         }
-    }, [filters]);
+    }, [filters, currentPage]);
 
     const handlePageChange = (newPage: number) => {
         if (newPage >= 1 && newPage <= pagination.totalPages) {
@@ -271,7 +286,6 @@ export default function ProductPage() {
             setExporting(false);
         }
     };
-    const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
 
@@ -338,6 +352,8 @@ export default function ProductPage() {
             <TableCell className="py-3"><div className="h-4 w-20 bg-gray-100 dark:bg-gray-800 rounded animate-pulse" /></TableCell>
             {/* Status */}
             <TableCell className="py-3"><div className="h-5 w-24 bg-gray-100 dark:bg-gray-800 rounded-full animate-pulse" /></TableCell>
+            {/* Sync Status */}
+            <TableCell className="py-3"><div className="h-5 w-24 bg-gray-100 dark:bg-gray-800 rounded-full animate-pulse" /></TableCell>
             {/* Create Date */}
             <TableCell className="py-3"><div className="h-4 w-24 bg-gray-100 dark:bg-gray-800 rounded animate-pulse" /></TableCell>
             {/* Updated */}
@@ -369,6 +385,13 @@ export default function ProductPage() {
                     <p className="text-sm text-gray-600 dark:text-gray-400">{t('products.subtitle')}</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
+                    <button
+                        onClick={() => setShowCreateModal(true)}
+                        className="bg-gradient-to-r from-blue-600 to-blue-500 inline-flex items-center gap-2 rounded-lg px-4 py-2.5 text-theme-sm font-medium text-white shadow hover:from-blue-700 hover:to-blue-600"
+                        title="Create new product"
+                    >
+                        <Plus className="h-4 w-4" /> Create Product
+                    </button>
                     <button
                         onClick={() => setIsSyncModalOpen(true)}
                         className="bg-gradient-to-r from-green-600 to-green-500 inline-flex items-center gap-2 rounded-lg px-4 py-2.5 text-theme-sm font-medium text-white shadow hover:from-green-700 hover:to-green-600"
@@ -532,6 +555,12 @@ export default function ProductPage() {
                                     isHeader
                                     className="py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400"
                                 >
+                                    Sync Status
+                                </TableCell>
+                                <TableCell
+                                    isHeader
+                                    className="py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400"
+                                >
                                     {t('products.table.timestamps')}
                                 </TableCell>
                                 <TableCell
@@ -546,9 +575,9 @@ export default function ProductPage() {
                         {/* Updated Table Body */}
                         <TableBody className="divide-y divide-gray-100 dark:divide-gray-800">
                             {isLoading ? skeletonRows : error ? (
-                                <TableRow><TableCell colSpan={8} className="py-5 text-center text-red-500">{error}</TableCell></TableRow>
+                                <TableRow><TableCell colSpan={9} className="py-5 text-center text-red-500">{error}</TableCell></TableRow>
                             ) : products.length === 0 ? (
-                                <TableRow><TableCell colSpan={8} className="py-5 text-center text-gray-500">{t('products.no_results')}</TableCell></TableRow>
+                                <TableRow><TableCell colSpan={9} className="py-5 text-center text-gray-500">{t('products.no_results')}</TableCell></TableRow>
                             ) : (
                                 products.map((product) => {
                                     const productImages = product.images?.slice(0, 4) || []; // Show max 4 images
@@ -656,6 +685,33 @@ export default function ProductPage() {
                                                 </Badge>
                                             </TableCell>
 
+                                            {/* Sync Status */}
+                                            <TableCell className="py-3">
+                                                <div className="flex items-center gap-2">
+                                                    {product.shopId ? (
+                                                        <Badge size="sm" color="success">
+                                                            Synced
+                                                        </Badge>
+                                                    ) : (
+                                                        <div className="flex items-center gap-1">
+                                                            <Badge size="sm" color="warning">
+                                                                Local Only
+                                                            </Badge>
+                                                            <button
+                                                                onClick={() => {
+                                                                    setSelectedSyncProduct(product);
+                                                                    setShowSyncModal(true);
+                                                                }}
+                                                                className="ml-1 p-1 text-xs bg-blue-50 hover:bg-blue-100 text-blue-600 rounded transition-colors"
+                                                                title="Sync to TikTok Shop"
+                                                            >
+                                                                <Upload className="h-3 w-3" />
+                                                            </button>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </TableCell>
+
                                             {/* Timestamps */}
                                             <TableCell className="py-3 text-gray-500 text-[11px] dark:text-gray-400 align-top whitespace-nowrap">
                                                 <div className="flex flex-col gap-1">
@@ -742,6 +798,12 @@ export default function ProductPage() {
             </div>
 
             {/* Add the modal components */}
+            <CreateProductModal
+                isOpen={showCreateModal}
+                onClose={() => setShowCreateModal(false)}
+                onSuccess={handleCreateSuccess}
+            />
+
             <ProductDetailModal
                 product={selectedProduct}
                 isOpen={isModalOpen}
@@ -752,6 +814,16 @@ export default function ProductPage() {
                 isOpen={isSyncModalOpen}
                 onClose={() => setIsSyncModalOpen(false)}
                 onSync={handlerSyncProduct}
+            />
+
+            <SyncSingleProductModal
+                isOpen={showSyncModal && selectedSyncProduct !== null}
+                onClose={() => {
+                    setShowSyncModal(false);
+                    setSelectedSyncProduct(null);
+                }}
+                product={selectedSyncProduct}
+                onSyncSuccess={fetchProducts}
             />
         </div>
 
