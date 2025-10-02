@@ -52,7 +52,7 @@ export default function FraudAlertPage() {
         setFilters(prev => ({ ...prev, [field]: value }));
     };
 
-    const fetchAlerts = async () => {
+    const fetchAlerts = useCallback(async () => {
         setIsLoading(true);
         setError(null);
         try {
@@ -65,21 +65,21 @@ export default function FraudAlertPage() {
             const result = await httpClient.get(`/fraud-alert?${params.toString()}`);
             setAlerts(result?.alerts || []);
         } catch (err) {
-            const message = err instanceof Error ? err.message : "An unknown fetch error occurred";
+            const message = err instanceof Error ? err.message : t('fraud.fetch_error');
             setError(message);
             console.error("Fetch failed", err);
         } finally {
             setIsLoading(false);
         }
-    };
+    }, [filters.shopId, filters.alertType, filters.startDate, filters.endDate, t]);
 
     useEffect(() => {
         fetchAlerts();
-    }, [filters.shopId, filters.alertType, filters.startDate, filters.endDate]);
+    }, [filters.shopId, filters.alertType, filters.startDate, filters.endDate, fetchAlerts]);
 
 
     const formatUnixToDate = (ts: number) => {
-        if (!ts) return "N/A";
+        if (!ts) return t('common.na');
         const ms = ts < 1e12 ? ts * 1000 : ts;
         return new Date(ms).toLocaleDateString("vi-VN", {
             year: 'numeric',
@@ -122,7 +122,7 @@ export default function FraudAlertPage() {
                             className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-theme-sm font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 disabled:opacity-50 disabled:cursor-not-allowed dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200"
                         >
                             <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-                            Refresh
+                            {t('common.refresh')}
                         </button>
                     </div>
                 </div>
@@ -316,14 +316,14 @@ export default function FraudAlertPage() {
                                                 <p className="font-mono text-gray-800 text-theme-sm dark:text-white/90">
                                                     {alert.orderBankAccount 
                                                         ? `*****${alert.orderBankAccount.slice(-4)}` 
-                                                        : 'N/A'}
+                                                        : t('common.na')}
                                                 </p>
                                             </TableCell>
                                             <TableCell className="py-3">
                                                 <p className="font-mono text-gray-800 text-theme-sm dark:text-white/90">
                                                     {alert.configuredBankAccount
                                                         ? `*****${alert.configuredBankAccount.slice(-4)}`
-                                                        : 'N/A'}
+                                                        : t('common.na')}
                                                 </p>
                                             </TableCell>
                                             <TableCell className="py-3 text-gray-500 text-theme-sm dark:text-gray-400">
