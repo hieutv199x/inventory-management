@@ -101,7 +101,7 @@ const accountItems: NavItem[] = [
     icon: <FaAppStore size={24}/>,
     name: "nav.organizations",
     path: "/organizations",
-    roles: ["ADMIN", "SUPER_ADMIN", "OWNER"]
+    roles: ["SUPER_ADMIN"]
   }
 ];
 
