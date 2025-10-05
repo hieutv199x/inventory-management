@@ -417,34 +417,6 @@ export default function UserRolesPage() {
         </div>
       </div>
 
-      {/* Stats Cards - Update to use server data */}
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-        {Object.entries(systemRoleColors).map(([role, colorClass]) => {
-          const count = users.filter(u => u.role === role).length;
-
-          return (
-            <div key={role} className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">{role}</p>
-                  <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                    {count}
-                    {searchTerm && (
-                      <span className="text-sm text-gray-500 ml-1">
-                        on this page
-                      </span>
-                    )}
-                  </p>
-                </div>
-                <span className={`px-2 py-1 text-xs font-semibold rounded-full ${colorClass}`}>
-                  {role}
-                </span>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
       {/* Users Content - Grid View */}
       {viewMode === 'grid' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -542,8 +514,7 @@ export default function UserRolesPage() {
                     onClick={() => openEditModal(user)}
                     className="flex-1 px-3 py-1.5 text-xs font-medium text-brand-600 hover:text-brand-700 dark:text-brand-400 dark:hover:text-brand-300 border border-brand-300 rounded hover:bg-brand-50 dark:hover:bg-brand-900 transition-colors flex items-center justify-center space-x-1"
                   >
-                    <FaEdit className="h-3 w-3" />
-                    <span>Sửa</span>
+                    <FaEdit className="h-3 w-3" title='Sửa' />
                   </button>
 
                   <button
@@ -555,13 +526,11 @@ export default function UserRolesPage() {
                   >
                     {user.isActive ? (
                       <>
-                        <FaUserSlash className="h-3 w-3" />
-                        <span>Vô hiệu</span>
+                        <FaUserSlash className="h-3 w-3" title='Vô hiệu hóa'/>
                       </>
                     ) : (
                       <>
-                        <FaUserCheck className="h-3 w-3" />
-                        <span>Kích hoạt</span>
+                        <FaUserCheck className="h-3 w-3" title='Kích hoạt'/>
                       </>
                     )}
                   </button>
@@ -570,16 +539,14 @@ export default function UserRolesPage() {
                     onClick={() => handleResetPassword(user.id)}
                     className="flex-1 px-3 py-1.5 text-xs font-medium text-purple-600 hover:text-purple-700 dark:text-purple-400 dark:hover:text-purple-300 border border-purple-300 rounded hover:bg-purple-50 dark:hover:bg-purple-900 transition-colors flex items-center justify-center space-x-1"
                   >
-                    <FaKey className="h-3 w-3" />
-                    <span>Reset PW</span>
+                    <FaKey className="h-3 w-3" title='Reset mật khẩu'/>
                   </button>
 
                   <button
                     onClick={() => handleDeleteUser(user.id)}
                     className="flex-1 px-3 py-1.5 text-xs font-medium text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 border border-red-300 rounded hover:bg-red-50 dark:hover:bg-red-900 transition-colors flex items-center justify-center space-x-1"
                   >
-                    <FaTrash className="h-3 w-3" />
-                    <span>Xóa</span>
+                    <FaTrash className="h-3 w-3" title='Xóa' />
                   </button>
                 </div>
               </div>
@@ -695,8 +662,7 @@ export default function UserRolesPage() {
                             onClick={() => openEditModal(user)}
                             className="text-brand-600 hover:text-brand-900 dark:text-brand-400 dark:hover:text-brand-300 inline-flex items-center space-x-1"
                           >
-                            <FaEdit className="h-3 w-3" />
-                            <span>Sửa</span>
+                            <FaEdit className="h-3 w-3" title='Sửa'/>
                           </button>
 
                           <button
@@ -708,13 +674,11 @@ export default function UserRolesPage() {
                           >
                             {user.isActive ? (
                               <>
-                                <FaUserSlash className="h-3 w-3" />
-                                <span>Vô hiệu</span>
+                                <FaUserSlash className="h-3 w-3" title='Vô hiệu hóa'/>
                               </>
                             ) : (
                               <>
-                                <FaUserCheck className="h-3 w-3" />
-                                <span>Kích hoạt</span>
+                                <FaUserCheck className="h-3 w-3" title='Kích hoạt'/>
                               </>
                             )}
                           </button>
@@ -723,16 +687,14 @@ export default function UserRolesPage() {
                             onClick={() => handleResetPassword(user.id)}
                             className="text-purple-600 hover:text-purple-900 dark:text-purple-400 dark:hover:text-purple-300 inline-flex items-center space-x-1"
                           >
-                            <FaKey className="h-3 w-3" />
-                            <span>Reset</span>
+                            <FaKey className="h-3 w-3" title='Reset' />
                           </button>
 
                           <button
                             onClick={() => handleDeleteUser(user.id)}
                             className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300 inline-flex items-center space-x-1"
                           >
-                            <FaTrash className="h-3 w-3" />
-                            <span>Xóa</span>
+                            <FaTrash className="h-3 w-3" title='Xóa' />
                           </button>
                         </div>
                       </td>

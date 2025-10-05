@@ -144,11 +144,6 @@ export async function POST(request: NextRequest) {
   try {
     const { user: currentUser, isAdmin } = await getUserWithShopAccess(request, prisma);
 
-    // Only admins can create user shop roles
-    if (!isAdmin) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
-
     const { userId, shopId, role } = await request.json();
 
     // Validate required fields
@@ -159,22 +154,84 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const shop = await prisma.shopAuthorization.findUnique({
+      where: { id: shopId },
+      select: {
+        id: true,
+        shopId: true,
+        shopName: true,
+        status: true,
+        orgId: true,
+        groupId: true
+      }
+    });
+
+    if (!shop) {
+      return NextResponse.json({ error: 'Shop not found' }, { status: 404 });
+    }
+
+    const isOrgAdmin = ['ADMIN', 'SUPER_ADMIN'].includes(currentUser.role as string);
+    let canManage = isOrgAdmin;
+
+    if (!canManage && shop.groupId) {
+      const membership = await prisma.shopGroupMember.findUnique({
+        where: {
+          groupId_userId: {
+            groupId: shop.groupId,
+            userId: currentUser.id
+          }
+        }
+      });
+
+      if (membership?.isActive && membership.role === 'MANAGER') {
+        canManage = true;
+      }
+    }
+
+    if (!canManage) {
+      return NextResponse.json({ error: 'Only administrators or group managers can assign shop access.' }, { status: 403 });
+    }
+
     // Verify the user exists
     const user = await prisma.user.findUnique({
-      where: { id: userId }
+      where: { id: userId },
+      select: {
+        id: true,
+        name: true,
+        role: true
+      }
     });
 
     if (!user) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    // Verify the shop exists
-    const shop = await prisma.shopAuthorization.findUnique({
-      where: { id: shopId }
+    // Enforce organization membership alignment
+    const userOrgMembership = await prisma.organizationMember.findFirst({
+      where: {
+        orgId: shop.orgId,
+        userId
+      }
     });
 
-    if (!shop) {
-      return NextResponse.json({ error: 'Shop not found' }, { status: 404 });
+    if (!userOrgMembership) {
+      return NextResponse.json({ error: 'User does not belong to this organization' }, { status: 400 });
+    }
+
+    // Ensure assigned user is part of the shop group if one exists
+    if (shop.groupId) {
+      const targetMembership = await prisma.shopGroupMember.findUnique({
+        where: {
+          groupId_userId: {
+            groupId: shop.groupId,
+            userId
+          }
+        }
+      });
+
+      if (!targetMembership || !targetMembership.isActive) {
+        return NextResponse.json({ error: 'User must be an active member of the group that owns this shop' }, { status: 400 });
+      }
     }
 
     // Check if the role already exists
@@ -217,11 +274,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       userShopRole: {
         ...userShopRoleWithData,
-        user: {
-          id: user.id,
-          name: user.name,
-          role: user.role
-        },
+        user,
         shop: {
           id: shop.id,
           shopId: shop.shopId,

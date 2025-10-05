@@ -19,7 +19,10 @@
     "verify-migration": "npx tsx src/scripts/verify-specific-migration.ts",
     "debug-migration": "npx tsx src/scripts/debug-migration.ts",
     "simple-migrate": "npx tsx src/scripts/simple-migration.ts",
-    "cleanup": "npx tsx src/scripts/cleanup-conflicts.ts"
+    "cleanup": "npx tsx src/scripts/cleanup-conflicts.ts",
+    "repair:orders-org": "npx tsx src/scripts/repair-orders-org.ts",
+    "force:orders-primary": "npx tsx src/scripts/force-orders-to-primary-org.ts",
+    "backfill:org": "npx tsx src/scripts/backfill-org.ts"
   },
   "dependencies": {
     "@fullcalendar/core": "^6.1.15",
@@ -60,6 +63,7 @@
     "react-dropzone": "^14.3.5",
     "react-hot-toast": "^2.4.1",
     "react-icons": "^5.5.0",
+    "react-select": "^5.10.2",
     "request": "^2.88.2",
     "superagent": "^10.2.3",
     "swiper": "^11.2.0",

@@ -72,6 +72,8 @@ model User {
   schedulerConfigs SchedulerConfig[]
   // Organization memberships (multi-tenant)
   organizationMemberships OrganizationMember[]
+  groupMemberships        ShopGroupMember[]
+  managedGroups           ShopGroup[]      @relation("GroupManager")
   auditLogs AuditLog[]
 }
 
@@ -94,6 +96,51 @@ model Session {
   activeOrgId  String?  @db.ObjectId
 }
  
+enum ShopGroupRole {
+  MANAGER
+  MEMBER
+}
+
+model ShopGroup {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  name        String
+  description String?
+  orgId       String   @db.ObjectId
+  managerId   String   @db.ObjectId
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  manager      User          @relation("GroupManager", fields: [managerId], references: [id], onDelete: Cascade)
+  members      ShopGroupMember[]
+  shops        ShopAuthorization[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("shop_groups")
+  @@unique([orgId, name])
+  @@index([orgId])
+  @@index([managerId])
+}
+
+model ShopGroupMember {
+  id        String        @id @default(auto()) @map("_id") @db.ObjectId
+  groupId   String        @db.ObjectId
+  userId    String        @db.ObjectId
+  role      ShopGroupRole @default(MEMBER)
+  isDefault Boolean       @default(false)
+  isActive  Boolean       @default(true)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  group ShopGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, userId])
+  @@index([userId])
+  @@index([groupId])
+  @@map("shop_group_members")
+}
+
 // Restored ChannelApp model (previously corrupted by patch)
 model ChannelApp {
   id        String   @id @default(auto()) @map("_id") @db.ObjectId
@@ -161,6 +208,8 @@ model ShopAuthorization {
   // Relations - make appId optional for migration
   appId String?   @db.ObjectId
   app   ChannelApp? @relation(fields: [appId], references: [id], onDelete: Cascade)
+  groupId String?      @db.ObjectId
+  group   ShopGroup?   @relation(fields: [groupId], references: [id], onDelete: SetNull)
   
   // Bank relations
   bankAccounts BankAccount[]
@@ -185,6 +234,7 @@ model ShopAuthorization {
   
   @@map("shop_authorizations")
   @@index([orgId])
+  @@index([groupId])
 }
 
 // Update Product model to be channel-agnostic
@@ -1251,6 +1301,7 @@ model Organization {
   members   OrganizationMember[]
   // Reverse relations for tenant-scoped entities
   shopAuthorizations      ShopAuthorization[]
+  shopGroups              ShopGroup[]
   products                Product[]
   bankAccounts            BankAccount[]
   bankHistories           BankHistory[]

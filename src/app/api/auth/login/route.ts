@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
 
     // Find user by username only
     const user = await prisma.user.findUnique({
-      where: { username },
+      where: { username, isActive: true },
       select: {
         id: true,
         username: true,

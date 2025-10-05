@@ -47,7 +47,7 @@ export const userShopRoleApi = {
 
 // Shop API methods
 export const shopApi = {
-  getAll: () => httpClient.get('/shops'),
+  getAll: (params?: string) => httpClient.get(`/shops${params || ''}`),
   
   getById: (id: string) => httpClient.get(`/shops/${id}`),
   
@@ -62,6 +62,32 @@ export const shopApi = {
   }) => httpClient.put(`/shops/${id}`, shopData),
   
   delete: (id: string) => httpClient.delete(`/shops/${id}`),
+};
+
+export const shopGroupApi = {
+  getAll: (params?: string) => httpClient.get(`/shop-groups${params || ''}`),
+
+  getById: (id: string) => httpClient.get(`/shop-groups/${id}`),
+
+  create: (payload: {
+    name: string;
+    description?: string;
+    managerId: string;
+    memberIds?: string[];
+  }) => httpClient.post('/shop-groups', payload),
+
+  update: (id: string, payload: {
+    name?: string;
+    description?: string | null;
+    managerId?: string;
+    memberIds?: string[];
+    defaultMemberId?: string | null;
+  }) => httpClient.patch(`/shop-groups/${id}`, payload),
+
+  delete: (id: string) => httpClient.delete(`/shop-groups/${id}`),
+
+  moveShop: (shopId: string, payload: { groupId: string | null }) =>
+    httpClient.patch(`/shops/${shopId}/group`, payload),
 };
 
 // Auth API methods

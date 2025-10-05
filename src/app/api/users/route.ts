@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { OrganizationRole } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { verifyToken } from "@/lib/auth";
 import { resolveOrgContext } from '@/lib/tenant-context';
@@ -153,7 +154,7 @@ export async function GET(request: NextRequest) {
 // Create new user (Admin only)
 export async function POST(request: NextRequest) {
   try {
-    const decoded = verifyToken(request);
+  const decoded = verifyToken(request);
 
     // Get current user
     const currentUser = await prisma.user.findUnique({
@@ -167,12 +168,31 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if user has permission (Admin only)
-    if (!["ADMIN"].includes(currentUser.role)) {
+    // Determine org context and creator permissions
+    const orgContext = await resolveOrgContext(request, prisma as any);
+    const isSuperAdmin = orgContext.superAdmin === true || currentUser.role === "SUPER_ADMIN";
+
+    // Check if user has permission
+    if (!(["ADMIN", "MANAGER", "SUPER_ADMIN"].includes(currentUser.role))) {
       return NextResponse.json(
         { error: "Only administrators can create users" },
         { status: 403 }
       );
+    }
+
+    let targetOrgId: string | null = null;
+    if (!isSuperAdmin) {
+      if (!orgContext.org) {
+        const errorCode = orgContext.needsSelection ? "ACTIVE_ORG_REQUIRED" : "ORGANIZATION_CONTEXT_REQUIRED";
+        return NextResponse.json({ error: errorCode }, { status: 409 });
+      }
+
+      targetOrgId = orgContext.org.id;
+
+      const activeMembership = orgContext.memberships?.find((membership) => membership.orgId === targetOrgId);
+      if (!activeMembership) {
+        return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
+      }
     }
 
     const { name, username, role, password } = await request.json();
@@ -181,6 +201,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: "Missing required fields" },
         { status: 400 }
+      );
+    }
+
+    if (role === "SUPER_ADMIN" && currentUser.role !== "SUPER_ADMIN") {
+      return NextResponse.json(
+        { error: "Only super administrators can create super admin users" },
+        { status: 403 }
       );
     }
 
@@ -199,18 +226,51 @@ export async function POST(request: NextRequest) {
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 12);
 
-    const newUser = await prisma.user.create({
-      data: {
-        name,
-        username,
-        role,
-        password: hashedPassword,
-      },
-      select: {
-        id: true,
-        name: true,
-        role: true,
-      },
+    const mapUserRoleToOrgRole = (userRole: string): OrganizationRole => {
+      switch (userRole) {
+        case "ADMIN":
+        case "MANAGER":
+          return OrganizationRole.ADMIN;
+        case "ACCOUNTANT":
+          return OrganizationRole.ACCOUNTANT;
+        case "RESOURCE":
+        case "SELLER":
+          return OrganizationRole.OPERATOR;
+        case "SUPER_ADMIN":
+          return OrganizationRole.ADMIN;
+        default:
+          return OrganizationRole.VIEWER;
+      }
+    };
+
+    const newUser = await prisma.$transaction(async (tx) => {
+      const createdUser = await tx.user.create({
+        data: {
+          name,
+          username,
+          role,
+          password: hashedPassword,
+          createdBy: currentUser.id,
+        },
+        select: {
+          id: true,
+          name: true,
+          role: true,
+        },
+      });
+
+      if (targetOrgId) {
+        await tx.organizationMember.create({
+          data: {
+            orgId: targetOrgId,
+            userId: createdUser.id,
+            role: mapUserRoleToOrgRole(createdUser.role),
+            inviteStatus: "ACCEPTED",
+          },
+        });
+      }
+
+      return createdUser;
     });
 
     return NextResponse.json({ user: newUser }, { status: 201 });

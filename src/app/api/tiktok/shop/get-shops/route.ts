@@ -11,7 +11,13 @@ const prisma = new PrismaClient();
  */
 export async function GET(request: NextRequest) {
   try {
-    const { user, isAdmin, accessibleShopIds } = await getUserWithShopAccess(request, prisma);
+    const {
+      isAdmin,
+      accessibleShopIds,
+      managedGroupIds = [],
+      directShopIds = [],
+      activeOrgId
+    } = await getUserWithShopAccess(request, prisma);
 
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get('page') || '1', 10);
@@ -23,7 +29,11 @@ export async function GET(request: NextRequest) {
     const skip = (page - 1) * limit;
 
     // Get active shop IDs
-    const activeShopIds = await getActiveShopIds(prisma);
+    const activeShopIds = await getActiveShopIds(prisma, {
+      orgId: activeOrgId ?? undefined,
+      groupIds: isAdmin ? undefined : managedGroupIds,
+      shopIds: isAdmin ? undefined : directShopIds
+    });
 
     // Validate shop access
     const { shopFilter, hasAccess } = validateShopAccess(

@@ -1,13 +1,60 @@
 import { NextRequest, NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
+import { Prisma, PrismaClient } from "@prisma/client";
 import { getUserWithShopAccess } from "@/lib/auth";
 import { resolveOrgContext, requireOrg, withOrgScope } from '@/lib/tenant-context';
 
 const prisma = new PrismaClient();
 
+const shopInclude = {
+    app: {
+        select: {
+            id: true,
+            appName: true,
+            appKey: true,
+            appSecret: true,
+            channel: true,
+            isActive: true
+        }
+    },
+    group: {
+        select: {
+            id: true,
+            name: true,
+            manager: {
+                select: {
+                    id: true,
+                    name: true
+                }
+            }
+        }
+    },
+    userShopRoles: {
+        include: {
+            user: {
+                select: {
+                    id: true,
+                    name: true,
+                    username: true,
+                    role: true
+                }
+            }
+        }
+    }
+} satisfies Prisma.ShopAuthorizationInclude;
+
+type ShopWithRelations = Prisma.ShopAuthorizationGetPayload<{
+    include: typeof shopInclude;
+}>;
+
 export async function GET(req: NextRequest) {
     try {
-    const { user, accessibleShopIds, isAdmin } = await getUserWithShopAccess(req, prisma);
+    const {
+        accessibleShopIds,
+        directShopIds = [],
+        managedGroupShopIds = [],
+        isAdmin,
+        isManager
+    } = await getUserWithShopAccess(req, prisma);
     const orgResult = await resolveOrgContext(req, prisma);
     const org = requireOrg(orgResult);
         
@@ -73,8 +120,17 @@ export async function GET(req: NextRequest) {
 
         // Role-based access control
         if (!isAdmin) {
-            // For non-admin users, filter by accessible shops
-            if (accessibleShopIds.length === 0) {
+            // Determine allowed shops based on role-specific scopes
+            const managerScopedShops = Array.from(new Set([
+                ...managedGroupShopIds,
+                ...directShopIds
+            ]));
+
+            const allowedShopIds = isManager
+                ? (managerScopedShops.length > 0 ? managerScopedShops : accessibleShopIds)
+                : (directShopIds.length > 0 ? directShopIds : accessibleShopIds);
+
+            if (!allowedShopIds || allowedShopIds.length === 0) {
                 // User has no shop access
                 return NextResponse.json({
                     shops: [],
@@ -89,7 +145,7 @@ export async function GET(req: NextRequest) {
 
             // Filter by accessible shop IDs (TikTok shop IDs)
             whereClause.id = {
-                in: accessibleShopIds
+                in: allowedShopIds
             };
         }
 
@@ -99,23 +155,9 @@ export async function GET(req: NextRequest) {
             where: scopedWhere
         });
 
-        const totalPages = Math.ceil(total / limit);
-
-        // Fetch shops with all necessary data
-        const shops = await prisma.shopAuthorization.findMany({
+        const shops: ShopWithRelations[] = await prisma.shopAuthorization.findMany({
             where: scopedWhere,
-            include: {
-                app: {
-                    select: {
-                        id: true,
-                        appName: true,
-                        appKey: true,
-                        appSecret: true,
-                        channel: true,
-                        isActive: true
-                    }
-                }
-            },
+            include: shopInclude,
             orderBy: [
                 { updatedAt: 'desc' },
                 { createdAt: 'desc' }
@@ -123,6 +165,8 @@ export async function GET(req: NextRequest) {
             skip,
             take: limit
         });
+
+        const totalPages = limit > 0 ? Math.ceil(total / limit) : 1;
 
         // Transform the data to match frontend expectations
         const transformedShops = shops.map(shop => ({
@@ -140,7 +184,26 @@ export async function GET(req: NextRequest) {
                 appName: shop?.app?.appName,
                 channel: shop?.app?.channel,
                 appSecret: shop?.app?.appSecret
-            }
+            },
+            group: shop.group ? {
+                id: shop.group.id,
+                name: shop.group.name,
+                manager: shop.group.manager ? {
+                    id: shop.group.manager.id,
+                    name: shop.group.manager.name
+                } : null
+            } : null,
+            userAssignments: shop.userShopRoles.map(role => ({
+                id: role.id,
+                role: role.role,
+                user: role.user ? {
+                    id: role.user.id,
+                    name: role.user.name,
+                    username: role.user.username,
+                    systemRole: role.user.role
+                } : null,
+                createdAt: role.createdAt.toISOString()
+            }))
         }));
 
         return NextResponse.json({

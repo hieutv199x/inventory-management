@@ -6,8 +6,18 @@ const prisma = new PrismaClient();
 
 export async function GET(req: NextRequest) {
     try {
-        const { user, accessibleShopIds, isAdmin } = await getUserWithShopAccess(req, prisma);
-        const activeShopIds = await getActiveShopIds(prisma);
+        const {
+            accessibleShopIds,
+            isAdmin,
+            managedGroupIds = [],
+            directShopIds = [],
+            activeOrgId
+        } = await getUserWithShopAccess(req, prisma);
+        const activeShopIds = await getActiveShopIds(prisma, {
+            orgId: activeOrgId ?? undefined,
+            groupIds: isAdmin ? undefined : managedGroupIds,
+            shopIds: isAdmin ? undefined : directShopIds
+        });
 
         const { searchParams } = req.nextUrl;
 
@@ -30,11 +40,16 @@ export async function GET(req: NextRequest) {
         filters.shopId = shopFilter;
 
         // Get active shops only
-        const activeShops = await prisma.shopAuthorization.findMany({
-            where: { status: 'ACTIVE' },
-            select: { shopId: true },
-        });
-        const activeShopIdsFromDb = activeShops.map(shop => shop.shopId);
+        const activeShopRecords = activeShopIds.length > 0
+            ? await prisma.shopAuthorization.findMany({
+                where: { id: { in: activeShopIds } },
+                select: { id: true, shopId: true },
+            })
+            : [];
+
+        const activeShopIdsFromDb = activeShopRecords
+            .map(shop => shop.shopId)
+            .filter((id): id is string => Boolean(id));
 
         // Filter to only include active shops
         if (filters.shopId) {

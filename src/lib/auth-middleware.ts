@@ -70,11 +70,29 @@ export async function checkShopPermission(userId: string, shopId: string, allowe
       }
     });
 
-    if (!userShopRole) {
+    if (userShopRole && allowedRoles.includes(userShopRole.role)) {
+      return true;
+    }
+
+    const shop = await prisma.shopAuthorization.findUnique({
+      where: { id: shopId },
+      select: { groupId: true }
+    });
+
+    if (!shop?.groupId) {
       return false;
     }
 
-    return allowedRoles.includes(userShopRole.role);
+    const membership = await prisma.shopGroupMember.findUnique({
+      where: {
+        groupId_userId: {
+          groupId: shop.groupId,
+          userId
+        }
+      }
+    });
+
+    return Boolean(membership && membership.isActive && membership.role === 'MANAGER');
   } catch (error) {
     return false;
   }

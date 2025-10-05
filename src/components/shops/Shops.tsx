@@ -1,8 +1,10 @@
 "use client";
 import React, { useState, useEffect, useCallback } from 'react';
-import { FaStore, FaPlus, FaEdit, FaTrash, FaTimes, FaSearch, FaEye, FaTh, FaList, FaKey, FaCopy, FaSave } from 'react-icons/fa';
+import { FaStore, FaPlus, FaEdit, FaTrash, FaTimes, FaSearch, FaEye, FaTh, FaList, FaKey, FaCopy, FaSave, FaLayerGroup } from 'react-icons/fa';
 import { useAuth } from '@/context/authContext';
+import { useLanguage } from '@/context/LanguageContext';
 import { httpClient } from '@/lib/http-client';
+import { shopGroupApi } from '@/lib/api-client';
 import Badge from "@/components/ui/badge/Badge";
 import Button from "@/components/ui/button/Button";
 import { Modal } from "@/components/ui/modal";
@@ -16,6 +18,15 @@ import { useLoading } from '@/context/loadingContext';
 import ShopDetailsModal from './ShopDetailsModal';
 import EditManagedNameModal from './EditManagedNameModal';
 import AppListModal from './AppListModal';
+
+interface ShopGroupInfo {
+  id: string;
+  name: string;
+  manager: {
+    id: string;
+    name: string | null;
+  } | null;
+}
 
 interface Shop {
   id: string;
@@ -32,6 +43,7 @@ interface Shop {
   region: string;
   status: string | null;
   createdAt: string;
+  group?: ShopGroupInfo | null;
 }
 
 interface App {
@@ -48,6 +60,7 @@ interface App {
 
 export default function Shops() {
   const { user } = useAuth();
+  const { t } = useLanguage();
   const { showLoading, hideLoading } = useLoading();
 
   const [shops, setShops] = useState<Shop[]>([]);
@@ -77,6 +90,12 @@ export default function Shops() {
   const [selectedApp, setSelectedApp] = useState<App | null>(null);
   const [showDeleteAppModal, setShowDeleteAppModal] = useState(false);
 
+  const [shopGroups, setShopGroups] = useState<ShopGroupInfo[]>([]);
+  const [groupsLoading, setGroupsLoading] = useState(false);
+  const [showAssignGroupModal, setShowAssignGroupModal] = useState(false);
+  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
+  const [assigningGroup, setAssigningGroup] = useState(false);
+
   const [formData, setFormData] = useState({
     country: 'US',
     serviceId: '',
@@ -91,9 +110,11 @@ export default function Shops() {
   ];
 
   // Role-based permissions
-  const canAdd = user?.role === 'ADMIN' || user?.role === 'MANAGER';
-  const canDelete = user?.role === 'ADMIN';
-  const canViewAllShops = user?.role === 'ADMIN' || user?.role === 'MANAGER';
+  const userRole = user?.role as string | undefined;
+  const canAdd = userRole === 'ADMIN' || userRole === 'MANAGER';
+  const canDelete = userRole === 'ADMIN';
+  const canViewAllShops = userRole === 'ADMIN' || userRole === 'MANAGER';
+  const canAssignGroup = userRole === 'ADMIN' || userRole === 'SUPER_ADMIN';
 
   // Fetch shops with search and pagination
   const fetchShops = useCallback(async (page = 1, search = '', limit = 12) => {
@@ -114,7 +135,36 @@ export default function Shops() {
 
       const data = await httpClient.get(`/shops?${params}`);
 
-      setShops(data.shops || []);
+      const normalizedShops: Shop[] = (data.shops || []).map((shop: any) => ({
+        id: shop.id,
+        shopId: shop.shopId,
+        shopName: shop.shopName ?? null,
+        managedName: shop.managedName ?? null,
+        shopCipher: shop.shopCipher ?? null,
+        app: {
+          id: shop.app?.id ?? '',
+          channel: shop.app?.channel ?? 'N/A',
+          appSecret: shop.app?.appSecret ?? null,
+          appName: shop.app?.appName ?? null,
+        },
+        region: shop.region ?? 'N/A',
+        status: shop.status ?? null,
+        createdAt: shop.createdAt,
+        group: shop.group
+          ? {
+              id: shop.group.id,
+              name: shop.group.name,
+              manager: shop.group.manager
+                ? {
+                    id: shop.group.manager.id,
+                    name: shop.group.manager.name ?? null,
+                  }
+                : null,
+            }
+          : null,
+      }));
+
+      setShops(normalizedShops);
       setPagination({
         page: data.pagination?.page || 1,
         limit: data.pagination?.limit || limit,
@@ -277,6 +327,59 @@ export default function Shops() {
     }
   };
 
+  const loadShopGroups = useCallback(async () => {
+    try {
+      setGroupsLoading(true);
+      const response = await shopGroupApi.getAll();
+      const groups: ShopGroupInfo[] = (response.groups || []).map((group: any) => ({
+        id: group.id,
+        name: group.name,
+        manager: group.manager
+          ? {
+              id: group.manager.id,
+              name: group.manager.name ?? null,
+            }
+          : null,
+      }));
+      setShopGroups(groups);
+    } catch (error: any) {
+      console.error('Error fetching shop groups:', error);
+      setError(t('shops.assign_modal.load_failed'));
+    } finally {
+      setGroupsLoading(false);
+    }
+  }, [t]);
+
+  const handleOpenAssignGroupModal = (shop: Shop) => {
+    setSelectedShop(shop);
+    setSelectedGroupId(shop.group?.id ?? null);
+    setShowAssignGroupModal(true);
+    loadShopGroups();
+  };
+
+  const handleAssignGroup = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!selectedShop) return;
+
+    setAssigningGroup(true);
+    showLoading(t('common.saving'));
+
+    try {
+      await shopGroupApi.moveShop(selectedShop.id, {
+        groupId: selectedGroupId || null,
+      });
+      setSuccess(t('shops.assign_modal.success'));
+      await fetchShops(pagination.page, searchTerm, pagination.limit);
+      closeModals();
+    } catch (error: any) {
+      console.error('Error updating shop group:', error);
+      setError(error?.message || t('shops.assign_modal.save_failed'));
+    } finally {
+      setAssigningGroup(false);
+      hideLoading();
+    }
+  };
+
   // Add state for editing managed names
   const [editingManagedName, setEditingManagedName] = useState<{ [id: string]: boolean }>({});
   const [editManagedNameValue, setEditManagedNameValue] = useState<{ [id: string]: string }>({});
@@ -351,10 +454,14 @@ export default function Shops() {
     setShowDetailsModal(false);
     setShowAppListModal(false);
     setShowDeleteAppModal(false);
+  setShowAssignGroupModal(false);
     setSelectedShop(null);
     setSelectedApp(null);
     setEditingAppId(null);
     setEditAppSecret("");
+  setSelectedGroupId(null);
+  setAssigningGroup(false);
+  setGroupsLoading(false);
     setError('');
     setFormData({
       country: 'US',
@@ -388,6 +495,8 @@ export default function Shops() {
       hideLoading();
     }
   };
+
+  const selectedShopDisplayName = selectedShop ? (selectedShop.managedName || selectedShop.shopName || selectedShop.shopId) : '';
 
   if (loading) {
     return (
@@ -603,6 +712,12 @@ export default function Shops() {
                       {shop.app.channel}
                     </span>
                   </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500 dark:text-gray-400">{t('shops.group_label')}:</span>
+                    <span className="text-gray-900 dark:text-white text-xs truncate ml-2">
+                      {shop.group?.name || t('shops.no_group')}
+                    </span>
+                  </div>
                   <div className="flex justify-between items-center">
                     <span className="text-gray-500 dark:text-gray-400">Secret:</span>
                     <div className="flex items-center">
@@ -637,6 +752,15 @@ export default function Shops() {
                     <FaEye className="h-3 w-3" />
                     <span>Chi tiết</span>
                   </button>
+                  {canAssignGroup && (
+                    <button
+                      onClick={() => handleOpenAssignGroupModal(shop)}
+                      className="flex-1 px-3 py-1.5 text-xs font-medium text-amber-600 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300 border border-amber-300 dark:border-amber-500 rounded hover:bg-amber-50 dark:hover:bg-amber-900 transition-colors flex items-center justify-center space-x-1"
+                    >
+                      <FaLayerGroup className="h-3 w-3" />
+                      <span>{t('shops.actions.assign_group')}</span>
+                    </button>
+                  )}
                   <LoadingButton
                     onClick={() => handleRefreshToken(shop)}
                     loading={!!refreshingToken[shop.id]}
@@ -688,6 +812,9 @@ export default function Shops() {
                     Trạng thái
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    {t('shops.group_label')}
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                     Ngày tạo
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
@@ -698,7 +825,7 @@ export default function Shops() {
               <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                 {shops.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
+                    <td colSpan={8} className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
                       {searchTerm
                         ? `Không có shop nào khớp với "${searchTerm}". Thử tìm kiếm khác.`
                         : 'Chưa có shop nào. Bắt đầu bằng cách thêm shop đầu tiên của bạn.'
@@ -821,6 +948,17 @@ export default function Shops() {
                       <td className="px-6 py-4">
                         {getStatusBadge(shop.status)}
                       </td>
+                      <td className="px-6 py-4">
+                        {shop.group ? (
+                          <div className="text-sm text-gray-900 dark:text-white">
+                            {shop.group.name}
+                          </div>
+                        ) : (
+                          <span className="text-sm text-gray-400 dark:text-gray-500 italic">
+                            {t('shops.no_group')}
+                          </span>
+                        )}
+                      </td>
                       <td className="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
                         {new Date(shop.createdAt).toLocaleDateString('vi-VN')}
                       </td>
@@ -836,6 +974,15 @@ export default function Shops() {
                             <FaEye className="h-3 w-3" />
                             <span>Chi tiết</span>
                           </button>
+                          {canAssignGroup && (
+                            <button
+                              onClick={() => handleOpenAssignGroupModal(shop)}
+                              className="text-amber-600 hover:text-amber-800 dark:text-amber-400 dark:hover:text-amber-300 inline-flex items-center space-x-1"
+                            >
+                              <FaLayerGroup className="h-3 w-3" />
+                              <span>{t('shops.actions.assign_group')}</span>
+                            </button>
+                          )}
                           <LoadingButton
                             onClick={() => handleRefreshToken(shop)}
                             loading={!!refreshingToken[shop.id]}
@@ -1011,6 +1158,71 @@ export default function Shops() {
                 className="flex-1"
               >
                 Lưu thay đổi
+              </LoadingButton>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {showAssignGroupModal && selectedShop && (
+        <Modal isOpen={showAssignGroupModal} onClose={closeModals} className="max-w-md p-6">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white vietnamese-text">
+              {t('shops.assign_modal.title', { shop: selectedShopDisplayName })}
+            </h2>
+            <button onClick={closeModals} className="text-gray-400 hover:text-gray-600">
+              <FaTimes className="h-5 w-5" />
+            </button>
+          </div>
+
+          <form onSubmit={handleAssignGroup} className="space-y-4">
+            <div>
+              <Label>{t('shops.assign_modal.group_label')}</Label>
+              {groupsLoading ? (
+                <div className="py-2 text-sm text-gray-500 dark:text-gray-400">
+                  {t('common.loading')}
+                </div>
+              ) : (
+                <select
+                  value={selectedGroupId ?? ''}
+                  onChange={(e) => setSelectedGroupId(e.target.value || null)}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                  disabled={assigningGroup}
+                >
+                  <option value="">{t('shops.assign_modal.unassigned')}</option>
+                  {shopGroups.map((group) => (
+                    <option key={group.id} value={group.id}>
+                      {group.name}{group.manager?.name ? ` • ${group.manager.name}` : ''}
+                    </option>
+                  ))}
+                </select>
+              )}
+              <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                {t('shops.assign_modal.group_help')}
+              </p>
+              {!groupsLoading && shopGroups.length === 0 && (
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  {t('shopGroups.no_groups')}
+                </p>
+              )}
+            </div>
+
+            <div className="flex space-x-3 pt-4">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={closeModals}
+                className="flex-1"
+              >
+                {t('common.cancel')}
+              </Button>
+              <LoadingButton
+                type="submit"
+                loading={assigningGroup}
+                loadingText={t('common.saving')}
+                className="flex-1"
+              >
+                {t('shops.assign_modal.save_group')}
               </LoadingButton>
             </div>
           </form>

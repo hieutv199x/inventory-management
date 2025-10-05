@@ -1,11 +1,16 @@
 "use client";
-import React, { useState, useEffect } from 'react';
-import { FaUsers, FaPlus, FaEdit, FaTrash, FaTimes, FaSearch } from 'react-icons/fa';
-import { userShopRoleApi, userApi, shopApi } from '@/lib/api-client';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { FaUsers, FaPlus, FaEdit, FaTrash, FaTimes, FaSearch, FaLayerGroup, FaUserPlus, FaStore } from 'react-icons/fa';
+import { userShopRoleApi, userApi, shopApi, shopGroupApi } from '@/lib/api-client';
 import { Modal } from '@/components/ui/modal';
 import Button from '@/components/ui/button/Button';
 import Label from '@/components/form/Label';
 import { useLanguage } from '@/context/LanguageContext';
+import { useAuth } from '@/context/authContext';
+import AssignUserShopGroupModal from '@/components/permissions/AssignUserShopGroupModal';
+import LoadingButton from '@/components/ui/loading/LoadingButton';
+import CreateShopGroupModal from '@/components/permissions/CreateShopGroupModal';
+import Select, { FormatOptionLabelMeta, MultiValue } from 'react-select';
 
 interface UserShopRole {
   id: string;
@@ -16,7 +21,7 @@ interface UserShopRole {
   user: {
     id: string;
     name: string;
-    email: string;
+    username: string;
   };
   shop: {
     id: string;
@@ -27,16 +32,55 @@ interface UserShopRole {
 interface User {
   id: string;
   name: string;
-  email: string;
+  username: string;
 }
 
 interface Shop {
   id: string;
   shopName: string;
+  shopId?: string;
+  managedName?: string | null;
+  groupId?: string | null;
+  groupName?: string | null;
+}
+
+interface ShopOption {
+  value: string;
+  label: string;
+  shopId?: string;
+  groupName?: string | null;
+}
+
+interface ShopGroupMember {
+  id: string;
+  user: {
+    id: string;
+    name?: string | null;
+    username?: string | null;
+    role?: string | null;
+  } | null;
+  role?: string | null;
+  isDefault?: boolean;
+}
+
+interface ShopGroup {
+  id: string;
+  name: string;
+  description?: string | null;
+  manager: {
+    id: string;
+    name?: string | null;
+    username?: string | null;
+  } | null;
+  members: ShopGroupMember[];
+  shopCount: number;
 }
 
 export default function PermissionsPage() {
   const { t } = useLanguage();
+  const { user } = useAuth();
+  const userId = user?.id ?? null;
+  const userRole = user?.role ?? null;
   const [userRoles, setUserRoles] = useState<UserShopRole[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [shops, setShops] = useState<Shop[]>([]);
@@ -44,6 +88,7 @@ export default function PermissionsPage() {
   const [selectedShop, setSelectedShop] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [showAssignModal, setShowAssignModal] = useState(false);
+  const [showAssignShopGroupModal, setShowAssignShopGroupModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedRole, setSelectedRole] = useState<UserShopRole | null>(null);
   const [formData, setFormData] = useState({
@@ -60,6 +105,18 @@ export default function PermissionsPage() {
     totalPages: 0
   });
   const [searchLoading, setSearchLoading] = useState(false);
+  const [groups, setGroups] = useState<ShopGroup[]>([]);
+  const [groupsLoading, setGroupsLoading] = useState(true);
+  const [selectedGroup, setSelectedGroup] = useState<ShopGroup | null>(null);
+  const [showAddUserToGroupModal, setShowAddUserToGroupModal] = useState(false);
+  const [showAddShopToGroupModal, setShowAddShopToGroupModal] = useState(false);
+  const [groupUserForm, setGroupUserForm] = useState({ userId: '' });
+  const [groupShopForm, setGroupShopForm] = useState({ shopIds: [] as string[] });
+  const [groupModalError, setGroupModalError] = useState('');
+  const [groupActionLoading, setGroupActionLoading] = useState(false);
+  const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
+  const [shopSelectPortalTarget, setShopSelectPortalTarget] = useState<HTMLElement | null>(null);
+  const canCreateGroups = useMemo(() => ['ADMIN', 'SUPER_ADMIN'].includes(user?.role ?? ''), [user?.role]);
 
   const roleColors = {
     OWNER: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
@@ -87,6 +144,52 @@ export default function PermissionsPage() {
     }
   };
 
+  const mapShopGroup = useCallback((group: any): ShopGroup => ({
+    id: group.id,
+    name: group.name,
+    description: group.description ?? null,
+    manager: group.manager
+      ? {
+          id: group.manager.id,
+          name: group.manager.name ?? null,
+          username: group.manager.username ?? null
+        }
+      : null,
+    members: (group.members || [])
+      .filter((member: any) => member.isActive !== false)
+      .map((member: any) => ({
+        id: member.id,
+        user: member.user
+          ? {
+              id: member.user.id,
+              name: member.user.name ?? null,
+              username: member.user.username ?? null,
+              role: member.user.role ?? null
+            }
+          : null,
+        role: member.role ?? null,
+        isDefault: member.isDefault ?? false
+      })),
+    shopCount: group.shopCount ?? 0
+  }), []);
+
+  const refreshSelectedGroup = useCallback(
+    async (groupId: string) => {
+      try {
+        const response = await shopGroupApi.getById(groupId);
+        if (response.group) {
+          const normalized = mapShopGroup(response.group);
+          setSelectedGroup(normalized);
+          return normalized;
+        }
+      } catch (error) {
+        console.error('Error refreshing group details:', error);
+      }
+      return null;
+    },
+    [mapShopGroup]
+  );
+
   // Fetch user roles with pagination and search
   const fetchUserRoles = async (page = 1, search = '', shopFilter = 'all') => {
     try {
@@ -97,7 +200,7 @@ export default function PermissionsPage() {
         ...(search && { search }),
         ...(shopFilter !== 'all' && { shopId: shopFilter })
       });
-      
+
       const data = await userShopRoleApi.getAll(`?${params}`);
       setUserRoles(data.userRoles || []);
       setPagination({
@@ -132,7 +235,7 @@ export default function PermissionsPage() {
       setUsers(data.users.map((user: any) => ({
         id: user.id,
         name: user.name,
-        email: user.email
+        username: user.username
       })) || []);
     } catch (error: any) {
       console.error('Error fetching users:', error);
@@ -142,12 +245,199 @@ export default function PermissionsPage() {
   // Fetch shops for dropdown
   const fetchShops = async () => {
     try {
-      const data = await shopApi.getAll();
-      setShops(data.shops || []);
+      const params = new URLSearchParams({
+        page: '1',
+        limit: '200',
+        status: 'ALL'
+      });
+      const data = await shopApi.getAll(`?${params.toString()}`);
+      const normalizedShops: Shop[] = (data.shops || []).map((shop: any) => ({
+        id: shop.id,
+        shopName: shop.shopName ?? shop.managedName ?? shop.shopId ?? 'N/A',
+        shopId: shop.shopId,
+        managedName: shop.managedName ?? null,
+        groupId: shop.group?.id ?? null,
+        groupName: shop.group?.name ?? null
+      }));
+      setShops(normalizedShops);
     } catch (error: any) {
       console.error('Error fetching shops:', error);
     }
   };
+
+  const fetchGroups = useCallback(async () => {
+    try {
+      setGroupsLoading(true);
+      const response = await shopGroupApi.getAll();
+      const normalizedGroups: ShopGroup[] = (response.groups || []).map(mapShopGroup);
+      setGroups(normalizedGroups);
+    } catch (error: any) {
+      console.error('Error fetching shop groups:', error);
+      setError(t('permissions.groups.load_failed'));
+    } finally {
+      setGroupsLoading(false);
+    }
+  }, [mapShopGroup, t]);
+
+  const usersById = useMemo(() => {
+    const map = new Map<string, User>();
+    users.forEach((user) => {
+      map.set(user.id, user);
+    });
+    return map;
+  }, [users]);
+
+  const shopsByGroup = useMemo(() => {
+    const map = new Map<string, Shop[]>();
+    shops.forEach((shop) => {
+      if (!shop.groupId) {
+        return;
+      }
+      const existing = map.get(shop.groupId) ?? [];
+      existing.push(shop);
+      map.set(shop.groupId, existing);
+    });
+    return map;
+  }, [shops]);
+  
+  const shopsAssignedToSelectedGroup = useMemo(() => {
+    if (!selectedGroup) {
+      return [] as Shop[];
+    }
+
+    return shopsByGroup.get(selectedGroup.id) ?? [];
+  }, [selectedGroup, shopsByGroup]);
+
+  const availableUsersForSelectedGroup = useMemo(() => {
+    if (!selectedGroup) {
+      return users;
+    }
+
+    const memberIds = new Set(
+      selectedGroup.members
+        .map((member) => member.user?.id)
+        .filter(Boolean) as string[]
+    );
+
+    return users.filter((user) => !memberIds.has(user.id));
+  }, [selectedGroup, users]);
+
+  const availableShopsForSelectedGroup = useMemo(() => {
+    if (!selectedGroup) {
+      return shops;
+    }
+
+    return shops.filter((shop) => shop.groupId !== selectedGroup.id);
+  }, [selectedGroup, shops]);
+
+  const managedGroups = useMemo(() => {
+    if (!userId) {
+      return [] as ShopGroup[];
+    }
+
+    return groups.filter((group) => group.manager?.id === userId);
+  }, [groups, userId]);
+
+  const isGroupManagerContext = useMemo(() => {
+    return userRole === 'MANAGER' && managedGroups.length > 0;
+  }, [userRole, managedGroups]);
+
+  const managedGroupMemberIds = useMemo(() => {
+    const ids = new Set<string>();
+    managedGroups.forEach((group) => {
+      group.members.forEach((member) => {
+        const memberId = member.user?.id;
+        if (memberId) {
+          ids.add(memberId);
+        }
+      });
+    });
+    return ids;
+  }, [managedGroups]);
+
+  const assignableUsers = useMemo(() => {
+    if (!isGroupManagerContext) {
+      return users;
+    }
+
+    if (managedGroupMemberIds.size === 0) {
+      return [] as User[];
+    }
+
+    return users.filter((userItem) => managedGroupMemberIds.has(userItem.id));
+  }, [isGroupManagerContext, users, managedGroupMemberIds]);
+
+  const assignableShops = useMemo(() => {
+    if (!isGroupManagerContext) {
+      return shops;
+    }
+
+    const allowedGroupIds = new Set(managedGroups.map((group) => group.id));
+    return shops.filter((shop) => shop.groupId && allowedGroupIds.has(shop.groupId));
+  }, [isGroupManagerContext, shops, managedGroups]);
+
+  const shopSelectInputId = useMemo(
+    () => (selectedGroup ? `add-shop-to-group-select-${selectedGroup.id}` : 'add-shop-to-group-select'),
+    [selectedGroup]
+  );
+
+  const shopOptions = useMemo<ShopOption[]>(() => {
+    return availableShopsForSelectedGroup.map((shop) => ({
+      value: shop.id,
+      label: shop.managedName ?? shop.shopName ?? shop.shopId ?? 'N/A',
+      shopId: shop.shopId,
+      groupName: shop.groupName
+    }));
+  }, [availableShopsForSelectedGroup]);
+
+  const selectedShopOptions = useMemo(() => {
+    if (!groupShopForm.shopIds.length) {
+      return [] as ShopOption[];
+    }
+
+    const selectedSet = new Set(groupShopForm.shopIds);
+    return shopOptions.filter((option) => selectedSet.has(option.value));
+  }, [groupShopForm.shopIds, shopOptions]);
+
+  const formatShopOptionLabel = useCallback(
+    (option: ShopOption, meta: FormatOptionLabelMeta<ShopOption>) => {
+      if (meta.context === 'value') {
+        return (
+          <div className="flex items-center gap-1">
+            <span>{option.label}</span>
+            {option.shopId && (
+              <span className="text-xs text-gray-500 dark:text-gray-400">({option.shopId})</span>
+            )}
+          </div>
+        );
+      }
+
+      return (
+        <div className="flex flex-col">
+          <span className="text-sm font-medium text-gray-900 dark:text-white">
+            {option.label}
+            {option.shopId ? ` (${option.shopId})` : ''}
+          </span>
+          {option.groupName && (
+            <span className="text-xs text-gray-500 dark:text-gray-400">
+              {t('permissions.groups.add_shop_modal.current_group_label')} {option.groupName}
+            </span>
+          )}
+        </div>
+      );
+    },
+    [t]
+  );
+
+  const handleShopSelectChange = useCallback((selected: MultiValue<ShopOption>) => {
+    setGroupShopForm({ shopIds: selected.map((option) => option.value) });
+  }, []);
+
+  useEffect(() => {
+    if (!canCreateGroups && showCreateGroupModal) {
+      setShowCreateGroupModal(false);
+    }
+  }, [canCreateGroups, showCreateGroupModal]);
 
   useEffect(() => {
     // Fetch initial data
@@ -155,11 +445,30 @@ export default function PermissionsPage() {
     Promise.all([
       fetchUserRoles(),
       fetchUsers(),
-      fetchShops()
+      fetchShops(),
+      fetchGroups()
     ]).catch(error => {
       console.error('Error fetching initial data:', error);
       setError('Không thể tải dữ liệu');
     }).finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    if (!showAssignModal) {
+      return;
+    }
+
+    if (formData.userId && !assignableUsers.some((userItem) => userItem.id === formData.userId)) {
+      setFormData((prev) => ({ ...prev, userId: '' }));
+    }
+
+    if (formData.shopId && !assignableShops.some((shopItem) => shopItem.id === formData.shopId)) {
+      setFormData((prev) => ({ ...prev, shopId: '' }));
+    }
+  }, [showAssignModal, assignableUsers, assignableShops, formData.userId, formData.shopId]);
+
+  useEffect(() => {
+    setShopSelectPortalTarget(document.body);
   }, []);
 
   // Handle pagination
@@ -177,7 +486,7 @@ export default function PermissionsPage() {
       ...(searchTerm && { search: searchTerm }),
       ...(selectedShop !== 'all' && { shopId: selectedShop })
     });
-    
+
     setSearchLoading(true);
     userShopRoleApi.getAll(`?${params}`).then(data => {
       setUserRoles(data.userRoles || []);
@@ -248,6 +557,196 @@ export default function PermissionsPage() {
     }
   };
 
+  const openAddUserToGroupModal = (group: ShopGroup) => {
+    setSelectedGroup(group);
+    setGroupUserForm({ userId: '' });
+    setGroupShopForm({ shopIds: [] });
+    setGroupModalError('');
+    setShowAddUserToGroupModal(true);
+    void refreshSelectedGroup(group.id);
+  };
+
+  const openAddShopToGroupModal = (group: ShopGroup) => {
+    setSelectedGroup(group);
+    setGroupUserForm({ userId: '' });
+    setGroupShopForm({ shopIds: [] });
+    setGroupModalError('');
+    setShowAddShopToGroupModal(true);
+  };
+
+  const closeGroupModals = () => {
+    setShowAddUserToGroupModal(false);
+    setShowAddShopToGroupModal(false);
+    setSelectedGroup(null);
+    setGroupUserForm({ userId: '' });
+    setGroupShopForm({ shopIds: [] });
+    setGroupModalError('');
+  };
+
+  const handleAddUserToGroup = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!selectedGroup) {
+      return;
+    }
+
+    if (!groupUserForm.userId) {
+      const message = t('permissions.assign_modal.select_user');
+      setGroupModalError(message);
+      return;
+    }
+
+    setGroupActionLoading(true);
+    setGroupModalError('');
+    setError('');
+
+    try {
+      const groupResponse = await shopGroupApi.getById(selectedGroup.id);
+      const existingMemberIds: string[] = (groupResponse.group?.members || [])
+        .filter((member: any) => member.isActive !== false)
+        .map((member: any) => member.user?.id)
+        .filter(Boolean);
+
+      const updatedMemberIds = Array.from(
+        new Set([...existingMemberIds, groupUserForm.userId])
+      );
+
+      await shopGroupApi.update(selectedGroup.id, {
+        memberIds: updatedMemberIds,
+      });
+
+      setSuccess(t('permissions.groups.add_user_success'));
+      await Promise.all([
+        fetchGroups(),
+        fetchUserRoles(pagination.page, searchTerm, selectedShop)
+      ]);
+      closeGroupModals();
+    } catch (error: any) {
+      console.error('Error adding user to group:', error);
+      const message = error?.message || t('permissions.groups.add_user_error');
+      setGroupModalError(message);
+      setError(message);
+    } finally {
+      setGroupActionLoading(false);
+    }
+  };
+
+  const handleRemoveUserFromGroup = async (member: ShopGroupMember) => {
+    if (!selectedGroup) {
+      return;
+    }
+
+    const userId = member.user?.id;
+    if (!userId) {
+      return;
+    }
+
+    const displayName = member.user?.name || member.user?.username || t('permissions.groups.unknown_user');
+    const confirmMessage = t('permissions.groups.remove_user_confirm', { name: displayName });
+    const confirmed = window.confirm(confirmMessage);
+
+    if (!confirmed) {
+      return;
+    }
+
+    setGroupActionLoading(true);
+    setGroupModalError('');
+    setError('');
+
+    try {
+      const remainingMemberIds = selectedGroup.members
+        .map((existingMember) => existingMember.user?.id)
+        .filter((id): id is string => Boolean(id) && id !== userId);
+
+      await shopGroupApi.update(selectedGroup.id, {
+        memberIds: remainingMemberIds
+      });
+
+      const cascadeFailures: string[] = [];
+      const associatedShops = shopsByGroup.get(selectedGroup.id) ?? [];
+
+      for (const shop of associatedShops) {
+        try {
+          const params = new URLSearchParams({
+            userId,
+            shopId: shop.id,
+            limit: '100'
+          });
+          const rolesResponse = await userShopRoleApi.getAll(`?${params.toString()}`);
+          const roles = (rolesResponse.userRoles ?? []) as Array<{ id: string }>;
+
+          for (const role of roles) {
+            await userShopRoleApi.delete(role.id);
+          }
+        } catch (cascadeError) {
+          console.error('Error removing shop access during cascade:', cascadeError);
+          cascadeFailures.push(shop.shopName ?? shop.shopId ?? shop.id);
+        }
+      }
+
+      await Promise.all([
+        fetchGroups(),
+        refreshSelectedGroup(selectedGroup.id),
+        fetchUserRoles(pagination.page, searchTerm, selectedShop)
+      ]);
+
+      if (cascadeFailures.length > 0) {
+        const warningMessage = t('permissions.groups.remove_user_cascade_warning', {
+          name: displayName,
+          shops: cascadeFailures.join(', ')
+        });
+        setGroupModalError(warningMessage);
+        setError(warningMessage);
+      } else {
+        setSuccess(t('permissions.groups.remove_user_success', { name: displayName }));
+      }
+    } catch (error: any) {
+      console.error('Error removing user from group:', error);
+      const message = error?.message || t('permissions.groups.remove_user_error');
+      setGroupModalError(message);
+      setError(message);
+    } finally {
+      setGroupActionLoading(false);
+    }
+  };
+
+  const handleAddShopToGroup = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!selectedGroup) {
+      return;
+    }
+
+    if (!groupShopForm.shopIds.length) {
+      const message = t('permissions.groups.add_shop_modal.no_selection');
+      setGroupModalError(message);
+      return;
+    }
+
+    setGroupActionLoading(true);
+    setGroupModalError('');
+    setError('');
+
+    try {
+      const uniqueShopIds = Array.from(new Set(groupShopForm.shopIds));
+
+      for (const shopId of uniqueShopIds) {
+        await shopGroupApi.moveShop(shopId, {
+          groupId: selectedGroup.id,
+        });
+      }
+
+      setSuccess(t('permissions.groups.add_shop_success', { count: uniqueShopIds.length }));
+      await Promise.all([fetchGroups(), fetchShops()]);
+      closeGroupModals();
+    } catch (error: any) {
+      console.error('Error adding shop to group:', error);
+      const message = error?.message || t('permissions.groups.add_shop_error');
+      setGroupModalError(message);
+      setError(message);
+    } finally {
+      setGroupActionLoading(false);
+    }
+  };
+
   const openEditModal = (userRole: UserShopRole) => {
     setSelectedRole(userRole);
     setFormData({
@@ -308,13 +807,211 @@ export default function PermissionsPage() {
             </p>
           </div>
         </div>
-        <button 
-          onClick={() => setShowAssignModal(true)}
-          className="px-4 py-2 bg-brand-500 text-white rounded-lg hover:bg-brand-600 transition-colors flex items-center space-x-2"
-        >
-          <FaPlus className="h-4 w-4" />
-          <span>{t('permissions.add_user_to_shop')}</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowAssignModal(true)}
+            className="px-4 py-2 bg-brand-500 text-white rounded-lg hover:bg-brand-600 transition-colors flex items-center space-x-2"
+          >
+            <FaPlus className="h-4 w-4" />
+            <span>{t('permissions.add_user_to_shop')}</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Group Management */}
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow">
+        <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+          <div>
+            <h3 className="text-lg font-medium text-gray-900 dark:text-white vietnamese-text">
+              {t('permissions.groups.title')}
+            </h3>
+            <p className="text-sm text-gray-600 dark:text-gray-400 vietnamese-text">
+              {t('permissions.groups.subtitle')}
+            </p>
+          </div>
+          <div className="flex items-center gap-2 self-start md:self-auto">
+            {canCreateGroups && (
+              <button
+                onClick={() => {
+                  setError('');
+                  setSuccess('');
+                  setGroupModalError('');
+                  setShowCreateGroupModal(true);
+                }}
+                className="px-3 py-2 text-sm bg-brand-500 text-white rounded-lg hover:bg-brand-600 transition-colors"
+              >
+                {t('permissions.groups.create_button')}
+              </button>
+            )}
+            <button
+              onClick={() => fetchGroups()}
+              disabled={groupsLoading}
+              className="px-3 py-2 text-sm bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {groupsLoading ? t('common.loading') : t('common.refresh')}
+            </button>
+          </div>
+        </div>
+        <div className="px-6 py-4">
+          {groupsLoading ? (
+            <div className="space-y-3">
+              <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
+              <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
+              <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
+            </div>
+          ) : groups.length === 0 ? (
+            <div className="text-sm text-gray-600 dark:text-gray-400 vietnamese-text">
+              {t('permissions.groups.no_groups')}
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                <thead className="bg-gray-50 dark:bg-gray-900">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      {t('permissions.groups.table.group')}
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      {t('permissions.groups.table.manager')}
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      {t('permissions.groups.table.members')}
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      {t('permissions.groups.table.shops')}
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      {t('permissions.table.actions')}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                  {groups.map((group) => {
+                    const groupShops = shopsByGroup.get(group.id) ?? [];
+                    const displayedMembers = group.members.slice(0, 3);
+                    const extraMembers = Math.max(group.members.length - displayedMembers.length, 0);
+                    const displayedShops = groupShops.slice(0, 3);
+                    const totalShopCount = Math.max(group.shopCount ?? 0, groupShops.length);
+                    const extraShops = Math.max(totalShopCount - displayedShops.length, 0);
+
+                    return (
+                      <tr key={group.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                        <td className="px-6 py-4 whitespace-nowrap align-top">
+                          <div className="text-sm font-semibold text-gray-900 dark:text-white vietnamese-text">
+                            {group.name}
+                          </div>
+                          {group.description && (
+                            <div className="text-sm text-gray-500 dark:text-gray-400 vietnamese-text">
+                              {group.description}
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white align-top">
+                          {group.manager ? (
+                            <div>
+                              <div className="font-medium vietnamese-text">
+                                {group.manager.name ?? t('permissions.groups.unknown_user')}
+                              </div>
+                              {group.manager.username && (
+                                <div className="text-xs text-gray-500 dark:text-gray-400">
+                                  {group.manager.username}
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-sm text-gray-500 dark:text-gray-400">N/A</span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-900 dark:text-white align-top">
+                          {group.members.length === 0 ? (
+                            <span className="text-sm text-gray-500 dark:text-gray-400">
+                              {t('permissions.groups.no_members')}
+                            </span>
+                          ) : (
+                            <div className="flex flex-wrap gap-2">
+                              {displayedMembers.map((member) => {
+                                const fallbackUser = member.user?.id ? usersById.get(member.user.id) : undefined;
+                                const displayName = member.user?.name ?? fallbackUser?.name ?? fallbackUser?.username ?? t('permissions.groups.unknown_user');
+                                const secondary = member.user?.username ?? fallbackUser?.username ?? '';
+
+                                return (
+                                  <span
+                                    key={member.id}
+                                    className="inline-flex items-center px-2.5 py-1 rounded-full bg-gray-100 dark:bg-gray-700 text-xs text-gray-700 dark:text-gray-200 vietnamese-text"
+                                  >
+                                    {displayName}
+                                    {secondary ? (
+                                      <span className="ml-1 text-[10px] text-gray-500 dark:text-gray-400">
+                                        ({secondary})
+                                      </span>
+                                    ) : null}
+                                  </span>
+                                );
+                              })}
+                              {extraMembers > 0 && (
+                                <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-gray-100 dark:bg-gray-700 text-xs text-gray-700 dark:text-gray-200">
+                                  {t('permissions.groups.more_members', { count: extraMembers })}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-900 dark:text-white align-top">
+                          {Math.max(group.shopCount ?? 0, groupShops.length) === 0 ? (
+                            <span className="text-sm text-gray-500 dark:text-gray-400">
+                              {t('permissions.groups.no_shops')}
+                            </span>
+                          ) : (
+                            <div className="space-y-1">
+                              {displayedShops.length > 0 ? (
+                                <div className="flex flex-wrap gap-2">
+                                  {displayedShops.map((shop) => (
+                                    <span
+                                      key={shop.id}
+                                      className="inline-flex items-center px-2.5 py-1 rounded-full bg-brand-50 dark:bg-brand-900/30 text-xs text-brand-700 dark:text-brand-200 vietnamese-text"
+                                    >
+                                      {shop.managedName ?? shop.shopName ?? 'N/A'}
+                                    </span>
+                                  ))}
+                                  {extraShops > 0 && (
+                                    <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-brand-50 dark:bg-brand-900/30 text-xs text-brand-700 dark:text-brand-200">
+                                      {t('permissions.groups.more_shops', { count: extraShops })}
+                                    </span>
+                                  )}
+                                </div>
+                              ) : null}
+                              {displayedShops.length === 0 && totalShopCount > 0 && (
+                                <div className="text-xs text-gray-500 dark:text-gray-400">
+                                  {t('permissions.groups.shop_count_summary', { count: totalShopCount })}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-3 align-top">
+                          <button
+                            onClick={() => openAddUserToGroupModal(group)}
+                            className="text-brand-600 hover:text-brand-900 dark:text-brand-400 dark:hover:text-brand-300 inline-flex items-center space-x-1"
+                          >
+                            <FaUserPlus className="h-3.5 w-3.5" />
+                            <span>{t('permissions.groups.add_user')}</span>
+                          </button>
+                          <button
+                            onClick={() => openAddShopToGroupModal(group)}
+                            className="text-amber-600 hover:text-amber-800 dark:text-amber-400 dark:hover:text-amber-300 inline-flex items-center space-x-1"
+                          >
+                            <FaStore className="h-3.5 w-3.5" />
+                            <span>{t('permissions.groups.add_shop')}</span>
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Enhanced Filters with Search Loading */}
@@ -392,13 +1089,13 @@ export default function PermissionsPage() {
         <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
           <h3 className="text-lg font-medium text-gray-900 dark:text-white vietnamese-text">
 
-            {(searchTerm || selectedShop !== 'all') 
+            {(searchTerm || selectedShop !== 'all')
               ? t('permissions.search_results')
               : t('permissions.user_access')
             }
           </h3>
         </div>
-        
+
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
             <thead className="bg-gray-50 dark:bg-gray-900">
@@ -443,7 +1140,7 @@ export default function PermissionsPage() {
                             {userRole.user.name}
                           </div>
                           <div className="text-sm text-gray-500 dark:text-gray-400 vietnamese-text">
-                            {userRole.user.email}
+                            {userRole.user.username}
                           </div>
                         </div>
                       </div>
@@ -462,14 +1159,14 @@ export default function PermissionsPage() {
                       {new Date(userRole.createdAt).toLocaleDateString()}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                      <button 
+                      <button
                         onClick={() => openEditModal(userRole)}
                         className="text-brand-600 hover:text-brand-900 dark:text-brand-400 dark:hover:text-brand-300 inline-flex items-center space-x-1"
                       >
                         <FaEdit className="h-3 w-3" />
                         <span>{t('permissions.edit')}</span>
                       </button>
-                      <button 
+                      <button
                         onClick={() => handleRemoveRole(userRole.id)}
                         className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300 inline-flex items-center space-x-1"
                       >
@@ -496,7 +1193,7 @@ export default function PermissionsPage() {
             >
               {t('permissions.previous')}
             </button>
-            
+
             <div className="flex items-center space-x-1">
               {Array.from({ length: Math.min(5, pagination.totalPages) }, (_, i) => {
                 let pageNum;
@@ -509,23 +1206,22 @@ export default function PermissionsPage() {
                 } else {
                   pageNum = pagination.page - 2 + i;
                 }
-                
+
                 return (
                   <button
                     key={pageNum}
                     onClick={() => handlePageChange(pageNum)}
-                    className={`px-3 py-2 border rounded-md text-sm ${
-                      pagination.page === pageNum
+                    className={`px-3 py-2 border rounded-md text-sm ${pagination.page === pageNum
                         ? 'bg-brand-500 text-white border-brand-500'
                         : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
-                    }`}
+                      }`}
                   >
                     {pageNum}
                   </button>
                 );
               })}
             </div>
-            
+
             <button
               onClick={() => handlePageChange(pagination.page + 1)}
               disabled={pagination.page === pagination.totalPages}
@@ -534,7 +1230,7 @@ export default function PermissionsPage() {
               {t('permissions.next')}
             </button>
           </div>
-          
+
           <div className="text-sm text-gray-700 dark:text-gray-300">
             {t('permissions.page')} {pagination.page} / {pagination.totalPages}
           </div>
@@ -548,9 +1244,6 @@ export default function PermissionsPage() {
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white vietnamese-text">
               {t('permissions.assign_modal.title')}
             </h2>
-            <button onClick={closeModals} className="text-gray-400 hover:text-gray-600">
-              <FaTimes className="h-5 w-5" />
-            </button>
           </div>
 
           <form onSubmit={handleAssignRole} className="space-y-4">
@@ -563,9 +1256,9 @@ export default function PermissionsPage() {
                 required
               >
                 <option value="">{t('permissions.assign_modal.select_user')}</option>
-                {users.map(user => (
+                {assignableUsers.map(user => (
                   <option key={user.id} value={user.id}>
-                    {user.name} ({user.email})
+                    {user.name} ({user.username})
                   </option>
                 ))}
               </select>
@@ -580,7 +1273,7 @@ export default function PermissionsPage() {
                 required
               >
                 <option value="">{t('permissions.assign_modal.select_shop')}</option>
-                {shops.map(shop => (
+                {assignableShops.map(shop => (
                   <option key={shop.id} value={shop.id}>
                     {shop.shopName}
                   </option>
@@ -592,13 +1285,12 @@ export default function PermissionsPage() {
               <Label>{t('permissions.assign_modal.role_permissions')}</Label>
               <div className="space-y-3">
                 {Object.entries(roleDescriptions).map(([role, info]) => (
-                  <div 
+                  <div
                     key={role}
-                    className={`p-3 border rounded-lg cursor-pointer transition-colors ${
-                      formData.role === role
+                    className={`p-3 border rounded-lg cursor-pointer transition-colors ${formData.role === role
                         ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/20'
                         : 'border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
-                    }`}
+                      }`}
                     onClick={() => setFormData(prev => ({ ...prev, role: role as UserShopRole['role'] }))}
                   >
                     <div className="flex items-center mb-2">
@@ -674,13 +1366,12 @@ export default function PermissionsPage() {
               <Label>{t('permissions.edit_modal.choose_new_role')}</Label>
               <div className="space-y-3">
                 {Object.entries(roleDescriptions).map(([role, info]) => (
-                  <div 
+                  <div
                     key={role}
-                    className={`p-3 border rounded-lg cursor-pointer transition-colors ${
-                      formData.role === role
+                    className={`p-3 border rounded-lg cursor-pointer transition-colors ${formData.role === role
                         ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/20'
                         : 'border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
-                    }`}
+                      }`}
                     onClick={() => setFormData(prev => ({ ...prev, role: role as UserShopRole['role'] }))}
                   >
                     <div className="flex items-center mb-2">
@@ -727,6 +1418,297 @@ export default function PermissionsPage() {
           </form>
         </Modal>
       )}
+
+      {/* Add User to Group Modal */}
+      {showAddUserToGroupModal && selectedGroup && (
+        <Modal isOpen={showAddUserToGroupModal} onClose={closeGroupModals} className="max-w-lg p-6">
+          <div className="flex justify-between items-start mb-4">
+            <div className="space-y-1">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white vietnamese-text">
+                {t('permissions.groups.add_user_modal.title')}
+              </h2>
+              <p className="text-sm text-gray-600 dark:text-gray-400 vietnamese-text">
+                {t('permissions.groups.add_user_modal.description', { group: selectedGroup.name })}
+              </p>
+            </div>
+          </div>
+
+          <form onSubmit={handleAddUserToGroup} className="space-y-4">
+            <div>
+              <Label>{t('permissions.groups.add_user_modal.user_label')}</Label>
+              {availableUsersForSelectedGroup.length === 0 ? (
+                <div className="py-2 text-sm text-gray-500 dark:text-gray-400 vietnamese-text">
+                  {t('permissions.groups.add_user_modal.no_users')}
+                </div>
+              ) : (
+                <select
+                  value={groupUserForm.userId}
+                  onChange={(event) => setGroupUserForm((prev) => ({ ...prev, userId: event.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                  disabled={groupActionLoading}
+                  required
+                >
+                  <option value="">{t('permissions.assign_modal.select_user')}</option>
+                  {availableUsersForSelectedGroup.map((user) => (
+                    <option key={user.id} value={user.id}>
+                      {user.name} ({user.username})
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+
+            <div>
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-white vietnamese-text">
+                {t('permissions.groups.manage_members.title')}
+              </h3>
+              {selectedGroup.members.length === 0 ? (
+                <p className="mt-2 text-sm text-gray-500 dark:text-gray-400 vietnamese-text">
+                  {t('permissions.groups.manage_members.no_members')}
+                </p>
+              ) : (
+                <ul className="mt-2 space-y-2">
+                  {selectedGroup.members.map((member) => {
+                    const fallbackUser = member.user?.id ? usersById.get(member.user.id) : undefined;
+                    const displayName = member.user?.name ?? fallbackUser?.name ?? fallbackUser?.username ?? t('permissions.groups.unknown_user');
+                    const secondary = member.user?.username ?? fallbackUser?.username ?? '';
+                    const canRemove = Boolean(member.user?.id) && !member.isDefault;
+
+                    return (
+                      <li
+                        key={member.id}
+                        className="flex items-center justify-between gap-3 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2"
+                      >
+                        <div>
+                          <p className="text-sm font-medium text-gray-900 dark:text-white vietnamese-text">{displayName}</p>
+                          {secondary && (
+                            <p className="text-xs text-gray-500 dark:text-gray-400">{secondary}</p>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {member.isDefault && (
+                            <span className="inline-flex items-center rounded-full bg-gray-100 dark:bg-gray-700 px-2 py-0.5 text-xs font-medium text-gray-600 dark:text-gray-300">
+                              {t('permissions.groups.manage_members.default_badge')}
+                            </span>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveUserFromGroup(member)}
+                            disabled={!canRemove || groupActionLoading}
+                            title={!canRemove ? t('permissions.groups.manage_members.cannot_remove_default') : undefined}
+                            className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                              canRemove && !groupActionLoading
+                                ? 'bg-red-50 text-red-600 hover:bg-red-100 dark:bg-red-500/10 dark:text-red-300 dark:hover:bg-red-500/20'
+                                : 'bg-gray-100 text-gray-400 cursor-not-allowed dark:bg-gray-800 dark:text-gray-500'
+                            }`}
+                          >
+                            <FaTrash className="h-3.5 w-3.5" />
+                            <span>{t('permissions.groups.manage_members.remove')}</span>
+                          </button>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+
+            {groupModalError && (
+              <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-md text-sm">
+                {groupModalError}
+              </div>
+            )}
+
+            <div className="flex space-x-3 pt-4">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={closeGroupModals}
+                className="flex-1"
+                disabled={groupActionLoading}
+              >
+                {t('common.cancel')}
+              </Button>
+              <LoadingButton
+                type="submit"
+                loading={groupActionLoading}
+                loadingText={t('permissions.groups.add_user_modal.loading')}
+                className="flex-1 bg-brand-500 hover:bg-brand-600 focus:ring-brand-500"
+                disabled={availableUsersForSelectedGroup.length === 0}
+              >
+                {t('permissions.groups.add_user_modal.submit')}
+              </LoadingButton>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* Add Shop to Group Modal */}
+      {showAddShopToGroupModal && selectedGroup && (
+        <Modal isOpen={showAddShopToGroupModal} onClose={closeGroupModals} className="max-w-lg p-6">
+          <div className="flex justify-between items-start mb-4">
+            <div className="space-y-1">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white vietnamese-text">
+                {t('permissions.groups.add_shop_modal.title')}
+              </h2>
+              <p className="text-sm text-gray-600 dark:text-gray-400 vietnamese-text">
+                {t('permissions.groups.add_shop_modal.description', { group: selectedGroup.name })}
+              </p>
+            </div>
+          </div>
+
+          <form onSubmit={handleAddShopToGroup} className="space-y-4">
+            <div>
+              <Label htmlFor={shopSelectInputId}>{t('permissions.groups.add_shop_modal.shop_label')}</Label>
+              {availableShopsForSelectedGroup.length === 0 ? (
+                <div className="py-2 text-sm text-gray-500 dark:text-gray-400 vietnamese-text">
+                  {t('permissions.groups.add_shop_modal.no_shops')}
+                </div>
+              ) : (
+                <Select<ShopOption, true>
+                  inputId={shopSelectInputId}
+                  instanceId={shopSelectInputId}
+                  aria-label={t('permissions.groups.add_shop_modal.shop_label')}
+                  unstyled
+                  isMulti
+                  options={shopOptions}
+                  value={selectedShopOptions}
+                  onChange={handleShopSelectChange}
+                  placeholder={t('permissions.groups.add_shop_modal.placeholder')}
+                  noOptionsMessage={() => t('permissions.groups.add_shop_modal.no_options')}
+                  isDisabled={groupActionLoading}
+                  closeMenuOnSelect={false}
+                  hideSelectedOptions={false}
+                  className="w-full"
+                  menuPortalTarget={shopSelectPortalTarget ?? undefined}
+                  menuPosition={shopSelectPortalTarget ? 'fixed' : 'absolute'}
+                  menuPlacement="auto"
+                  formatOptionLabel={formatShopOptionLabel}
+                  classNames={{
+                    control: ({ isFocused, isDisabled }) =>
+                      [
+                        'border rounded-md transition-colors min-h-[44px]',
+                        isDisabled
+                          ? 'bg-gray-100 dark:bg-gray-900 border-gray-200 dark:border-gray-700 cursor-not-allowed text-gray-400 dark:text-gray-500'
+                          : 'bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white',
+                        isFocused
+                          ? 'border-amber-500 ring-2 ring-amber-200 dark:ring-amber-500/40'
+                          : 'hover:border-gray-400 dark:hover:border-gray-500'
+                      ]
+                        .filter(Boolean)
+                        .join(' '),
+                    valueContainer: () => 'flex flex-wrap gap-2 px-3 py-2 text-sm',
+                    placeholder: () => 'text-sm text-gray-400 dark:text-gray-500',
+                    input: () => 'text-sm text-gray-900 dark:text-white',
+                    multiValue: () =>
+                      'flex items-center gap-1 bg-amber-500/10 dark:bg-amber-500/20 text-amber-700 dark:text-amber-200 rounded px-2 py-1 text-xs',
+                    multiValueLabel: () => 'leading-none',
+                    multiValueRemove: () =>
+                      'cursor-pointer text-amber-500 hover:text-amber-700 dark:text-amber-200 dark:hover:text-amber-100',
+                    indicatorsContainer: () => 'pr-2 gap-1 flex items-center text-gray-400 dark:text-gray-500',
+                    dropdownIndicator: ({ isFocused }) =>
+                      `p-1 ${isFocused ? 'text-amber-500' : 'text-gray-400 dark:text-gray-500'} hover:text-amber-500`,
+                    clearIndicator: () => 'p-1 hover:text-amber-500',
+                    indicatorSeparator: () => 'w-px h-4 bg-gray-200 dark:bg-gray-700',
+                    menu: () =>
+                      'mt-2 border border-gray-200 dark:border-gray-700 rounded-md bg-white dark:bg-gray-800 shadow-xl text-sm overflow-hidden',
+                    menuList: () => 'max-h-60 overflow-y-auto py-1',
+                    option: ({ isFocused, isSelected }) =>
+                      [
+                        'px-3 py-2 cursor-pointer transition-colors',
+                        isSelected
+                          ? 'bg-amber-100 dark:bg-amber-500/30 text-amber-700 dark:text-amber-100'
+                          : 'text-gray-700 dark:text-gray-200',
+                        !isSelected && isFocused ? 'bg-amber-50 dark:bg-amber-500/20' : ''
+                      ]
+                        .filter(Boolean)
+                        .join(' '),
+                    noOptionsMessage: () => 'px-3 py-2 text-sm text-gray-500 dark:text-gray-400'
+                  }}
+                  styles={{
+                    container: (base) => ({
+                      ...base,
+                      zIndex: 99999
+                    }),
+                    control: (base) => ({
+                      ...base,
+                      boxShadow: 'none'
+                    }),
+                    menuPortal: (base) => ({
+                      ...base,
+                      zIndex: 99999
+                    })
+                  }}
+                />
+              )}
+              {availableShopsForSelectedGroup.length > 0 && (
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 vietnamese-text">
+                  {t('permissions.groups.add_shop_modal.helper')}
+                </p>
+              )}
+            </div>
+
+            {groupModalError && (
+              <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-md text-sm">
+                {groupModalError}
+              </div>
+            )}
+
+            <div className="flex space-x-3 pt-4">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={closeGroupModals}
+                className="flex-1"
+                disabled={groupActionLoading}
+              >
+                {t('common.cancel')}
+              </Button>
+              <LoadingButton
+                type="submit"
+                loading={groupActionLoading}
+                loadingText={t('permissions.groups.add_shop_modal.loading')}
+                className="flex-1 bg-amber-500 hover:bg-amber-600 focus:ring-amber-500"
+                disabled={availableShopsForSelectedGroup.length === 0 || groupShopForm.shopIds.length === 0}
+              >
+                {t('permissions.groups.add_shop_modal.submit')}
+              </LoadingButton>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {canCreateGroups && (
+        <CreateShopGroupModal
+          isOpen={showCreateGroupModal}
+          onClose={() => setShowCreateGroupModal(false)}
+          users={users}
+          onSuccess={async (message) => {
+            setSuccess(message);
+            setError('');
+            await fetchGroups();
+          }}
+          onError={(message) => {
+            setError(message);
+          }}
+        />
+      )}
+
+      <AssignUserShopGroupModal
+        isOpen={showAssignShopGroupModal}
+        onClose={() => setShowAssignShopGroupModal(false)}
+        users={users}
+        shops={shops}
+        onSuccess={async (message) => {
+          setSuccess(message);
+          setError('');
+          await fetchUserRoles(pagination.page, searchTerm, selectedShop);
+          await fetchGroups();
+        }}
+        onError={(message) => {
+          setError(message);
+        }}
+      />
     </div>
   );
 }

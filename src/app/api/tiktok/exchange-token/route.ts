@@ -10,6 +10,16 @@ export async function POST(req: NextRequest) {
         // Get user from headers or token
         const { user, accessibleShopIds, isAdmin } = await getUserWithShopAccess(req, prisma);
 
+        const activeGroupMembership = user.groupMemberships?.find((membership) => membership.isDefault)
+            ?? user.groupMemberships?.find((membership) => membership.role === 'MANAGER')
+            ?? user.groupMemberships?.[0];
+
+        if (!activeGroupMembership) {
+            return NextResponse.json({ error: 'User is not assigned to any group. Please join a group before linking shops.' }, { status: 400 });
+        }
+
+        const activeGroupId = activeGroupMembership.groupId;
+
         const { code, app_key } = await req.json();
 
         if (!code || !app_key) {
@@ -82,6 +92,7 @@ export async function POST(req: NextRequest) {
                     shopCipher: shop.cipher, // Keep legacy field for compatibility
                     channelData: JSON.stringify(channelData), // Store in new unified format
                     status: 'ACTIVE',
+                    groupId: activeGroupId,
                 },
                 create: {
                     shopId: shop.id,
@@ -96,6 +107,7 @@ export async function POST(req: NextRequest) {
                     status: 'ACTIVE',
                     appId: credential.id, // Link to ChannelApp
                     orgId: user.organizationMemberships?.[0]?.orgId,
+                    groupId: activeGroupId,
                 },
             });
 
