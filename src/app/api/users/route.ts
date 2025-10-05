@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const { searchParams } = new URL(request.url);
+  const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get('page') || '1', 10);
     const limit = parseInt(searchParams.get('limit') || '10', 10);
     const search = searchParams.get('search') || '';
@@ -83,49 +83,158 @@ export async function GET(request: NextRequest) {
     const totalPages = Math.ceil(totalCount / limit);
 
     // Extract users and then load shop roles (keeping previous behavior)
+    const activeOrgId = orgResult.org.id;
+
     const baseUsers = memberships.map(m => ({ ...m.user, organizationRole: m.role }));
 
     const usersWithShopRoles = await Promise.all(
       baseUsers.map(async (user) => {
         try {
-          const userShopRoles = await prisma.userShopRole.findMany({
-            where: { userId: user.id },
-            select: { id: true, role: true, shopId: true }
+          const [userShopRoles, groupMemberships] = await Promise.all([
+            prisma.userShopRole.findMany({
+              where: { userId: user.id },
+              select: { id: true, role: true, shopId: true }
+            }),
+            prisma.shopGroupMember.findMany({
+              where: { userId: user.id, isActive: true },
+              include: {
+                group: {
+                  select: {
+                    id: true,
+                    name: true,
+                    orgId: true,
+                    managerId: true,
+                    shops: {
+                      select: {
+                        id: true,
+                        shopId: true,
+                        shopName: true,
+                        status: true
+                      }
+                    }
+                  }
+                }
+              }
+            })
+          ]);
+
+          const rolesWithShops = await Promise.all(
+            userShopRoles.map(async (usrRole) => {
+              try {
+                const shop = await prisma.shopAuthorization.findUnique({
+                  where: { id: usrRole.shopId },
+                  select: {
+                    id: true,
+                    shopId: true,
+                    shopName: true,
+                    status: true,
+                    app: { select: { channel: true, appName: true } }
+                  }
+                });
+                return {
+                  id: usrRole.id,
+                  role: usrRole.role,
+                  shop: shop ? {
+                    ...shop,
+                    channelName: shop.app?.channel || 'UNKNOWN',
+                    appName: shop.app?.appName || 'Unknown App'
+                  } : null
+                };
+              } catch (e) {
+                console.warn(`Could not fetch shop for role ${usrRole.id}:`, e);
+                return { id: usrRole.id, role: usrRole.role, shop: null };
+              }
+            })
+          );
+
+          const validRoles = rolesWithShops
+            .filter(r => r.shop !== null)
+            .map((r) => ({
+              id: r.id,
+              role: r.role,
+              shopAuthorizationId: r.shop!.id,
+              shopId: r.shop!.shopId,
+              shopName: r.shop!.shopName,
+              status: r.shop!.status,
+              channelName: r.shop!.channelName,
+              appName: r.shop!.appName
+            }));
+
+          const activeGroupMemberships = groupMemberships.filter(
+            (membership) => membership.group && membership.group.orgId === activeOrgId
+          );
+
+          const groups = activeGroupMemberships.map((membership) => ({
+            id: membership.group!.id,
+            name: membership.group!.name,
+            role: membership.role,
+            isDefault: membership.isDefault
+          }));
+
+          const accessibleShopMap = new Map<string, {
+            shopAuthorizationId: string;
+            shopId: string | null;
+            shopName: string | null;
+            status: string | null;
+            viaDirectRoles: string[];
+            viaGroups: { id: string; name: string }[];
+          }>();
+
+          validRoles.forEach((roleAssignment) => {
+            const key = roleAssignment.shopAuthorizationId;
+            if (!key) {
+              return;
+            }
+            const existing = accessibleShopMap.get(key) ?? {
+              shopAuthorizationId: roleAssignment.shopAuthorizationId,
+              shopId: roleAssignment.shopId,
+              shopName: roleAssignment.shopName,
+              status: roleAssignment.status,
+              viaDirectRoles: [],
+              viaGroups: []
+            };
+            existing.viaDirectRoles = Array.from(new Set([...existing.viaDirectRoles, roleAssignment.role]));
+            accessibleShopMap.set(key, existing);
           });
 
-            const rolesWithShops = await Promise.all(
-              userShopRoles.map(async (usrRole) => {
-                try {
-                  const shop = await prisma.shopAuthorization.findUnique({
-                    where: { id: usrRole.shopId },
-                    select: {
-                      id: true,
-                      shopId: true,
-                      shopName: true,
-                      status: true,
-                      app: { select: { channel: true, appName: true } }
-                    }
-                  });
-                  return {
-                    id: usrRole.id,
-                    role: usrRole.role,
-                    shop: shop ? {
-                      ...shop,
-                      channelName: shop.app?.channel || 'UNKNOWN',
-                      appName: shop.app?.appName || 'Unknown App'
-                    } : null
-                  };
-                } catch (e) {
-                  console.warn(`Could not fetch shop for role ${usrRole.id}:`, e);
-                  return { id: usrRole.id, role: usrRole.role, shop: null };
+          activeGroupMemberships.forEach((membership) => {
+            if (!membership.group) {
+              return;
+            }
+            membership.group.shops
+              .filter((shop) => shop.status === 'ACTIVE')
+              .forEach((shop) => {
+                const existing = accessibleShopMap.get(shop.id) ?? {
+                  shopAuthorizationId: shop.id,
+                  shopId: shop.shopId,
+                  shopName: shop.shopName,
+                  status: shop.status,
+                  viaDirectRoles: [],
+                  viaGroups: []
+                };
+                const alreadyAdded = existing.viaGroups.some((group) => group.id === membership.group!.id);
+                if (!alreadyAdded) {
+                  existing.viaGroups.push({ id: membership.group.id, name: membership.group.name });
                 }
-              })
-            );
-            const validRoles = rolesWithShops.filter(r => r.shop !== null);
-            return { ...user, userShopRoles: validRoles };
+                accessibleShopMap.set(shop.id, existing);
+              });
+          });
+
+          const accessibleShops = Array.from(accessibleShopMap.values()).map((shop) => ({
+            ...shop,
+            viaDirectRoles: Array.from(new Set(shop.viaDirectRoles)),
+            viaGroups: shop.viaGroups
+          }));
+
+          return {
+            ...user,
+            userShopRoles: validRoles,
+            groups,
+            accessibleShops
+          };
         } catch (e) {
           console.warn(`Could not fetch shop roles for user ${user.id}:`, e);
-          return { ...user, userShopRoles: [] };
+          return { ...user, userShopRoles: [], groups: [], accessibleShops: [] };
         }
       })
     );

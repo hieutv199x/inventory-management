@@ -7,23 +7,110 @@ import Button from '@/components/ui/button/Button';
 import Label from '@/components/form/Label';
 import Input from '@/components/form/input/InputField';
 
+type SystemRole = 'SUPER_ADMIN' | 'ADMIN' | 'MANAGER' | 'ACCOUNTANT' | 'SELLER' | 'RESOURCE';
+
+type ShopRole = 'OWNER' | 'MANAGER' | 'STAFF' | 'VIEWER';
+
+type GroupRole = 'MANAGER' | 'MEMBER';
+
+interface UserShopRoleAssignment {
+  id: string;
+  shopAuthorizationId: string;
+  shopId: string | null;
+  shopName: string | null;
+  status: string | null;
+  role: ShopRole;
+  channelName?: string | null;
+  appName?: string | null;
+}
+
+interface UserGroupMembership {
+  id: string;
+  name: string;
+  role: GroupRole;
+  isDefault: boolean;
+}
+
+interface AccessibleShop {
+  shopAuthorizationId: string;
+  shopId: string | null;
+  shopName: string | null;
+  status: string | null;
+  viaDirectRoles: string[];
+  viaGroups: { id: string; name: string }[];
+}
+
 interface User {
   id: string;
   name: string;
   username: string;
-  role: 'ADMIN' | 'MANAGER' | 'ACCOUNTANT' | 'SELLER' | 'RESOURCE';
-  isActive: boolean; // Add isActive property
-  userShopRoles: {
-    id: string;
-    shopName: string;
-    role: 'OWNER' | 'MANAGER' | 'STAFF' | 'VIEWER';
-  }[];
+  role: SystemRole;
+  isActive: boolean;
+  organizationRole?: string;
+  userShopRoles: UserShopRoleAssignment[];
+  groups: UserGroupMembership[];
+  accessibleShops: AccessibleShop[];
 }
 
 interface Shop {
   id: string;
   name: string;
 }
+
+const normalizeUsers = (incoming: any[] = []): User[] =>
+  incoming.map((user) => {
+    const normalizedRoles: UserShopRoleAssignment[] = Array.isArray(user.userShopRoles)
+      ? user.userShopRoles
+          .map((role: any) => ({
+            id: role.id,
+            shopAuthorizationId: role.shopAuthorizationId ?? role.shop?.id ?? '',
+            shopId: role.shopId ?? role.shop?.shopId ?? null,
+            shopName: role.shopName ?? role.shop?.shopName ?? null,
+            status: role.status ?? role.shop?.status ?? null,
+            role: (role.role ?? 'VIEWER') as ShopRole,
+            channelName: role.channelName ?? role.shop?.channelName ?? null,
+            appName: role.appName ?? role.shop?.appName ?? null,
+          }))
+          .filter((role: UserShopRoleAssignment) => Boolean(role.shopAuthorizationId))
+      : [];
+
+    const normalizedGroups: UserGroupMembership[] = Array.isArray(user.groups)
+      ? user.groups.map((group: any) => ({
+          id: group.id,
+          name: group.name,
+          role: (group.role ?? 'MEMBER') as GroupRole,
+          isDefault: Boolean(group.isDefault),
+        }))
+      : [];
+
+    const normalizedAccessible: AccessibleShop[] = Array.isArray(user.accessibleShops)
+      ? user.accessibleShops
+          .map((shop: any) => ({
+            shopAuthorizationId: shop.shopAuthorizationId ?? shop.id ?? '',
+            shopId: shop.shopId ?? null,
+            shopName: shop.shopName ?? null,
+            status: shop.status ?? null,
+            viaDirectRoles: Array.isArray(shop.viaDirectRoles)
+              ? Array.from(new Set(shop.viaDirectRoles))
+              : [],
+            viaGroups: Array.isArray(shop.viaGroups)
+              ? Array.from(
+                  new Map(
+                    shop.viaGroups.map((group: any) => [group.id, { id: group.id, name: group.name }])
+                  ).values()
+                )
+              : [],
+          }))
+          .filter((shop: AccessibleShop) => Boolean(shop.shopAuthorizationId))
+      : [];
+
+    return {
+      ...user,
+      userShopRoles: normalizedRoles,
+      groups: normalizedGroups,
+      accessibleShops: normalizedAccessible,
+    } as User;
+  });
 
 export default function UserRolesPage() {
   const [users, setUsers] = useState<User[]>([]);
@@ -55,6 +142,7 @@ export default function UserRolesPage() {
   const [searchLoading, setSearchLoading] = useState(false);
 
   const systemRoleColors = {
+    SUPER_ADMIN: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200',
     ADMIN: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
     MANAGER: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
     ACCOUNTANT: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
@@ -69,6 +157,49 @@ export default function UserRolesPage() {
     VIEWER: 'bg-gray-100 text-gray-800'
   };
 
+  const groupRoleColors: Record<GroupRole, string> = {
+    MANAGER: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
+    MEMBER: 'bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-200'
+  };
+
+  const resolveShopName = (name?: string | null, fallbackId?: string | null) => {
+    if (name && name.trim().length > 0) {
+      return name;
+    }
+    if (fallbackId && fallbackId.trim().length > 0) {
+      return fallbackId;
+    }
+    return 'Chưa có tên';
+  };
+
+  const getShopStatusBadge = (status?: string | null) => {
+    switch (status) {
+      case 'ACTIVE':
+        return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
+      case 'INACTIVE':
+        return 'bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-200';
+      case 'SUSPENDED':
+      case 'DISABLED':
+        return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200';
+      default:
+        return 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200';
+    }
+  };
+
+  const getStatusLabel = (status?: string | null) => {
+    switch (status) {
+      case 'ACTIVE':
+        return 'Hoạt động';
+      case 'INACTIVE':
+        return 'Tạm ngưng';
+      case 'SUSPENDED':
+      case 'DISABLED':
+        return 'Bị khoá';
+      default:
+        return 'Không xác định';
+    }
+  };
+
   // Fetch users from backend with search and pagination
   const fetchUsers = async (page = 1, search = '') => {
     try {
@@ -79,8 +210,9 @@ export default function UserRolesPage() {
         ...(search && { search })
       });
 
-      const data = await userApi.getAll(`?${params}`);
-      setUsers(data.users || []);
+  const data = await userApi.getAll(`?${params}`);
+  const normalized = normalizeUsers(data.users || []);
+  setUsers(normalized);
       setPagination({
         page: data.pagination?.page || 1,
         limit: data.pagination?.limit || 10,
@@ -133,7 +265,8 @@ export default function UserRolesPage() {
     // Call the API with the new limit
     setSearchLoading(true);
     userApi.getAll(`?${params}`).then(data => {
-      setUsers(data.users || []);
+      const normalized = normalizeUsers(data.users || []);
+      setUsers(normalized);
       setPagination({
         page: data.pagination?.page || 1,
         limit: data.pagination?.limit || newLimit,
@@ -489,19 +622,91 @@ export default function UserRolesPage() {
                     </p>
                   ) : (
                     <div className="space-y-1">
-                      {user.userShopRoles.slice(0, 3).map((shop) => (
-                        <div key={shop.id} className="flex items-center justify-between text-xs">
+                      {user.userShopRoles.slice(0, 3).map((assignment) => (
+                        <div key={assignment.id} className="flex items-center justify-between text-xs">
                           <span className="text-gray-600 dark:text-gray-400 truncate">
-                            {shop.shopName}
+                            {resolveShopName(assignment.shopName, assignment.shopId)}
                           </span>
-                          <span className={`px-1.5 py-0.5 rounded-full text-xs ${shopRoleColors[shop.role]}`}>
-                            {shop.role}
+                          <span className={`px-1.5 py-0.5 rounded-full text-xs ${shopRoleColors[assignment.role]}`}>
+                            {assignment.role}
                           </span>
                         </div>
                       ))}
                       {user.userShopRoles.length > 3 && (
                         <p className="text-xs text-gray-500 dark:text-gray-400">
                           +{user.userShopRoles.length - 3} cửa hàng khác
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Group Memberships */}
+                <div className="space-y-2">
+                  <h4 className="text-sm font-medium text-gray-900 dark:text-white">
+                    Nhóm tham gia ({user.groups.length})
+                  </h4>
+                  {user.groups.length === 0 ? (
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      Không tham gia nhóm nào
+                    </p>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      {user.groups.map((group) => (
+                        <div key={group.id} className="flex items-center space-x-2 bg-gray-100 dark:bg-gray-700/60 px-2 py-1 rounded-md">
+                          <span className="text-xs font-medium text-gray-700 dark:text-gray-100">
+                            {group.name}
+                          </span>
+                          <span className={`px-1.5 py-0.5 rounded-full text-[11px] ${groupRoleColors[group.role]}`}>
+                            {group.role === 'MANAGER' ? 'Quản lý' : 'Thành viên'}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Accessible Shops */}
+                <div className="space-y-2">
+                  <h4 className="text-sm font-medium text-gray-900 dark:text-white">
+                    Cửa hàng được truy cập ({user.accessibleShops.length})
+                  </h4>
+                  {user.accessibleShops.length === 0 ? (
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      Không có cửa hàng nào được cấp quyền
+                    </p>
+                  ) : (
+                    <div className="space-y-2">
+                      {user.accessibleShops.slice(0, 3).map((shop) => (
+                        <div key={shop.shopAuthorizationId} className="border border-gray-200 dark:border-gray-700 rounded-md p-2">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="font-medium text-gray-700 dark:text-gray-100 truncate">
+                              {resolveShopName(shop.shopName, shop.shopId)}
+                            </span>
+                            <span className={`px-1.5 py-0.5 rounded-full text-[11px] ${getShopStatusBadge(shop.status)}`}>
+                              {getStatusLabel(shop.status)}
+                            </span>
+                          </div>
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {shop.viaDirectRoles.length > 0 && (
+                              <span className="px-1.5 py-0.5 bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200 rounded-full text-[11px]">
+                                Trực tiếp ({shop.viaDirectRoles.join(', ')})
+                              </span>
+                            )}
+                            {shop.viaGroups.map((group) => (
+                              <span
+                                key={`${shop.shopAuthorizationId}-${group.id}`}
+                                className="px-1.5 py-0.5 bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-200 rounded-full text-[11px]"
+                              >
+                                Qua nhóm {group.name}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                      {user.accessibleShops.length > 3 && (
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                          +{user.accessibleShops.length - 3} cửa hàng khác
                         </p>
                       )}
                     </div>
@@ -576,7 +781,13 @@ export default function UserRolesPage() {
                     Trạng thái
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    Nhóm tham gia
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                     Phân công cửa hàng
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    Cửa hàng được truy cập
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                     Thao tác
@@ -586,7 +797,7 @@ export default function UserRolesPage() {
               <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                 {users.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
+                    <td colSpan={7} className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
                       {searchTerm
                         ? `Không có người dùng nào khớp với "${searchTerm}". Hãy thử điều chỉnh tìm kiếm.`
                         : 'Không tìm thấy người dùng. Thêm người dùng để bắt đầu.'
@@ -630,6 +841,34 @@ export default function UserRolesPage() {
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
+                        {user.groups.length === 0 ? (
+                          <span className="text-xs text-gray-500 dark:text-gray-400 italic">
+                            Không có nhóm
+                          </span>
+                        ) : (
+                          <div className="flex flex-wrap gap-1">
+                            {user.groups.slice(0, 3).map((group) => (
+                              <span
+                                key={group.id}
+                                className="inline-flex items-center gap-1 bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded-md"
+                              >
+                                <span className="text-[11px] font-medium text-gray-700 dark:text-gray-100">
+                                  {group.name}
+                                </span>
+                                <span className={`px-1 py-0.5 text-[10px] rounded ${groupRoleColors[group.role]}`}>
+                                  {group.role === 'MANAGER' ? 'Quản lý' : 'Thành viên'}
+                                </span>
+                              </span>
+                            ))}
+                            {user.groups.length > 3 && (
+                              <span className="text-xs text-gray-500 dark:text-gray-400">
+                                +{user.groups.length - 3} nhóm khác
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm text-gray-900 dark:text-white">
                           {user.userShopRoles.length === 0 ? (
                             <span className="text-gray-500 dark:text-gray-400 italic">
@@ -637,24 +876,49 @@ export default function UserRolesPage() {
                             </span>
                           ) : (
                             <div className="space-y-1">
-                              {user.userShopRoles.slice(0, 2).map((shop) => (
-                                <div key={shop.id} className="flex items-center space-x-2">
+                              {user.userShopRoles.slice(0, 2).map((assignment) => (
+                                <div key={assignment.id} className="flex items-center space-x-2">
                                   <span className="text-gray-600 dark:text-gray-400 text-xs">
-                                    {shop.shopName}
+                                    {resolveShopName(assignment.shopName, assignment.shopId)}
                                   </span>
-                                  <span className={`px-1.5 py-0.5 rounded text-xs ${shopRoleColors[shop.role]}`}>
-                                    {shop.role}
+                                  <span className={`px-1.5 py-0.5 rounded text-xs ${shopRoleColors[assignment.role]}`}>
+                                    {assignment.role}
                                   </span>
                                 </div>
                               ))}
                               {user.userShopRoles.length > 2 && (
                                 <span className="text-xs text-gray-500 dark:text-gray-400">
-                                  +{user.userShopRoles.length - 2} more
+                                  +{user.userShopRoles.length - 2} cửa hàng khác
                                 </span>
                               )}
                             </div>
                           )}
                         </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {user.accessibleShops.length === 0 ? (
+                          <span className="text-xs text-gray-500 dark:text-gray-400 italic">
+                            Không có cửa hàng truy cập
+                          </span>
+                        ) : (
+                          <div className="space-y-1">
+                            {user.accessibleShops.slice(0, 2).map((shop) => (
+                              <div key={shop.shopAuthorizationId} className="flex items-center space-x-2 text-xs">
+                                <span className="text-gray-600 dark:text-gray-300">
+                                  {resolveShopName(shop.shopName, shop.shopId)}
+                                </span>
+                                <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${getShopStatusBadge(shop.status)}`}>
+                                  {getStatusLabel(shop.status)}
+                                </span>
+                              </div>
+                            ))}
+                            {user.accessibleShops.length > 2 && (
+                              <span className="text-xs text-gray-500 dark:text-gray-400">
+                                +{user.accessibleShops.length - 2} cửa hàng khác
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                         <div className="flex items-center space-x-3 flex-wrap gap-2">

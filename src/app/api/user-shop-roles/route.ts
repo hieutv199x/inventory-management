@@ -6,16 +6,38 @@ const prisma = new PrismaClient();
 
 export async function GET(request: NextRequest) {
   try {
-    const { user: currentUser, isAdmin, accessibleShopIds } = await getUserWithShopAccess(request, prisma);
+    const {
+      isAdmin,
+      accessibleShopIds,
+      directShopIds = [],
+      managedGroupIds = [],
+      managedGroupShopIds = [],
+      activeOrgId
+    } = await getUserWithShopAccess(request, prisma);
+
+    if (!activeOrgId) {
+      return NextResponse.json({ error: 'ACTIVE_ORG_REQUIRED' }, { status: 409 });
+    }
 
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get('page') || '1', 10);
     const limit = parseInt(searchParams.get('limit') || '10', 10);
     const userId = searchParams.get('userId');
-    const shopId = searchParams.get('shopId');
+    const requestedShopId = searchParams.get('shopId');
     const role = searchParams.get('role');
 
     const skip = (page - 1) * limit;
+
+    const emptyResponse = () => NextResponse.json({
+      userRoles: [],
+      pagination: {
+        page,
+        limit,
+        total: 0,
+        totalPages: 0,
+        hasMore: false
+      }
+    });
 
     // Build where clause
     const whereClause: any = {};
@@ -23,17 +45,62 @@ export async function GET(request: NextRequest) {
     if (userId) {
       whereClause.userId = userId;
     }
-    if (shopId) {
-      whereClause.shopId = shopId;
-    }
     if (role) {
       whereClause.role = role;
     }
 
-    // Role-based filtering
-    if (!isAdmin) {
-      // Non-admin users can only see roles for shops they have access to
-      whereClause.shopId = { in: accessibleShopIds };
+    let allowedShopIds: string[] = [];
+
+    if (isAdmin) {
+      const orgShops = await prisma.shopAuthorization.findMany({
+        where: { orgId: activeOrgId },
+        select: { id: true }
+      });
+      allowedShopIds = orgShops.map((shop) => shop.id);
+    } else {
+      const candidateShopIds = Array.from(
+        new Set([
+          ...directShopIds,
+          ...managedGroupShopIds,
+          ...accessibleShopIds
+        ].filter(Boolean))
+      );
+
+      const scopeFilters: any[] = [];
+      if (candidateShopIds.length > 0) {
+        scopeFilters.push({ id: { in: candidateShopIds } });
+      }
+      if (managedGroupIds.length > 0) {
+        scopeFilters.push({ groupId: { in: managedGroupIds } });
+      }
+
+      if (scopeFilters.length === 0) {
+        return emptyResponse();
+      }
+
+      const scopedShops = await prisma.shopAuthorization.findMany({
+        where: {
+          orgId: activeOrgId,
+          OR: scopeFilters
+        },
+        select: { id: true }
+      });
+
+      allowedShopIds = scopedShops.map((shop) => shop.id);
+    }
+
+    const allowedShopIdSet = new Set(allowedShopIds);
+
+    if (requestedShopId) {
+      if (!allowedShopIdSet.has(requestedShopId)) {
+        return NextResponse.json({ error: 'FORBIDDEN' }, { status: 403 });
+      }
+      whereClause.shopId = requestedShopId;
+    } else {
+      if (allowedShopIds.length === 0) {
+        return emptyResponse();
+      }
+      whereClause.shopId = { in: allowedShopIds };
     }
 
     // First get the user roles without shop inclusion to avoid null errors
@@ -121,7 +188,7 @@ export async function GET(request: NextRequest) {
       pagination: {
         page,
         limit,
-        total: validUserRoles.length, // Use filtered count
+        total,
         totalPages,
         hasMore: page < totalPages
       },
@@ -142,7 +209,15 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const { user: currentUser, isAdmin } = await getUserWithShopAccess(request, prisma);
+    const {
+      user: currentUser,
+      isAdmin,
+      activeOrgId
+    } = await getUserWithShopAccess(request, prisma);
+
+    if (!activeOrgId) {
+      return NextResponse.json({ error: 'ACTIVE_ORG_REQUIRED' }, { status: 409 });
+    }
 
     const { userId, shopId, role } = await request.json();
 
@@ -190,6 +265,10 @@ export async function POST(request: NextRequest) {
 
     if (!canManage) {
       return NextResponse.json({ error: 'Only administrators or group managers can assign shop access.' }, { status: 403 });
+    }
+
+    if (shop.orgId !== activeOrgId) {
+      return NextResponse.json({ error: 'Shop is not part of the active organization' }, { status: 403 });
     }
 
     // Verify the user exists
@@ -299,11 +378,18 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const { user: currentUser, isAdmin } = await getUserWithShopAccess(request, prisma);
+    const {
+      isAdmin,
+      activeOrgId
+    } = await getUserWithShopAccess(request, prisma);
 
     // Only admins can delete user shop roles
     if (!isAdmin) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    if (!activeOrgId) {
+      return NextResponse.json({ error: 'ACTIVE_ORG_REQUIRED' }, { status: 409 });
     }
 
     const { searchParams } = new URL(request.url);
@@ -323,6 +409,15 @@ export async function DELETE(request: NextRequest) {
 
     if (!existingRole) {
       return NextResponse.json({ error: 'Role not found' }, { status: 404 });
+    }
+
+    const roleShop = await prisma.shopAuthorization.findUnique({
+      where: { id: existingRole.shopId },
+      select: { orgId: true }
+    });
+
+    if (!roleShop || roleShop.orgId !== activeOrgId) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     // Delete the role
