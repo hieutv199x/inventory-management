@@ -6,10 +6,33 @@ const prisma = new PrismaClient();
 
 export async function GET(req: NextRequest) {
     try {
-        const { user, accessibleShopIds, isAdmin } = await getUserWithShopAccess(req, prisma);
+        const { user, accessibleShopIds, isAdmin, activeOrgId } = await getUserWithShopAccess(req, prisma);
+
+        const orgScope = activeOrgId ? { orgId: activeOrgId } : {};
 
         // Build shop filter based on user permissions
-        const shopFilter = isAdmin ? {} : { shopId: { in: accessibleShopIds } };
+        const shopFilter = isAdmin
+            ? orgScope
+            : {
+                  ...orgScope,
+                  id: { in: accessibleShopIds }
+              };
+
+        if (!isAdmin && accessibleShopIds.length === 0) {
+            return NextResponse.json({
+                overview: {
+                    totalShops: 0,
+                    activeShops: 0,
+                    inactiveShops: 0,
+                    expiringTokens: 0
+                },
+                distribution: {
+                    byStatus: [],
+                    byRegion: []
+                },
+                recentActivity: []
+            });
+        }
 
         // Get shop overview stats
         const [

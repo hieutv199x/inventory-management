@@ -51,6 +51,12 @@ interface ShopOption {
   groupName?: string | null;
 }
 
+interface UserOption {
+  value: string;
+  label: string;
+  username?: string | null;
+}
+
 interface ShopGroupMember {
   id: string;
   user: {
@@ -110,12 +116,13 @@ export default function PermissionsPage() {
   const [selectedGroup, setSelectedGroup] = useState<ShopGroup | null>(null);
   const [showAddUserToGroupModal, setShowAddUserToGroupModal] = useState(false);
   const [showAddShopToGroupModal, setShowAddShopToGroupModal] = useState(false);
-  const [groupUserForm, setGroupUserForm] = useState({ userId: '' });
+  const [groupUserForm, setGroupUserForm] = useState<{ userIds: string[] }>({ userIds: [] });
   const [groupShopForm, setGroupShopForm] = useState({ shopIds: [] as string[] });
   const [groupModalError, setGroupModalError] = useState('');
   const [groupActionLoading, setGroupActionLoading] = useState(false);
   const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
   const [shopSelectPortalTarget, setShopSelectPortalTarget] = useState<HTMLElement | null>(null);
+  const [userSelectPortalTarget, setUserSelectPortalTarget] = useState<HTMLElement | null>(null);
   const canCreateGroups = useMemo(() => ['ADMIN', 'SUPER_ADMIN'].includes(user?.role ?? ''), [user?.role]);
 
   const roleColors = {
@@ -280,37 +287,28 @@ export default function PermissionsPage() {
   }, [mapShopGroup, t]);
 
   const usersById = useMemo(() => {
-    const map = new Map<string, User>();
-    users.forEach((user) => {
-      map.set(user.id, user);
-    });
-    return map;
+    return new Map(users.map((userItem) => [userItem.id, userItem]));
   }, [users]);
 
   const shopsByGroup = useMemo(() => {
-    const map = new Map<string, Shop[]>();
+    const byGroup = new Map<string, Shop[]>();
+
     shops.forEach((shop) => {
       if (!shop.groupId) {
         return;
       }
-      const existing = map.get(shop.groupId) ?? [];
-      existing.push(shop);
-      map.set(shop.groupId, existing);
-    });
-    return map;
-  }, [shops]);
-  
-  const shopsAssignedToSelectedGroup = useMemo(() => {
-    if (!selectedGroup) {
-      return [] as Shop[];
-    }
 
-    return shopsByGroup.get(selectedGroup.id) ?? [];
-  }, [selectedGroup, shopsByGroup]);
+      const current = byGroup.get(shop.groupId) ?? [];
+      current.push(shop);
+      byGroup.set(shop.groupId, current);
+    });
+
+    return byGroup;
+  }, [shops]);
 
   const availableUsersForSelectedGroup = useMemo(() => {
     if (!selectedGroup) {
-      return users;
+      return [] as User[];
     }
 
     const memberIds = new Set(
@@ -321,6 +319,55 @@ export default function PermissionsPage() {
 
     return users.filter((user) => !memberIds.has(user.id));
   }, [selectedGroup, users]);
+
+  const userOptions = useMemo<UserOption[]>(() => {
+    const fallbackLabel = t('permissions.groups.unknown_user');
+    return availableUsersForSelectedGroup.map((user) => ({
+      value: user.id,
+      label: user.name || user.username || fallbackLabel,
+      username: user.username ?? null
+    }));
+  }, [availableUsersForSelectedGroup, t]);
+
+  const selectedUserOptions = useMemo<UserOption[]>(() => {
+    if (groupUserForm.userIds.length === 0) {
+      return [];
+    }
+
+    const selectedSet = new Set(groupUserForm.userIds);
+    return userOptions.filter((option) => selectedSet.has(option.value));
+  }, [groupUserForm.userIds, userOptions]);
+
+  const formatUserOptionLabel = useCallback(
+    (option: UserOption, meta: FormatOptionLabelMeta<UserOption>) => {
+      if (meta.context === 'value') {
+        return option.label;
+      }
+
+      return (
+        <div className="flex flex-col">
+          <span className="text-sm font-medium text-gray-900 dark:text-white vietnamese-text">
+            {option.label}
+          </span>
+          {option.username ? (
+            <span className="text-xs text-gray-500 dark:text-gray-400">{option.username}</span>
+          ) : null}
+        </div>
+      );
+    },
+    []
+  );
+
+  const handleUserSelectChange = useCallback(
+    (selected: MultiValue<UserOption>) => {
+      const selectedIds = selected.map((option) => option.value);
+      setGroupUserForm({ userIds: selectedIds });
+      if (groupModalError) {
+        setGroupModalError('');
+      }
+    },
+    [groupModalError]
+  );
 
   const availableShopsForSelectedGroup = useMemo(() => {
     if (!selectedGroup) {
@@ -468,7 +515,13 @@ export default function PermissionsPage() {
   }, [showAssignModal, assignableUsers, assignableShops, formData.userId, formData.shopId]);
 
   useEffect(() => {
-    setShopSelectPortalTarget(document.body);
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const target = document.body;
+    setShopSelectPortalTarget(target);
+    setUserSelectPortalTarget(target);
   }, []);
 
   // Handle pagination
@@ -559,7 +612,7 @@ export default function PermissionsPage() {
 
   const openAddUserToGroupModal = (group: ShopGroup) => {
     setSelectedGroup(group);
-    setGroupUserForm({ userId: '' });
+    setGroupUserForm({ userIds: [] });
     setGroupShopForm({ shopIds: [] });
     setGroupModalError('');
     setShowAddUserToGroupModal(true);
@@ -568,7 +621,7 @@ export default function PermissionsPage() {
 
   const openAddShopToGroupModal = (group: ShopGroup) => {
     setSelectedGroup(group);
-    setGroupUserForm({ userId: '' });
+    setGroupUserForm({ userIds: [] });
     setGroupShopForm({ shopIds: [] });
     setGroupModalError('');
     setShowAddShopToGroupModal(true);
@@ -578,7 +631,7 @@ export default function PermissionsPage() {
     setShowAddUserToGroupModal(false);
     setShowAddShopToGroupModal(false);
     setSelectedGroup(null);
-    setGroupUserForm({ userId: '' });
+    setGroupUserForm({ userIds: [] });
     setGroupShopForm({ shopIds: [] });
     setGroupModalError('');
   };
@@ -589,8 +642,8 @@ export default function PermissionsPage() {
       return;
     }
 
-    if (!groupUserForm.userId) {
-      const message = t('permissions.assign_modal.select_user');
+    if (groupUserForm.userIds.length === 0) {
+      const message = t('permissions.groups.add_user_modal.no_selection');
       setGroupModalError(message);
       return;
     }
@@ -607,7 +660,7 @@ export default function PermissionsPage() {
         .filter(Boolean);
 
       const updatedMemberIds = Array.from(
-        new Set([...existingMemberIds, groupUserForm.userId])
+        new Set([...existingMemberIds, ...groupUserForm.userIds])
       );
 
       await shopGroupApi.update(selectedGroup.id, {
@@ -1441,20 +1494,82 @@ export default function PermissionsPage() {
                   {t('permissions.groups.add_user_modal.no_users')}
                 </div>
               ) : (
-                <select
-                  value={groupUserForm.userId}
-                  onChange={(event) => setGroupUserForm((prev) => ({ ...prev, userId: event.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                  disabled={groupActionLoading}
-                  required
-                >
-                  <option value="">{t('permissions.assign_modal.select_user')}</option>
-                  {availableUsersForSelectedGroup.map((user) => (
-                    <option key={user.id} value={user.id}>
-                      {user.name} ({user.username})
-                    </option>
-                  ))}
-                </select>
+                <Select<UserOption, true>
+                  unstyled
+                  isMulti
+                  options={userOptions}
+                  value={selectedUserOptions}
+                  onChange={handleUserSelectChange}
+                  placeholder={t('permissions.groups.add_user_modal.user_placeholder')}
+                  noOptionsMessage={() => t('permissions.groups.add_user_modal.no_options')}
+                  isDisabled={groupActionLoading}
+                  closeMenuOnSelect={false}
+                  hideSelectedOptions={false}
+                  className="w-full"
+                  formatOptionLabel={formatUserOptionLabel}
+                  menuPortalTarget={userSelectPortalTarget ?? undefined}
+                  menuPosition={userSelectPortalTarget ? 'fixed' : 'absolute'}
+                  menuPlacement="auto"
+                  classNames={{
+                    control: ({ isFocused, isDisabled }) =>
+                      [
+                        'border rounded-md transition-colors min-h-[44px]',
+                        isDisabled
+                          ? 'bg-gray-100 dark:bg-gray-900 border-gray-200 dark:border-gray-700 cursor-not-allowed text-gray-400 dark:text-gray-500'
+                          : 'bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white',
+                        isFocused
+                          ? 'border-brand-500 ring-2 ring-brand-200 dark:ring-brand-500/40'
+                          : 'hover:border-gray-400 dark:hover:border-gray-500'
+                      ]
+                        .filter(Boolean)
+                        .join(' '),
+                    valueContainer: () => 'flex flex-wrap gap-2 px-3 py-2 text-sm',
+                    placeholder: () => 'text-sm text-gray-400 dark:text-gray-500',
+                    input: () => 'text-sm text-gray-900 dark:text-white',
+                    multiValue: () =>
+                      'flex items-center gap-1 bg-brand-500/10 dark:bg-brand-500/20 text-brand-700 dark:text-brand-200 rounded px-2 py-1 text-xs',
+                    multiValueLabel: () => 'leading-none',
+                    multiValueRemove: () =>
+                      'cursor-pointer text-brand-500 hover:text-brand-700 dark:text-brand-200 dark:hover:text-brand-100',
+                    indicatorsContainer: () => 'pr-2 gap-1 flex items-center text-gray-400 dark:text-gray-500',
+                    dropdownIndicator: ({ isFocused }) =>
+                      `p-1 ${isFocused ? 'text-brand-500' : 'text-gray-400 dark:text-gray-500'} hover:text-brand-500`,
+                    clearIndicator: () => 'p-1 hover:text-brand-500',
+                    indicatorSeparator: () => 'w-px h-4 bg-gray-200 dark:bg-gray-700',
+                    menu: () =>
+                      'mt-2 border border-gray-200 dark:border-gray-700 rounded-md bg-white dark:bg-gray-800 shadow-xl text-sm overflow-hidden',
+                    menuList: () => 'max-h-60 overflow-y-auto py-1',
+                    option: ({ isFocused, isSelected }) =>
+                      [
+                        'px-3 py-2 cursor-pointer transition-colors',
+                        isSelected
+                          ? 'bg-brand-100 dark:bg-brand-500/30 text-brand-700 dark:text-brand-100'
+                          : 'text-gray-700 dark:text-gray-200',
+                        !isSelected && isFocused ? 'bg-brand-50 dark:bg-brand-500/20' : ''
+                      ]
+                        .filter(Boolean)
+                        .join(' '),
+                    noOptionsMessage: () => 'px-3 py-2 text-sm text-gray-500 dark:text-gray-400'
+                  }}
+                  styles={{
+                    container: (base) => ({
+                      ...base,
+                      zIndex: 100000
+                    }),
+                    control: (base) => ({
+                      ...base,
+                      boxShadow: 'none'
+                    }),
+                    menuPortal: (base) => ({
+                      ...base,
+                      zIndex: 100000
+                    }),
+                    menu: (base) => ({
+                      ...base,
+                      zIndex: 100000
+                    })
+                  }}
+                />
               )}
             </div>
 
@@ -1534,7 +1649,9 @@ export default function PermissionsPage() {
                 loading={groupActionLoading}
                 loadingText={t('permissions.groups.add_user_modal.loading')}
                 className="flex-1 bg-brand-500 hover:bg-brand-600 focus:ring-brand-500"
-                disabled={availableUsersForSelectedGroup.length === 0}
+                disabled={
+                  availableUsersForSelectedGroup.length === 0 || groupUserForm.userIds.length === 0
+                }
               >
                 {t('permissions.groups.add_user_modal.submit')}
               </LoadingButton>
