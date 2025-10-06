@@ -10,18 +10,8 @@ export async function GET(
     { params }: { params: Promise<{ orderId: string }> }
 ) {
     try {
-        const {
-            accessibleShopIds,
-            isAdmin,
-            managedGroupIds = [],
-            directShopIds = [],
-            activeOrgId
-        } = await getUserWithShopAccess(req, prisma);
-        const activeShopIds = await getActiveShopIds(prisma, {
-            orgId: activeOrgId ?? undefined,
-            groupIds: isAdmin ? undefined : managedGroupIds,
-            shopIds: isAdmin ? undefined : directShopIds
-        });
+        const { user, accessibleShopIds, isAdmin } = await getUserWithShopAccess(req, prisma);
+        const activeShopIds = await getActiveShopIds(prisma);
 
         // Await params before accessing properties
         const { orderId } = await params;

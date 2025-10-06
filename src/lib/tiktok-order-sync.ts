@@ -119,6 +119,58 @@ export class TikTokOrderSync {
         throw new Error(`Failed to execute ${context}`);
     }
 
+    private async ensureTrackingInformation(tiktokOrderId: string, prismaOrderId: string): Promise<void> {
+        try {
+            const existingCount = await prisma.orderTrackingInfo.count({
+                where: { orderId: prismaOrderId }
+            });
+
+            if (existingCount > 0) {
+                return;
+            }
+
+            const trackingInfo = await this.apiCallWithRetry(
+                () => this.client.api.FulfillmentV202309Api.OrdersOrderIdTrackingGet(
+                    tiktokOrderId,
+                    this.credentials.accessToken,
+                    "application/json",
+                    this.shopCipher
+                ),
+                'OrdersOrderIdTrackingGet'
+            );
+
+            const trackingEvents = trackingInfo?.body?.data?.tracking;
+            if (!Array.isArray(trackingEvents) || trackingEvents.length === 0) {
+                return;
+            }
+
+            const preparedEvents = trackingEvents
+                .filter(event => event && typeof event === 'object')
+                .map(event => {
+                    const updateMillisSource = (event as any).update_time_millis
+                        ?? (event as any).updateTimeMillis
+                        ?? (event as any).update_time
+                        ?? (event as any).updateTime
+                        ?? 0;
+                    const updateMillis = Number(updateMillisSource) || 0;
+                    return {
+                        orderId: prismaOrderId,
+                        description: String(event.description ?? ''),
+                        updateTimeMilli: updateMillis
+                    };
+                })
+                .filter(event => typeof event.description === 'string');
+
+            if (preparedEvents.length === 0) {
+                return;
+            }
+
+            await prisma.orderTrackingInfo.createMany({ data: preparedEvents });
+        } catch (error) {
+            console.warn(`Failed to ensure tracking info for order ${tiktokOrderId}:`, error);
+        }
+    }
+
     async syncOrders(options: OrderSyncOptions): Promise<OrderSyncResult> {
         const startTime = Date.now();
         let syncResults: OrderSyncResult = {
@@ -428,9 +480,10 @@ export class TikTokOrderSync {
                     };
 
                     if (existingOrderMap.has(order.id)) {
+                        const prismaOrderId = existingOrderMap.get(order.id)!;
                         // Update existing order with price details
                         await prisma.order.update({
-                            where: { id: existingOrderMap.get(order.id) },
+                            where: { id: prismaOrderId },
                             data: {
                                 ...orderData,
                                 orgId: this.credentials.organization?.id
@@ -439,24 +492,25 @@ export class TikTokOrderSync {
 
                         // Update payment information with price details if it exists
                         if (priceDetails) {
-                            await this.updateExistingPaymentWithPriceDetails(existingOrderMap.get(order.id)!, priceDetails);
+                            await this.updateExistingPaymentWithPriceDetails(prismaOrderId, priceDetails);
                         }
 
                         // Upsert recipient address if it exists
                         if (order.recipientAddress) {
-                            await this.upsertRecipientAddress(existingOrderMap.get(order.id)!, order.recipientAddress);
+                            await this.upsertRecipientAddress(prismaOrderId, order.recipientAddress);
                         }
                         if (order.packages && order.packages.length > 0) {
                             await prisma.orderPackage.deleteMany({
                                 where: {
-                                    orderId: existingOrderMap.get(order.id)!,
+                                    orderId: prismaOrderId,
                                 }
                             });
                             for (const pkg of order.packages) {
-                                await this.upsertOrderPackage(existingOrderMap.get(order.id)!, pkg);
+                                await this.upsertOrderPackage(prismaOrderId, pkg);
                             }
                         }
-
+                        await this.ensureTrackingInformation(order.id, prismaOrderId);
+                        
                         // Sync order attributes
                         await syncOrderCanSplitOrNot(prisma, {
                             shop_id: shopId,
@@ -473,7 +527,8 @@ export class TikTokOrderSync {
                         updated++;
                     } else {
                         // Create new order with all associations including price details
-                        await this.insertOrderWithAssociations(order, shopId, priceDetails);
+                        const newOrderId = await this.insertOrderWithAssociations(order, shopId, priceDetails);
+                        await this.ensureTrackingInformation(order.id, newOrderId);
                         created++;
                     }
 
@@ -711,16 +766,16 @@ export class TikTokOrderSync {
             // Prepare data for upsert - separate update and create data
             const { orderId: _, packageId: __, ...updateData } = packageData;
 
-                    await prisma.orderPackage.upsert({
-                        where: {
-                            orderId_packageId: {
-                                orderId: orderId,
-                                packageId: pkg.id
-                            }
-                        },
-                        update: { ...updateData, orgId: this.credentials.organization?.id },
-                        create: { ...packageData, orgId: this.credentials.organization?.id }
-                    });
+            await prisma.orderPackage.upsert({
+                where: {
+                    orderId_packageId: {
+                        orderId: orderId,
+                        packageId: pkg.id
+                    }
+                },
+                update: { ...updateData, orgId: this.credentials.organization?.id },
+                create: { ...packageData, orgId: this.credentials.organization?.id }
+            });
 
             console.log(`Upserted package ${pkg.id} for order ${orderId}`);
 
@@ -802,7 +857,7 @@ export class TikTokOrderSync {
         order: any,
         shopId: string,
         priceDetails: any = null
-    ) {
+    ): Promise<string> {
         // Enhanced channel data with price details
         const channelData = {
             orderType: order.orderType,
@@ -1067,6 +1122,8 @@ export class TikTokOrderSync {
                 }
             }
         }
+
+        return persistedOrder.id;
     }
 }
 

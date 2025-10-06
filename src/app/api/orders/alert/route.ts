@@ -51,8 +51,8 @@ export async function GET(req: NextRequest) {
                 ...baseShopWhere,
                 OR: [
                     {
-                        shippingDueTime: { gt: now, lt: twentyFourHoursFromNow },
-                        status: { notIn: ["AWAITING_COLLECTION", "IN_TRANSIT", "DELIVERED", "COMPLETED", "CANCELLED"] }
+                        cancelOrderSlaTime: { gt: now, lt: twentyFourHoursFromNow },
+                        status: { notIn: ["IN_TRANSIT", "DELIVERED", "COMPLETED", "CANCELLED"] }
                     },
                     // {
                     //     collectionDueTime: { gt: now, lt: twentyFourHoursFromNow },

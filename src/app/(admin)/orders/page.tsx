@@ -18,6 +18,7 @@ import toast from 'react-hot-toast';
 import { useLanguage } from '@/context/LanguageContext';
 import ImportOrdersModal from '@/components/Orders/ImportOrdersModal';
 import BulkTrackingModal from '@/components/Orders/BulkTrackingModal';
+import TrackingHistoryModal, { TrackingEventItem } from '@/components/Orders/TrackingHistoryModal';
 
 interface Order {
     id: string;
@@ -49,6 +50,7 @@ interface Order {
         shippingProviderId?: string;
         shippingProviderName?: string;
     }[],
+    trackingInfos?: TrackingEventItem[];
     shopId: string;
     lineItemsCount?: number;
     canSplitPackages?: boolean; // Added canSplitPackages field
@@ -166,6 +168,10 @@ export default function OrdersPage() {
     const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
     const [showTrackingModal, setShowTrackingModal] = useState(false);
     const [selectedOrderForTracking, setSelectedOrderForTracking] = useState<Order | null>(null);
+    const [trackingHistoryOpen, setTrackingHistoryOpen] = useState(false);
+    const [trackingHistoryLoading, setTrackingHistoryLoading] = useState(false);
+    const [trackingHistoryEvents, setTrackingHistoryEvents] = useState<TrackingEventItem[]>([]);
+    const [trackingHistoryOrderId, setTrackingHistoryOrderId] = useState<string | null>(null);
     const [selectedOrderForSplit, setSelectedOrderForSplit] = useState<Order | null>(null);
     const [showImportModal, setShowImportModal] = useState(false);
     const [importFile, setImportFile] = useState<File | null>(null);
@@ -664,14 +670,6 @@ export default function OrdersPage() {
         }).filter(item => item.image) || [];
     };
 
-    // Filter orders based on search term
-    const filteredOrders = orders.filter(order =>
-        order.orderId.toLowerCase().includes(filters.keyword.toLowerCase()) ||
-        order.buyerEmail.toLowerCase().includes(filters.keyword.toLowerCase()) ||
-        (order.recipientAddress?.name || '').toLowerCase().includes(filters.keyword.toLowerCase()) ||
-        order.lineItems.some(item => item.productName.toLowerCase().includes(filters.keyword.toLowerCase()))
-    );
-
     const formatCustomerInfo = (order: Order) => {
         const address = order.recipientAddress;
         if (!address) return 'N/A';
@@ -749,6 +747,39 @@ export default function OrdersPage() {
         } finally {
             setUpdatingStatus(null);
         }
+    };
+
+    const handleViewTrackingHistory = async (order: Order) => {
+        setTrackingHistoryOrderId(order.orderId);
+        setTrackingHistoryEvents([]);
+        setTrackingHistoryOpen(true);
+        setTrackingHistoryLoading(true);
+
+        try {
+            const response = await httpClient.get(`/orders/${order.orderId}/tracking`);
+            const rawEvents = Array.isArray(response?.trackingInfos) ? response.trackingInfos : [];
+            const events: TrackingEventItem[] = rawEvents.map((event: any) => ({
+                id: event.id,
+                description: event.description ?? '',
+                updateTimeMilli: typeof event.updateTimeMilli === 'number'
+                    ? event.updateTimeMilli
+                    : Number(event.updateTimeMilli ?? 0),
+                createdAt: event.createdAt ?? null
+            }));
+            setTrackingHistoryEvents(events);
+        } catch (error) {
+            console.error('Error loading tracking history:', error);
+            toast.error(t('orders.tracking_load_failed'));
+            setTrackingHistoryEvents([]);
+        } finally {
+            setTrackingHistoryLoading(false);
+        }
+    };
+
+    const closeTrackingHistoryModal = () => {
+        setTrackingHistoryOpen(false);
+        setTrackingHistoryEvents([]);
+        setTrackingHistoryOrderId(null);
     };
 
     const handleAddTracking = (order: Order) => {
@@ -1421,6 +1452,13 @@ export default function OrdersPage() {
                                                         {t('orders.view')}
                                                     </button>
                                                     <button
+                                                        onClick={() => handleViewTrackingHistory(order)}
+                                                        className="inline-flex items-center px-2 py-1 text-xs font-medium text-purple-600 hover:text-purple-900 border border-purple-300 rounded hover:bg-purple-50 dark:border-purple-800 dark:bg-purple-900 dark:text-purple-300 dark:hover:bg-purple-700"
+                                                    >
+                                                        <Clock className="h-3 w-3 mr-1" />
+                                                        {t('orders.view_tracking')}
+                                                    </button>
+                                                    <button
                                                         onClick={() => syncOrderDetail(order)}
                                                         disabled={syncingDetail === order.orderId || syncing}
                                                         className="inline-flex items-center px-2 py-1 text-xs font-medium text-indigo-600 hover:text-indigo-900 border border-indigo-300 rounded hover:bg-indigo-50 dark:border-indigo-800 dark:bg-indigo-900 dark:text-indigo-400 dark:hover:bg-indigo-700 disabled:opacity-50"
@@ -1664,6 +1702,14 @@ export default function OrdersPage() {
                         hideLoading();
                     }
                 }}
+            />
+
+            <TrackingHistoryModal
+                isOpen={trackingHistoryOpen}
+                onClose={closeTrackingHistoryModal}
+                orderId={trackingHistoryOrderId}
+                events={trackingHistoryEvents}
+                isLoading={trackingHistoryLoading}
             />
         </div>
     );

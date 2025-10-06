@@ -23,10 +23,10 @@ enum Channel {
 }
 
 enum AuthorizationStatus {
-  ACTIVE    // Đang hoạt động
-  EXPIRED   // Đã hết hạn (cần refresh)
-  REVOKED   // Đã bị thu hồi
-  INACTIVE  // Không hoạt động
+  ACTIVE // Đang hoạt động
+  EXPIRED // Đã hết hạn (cần refresh)
+  REVOKED // Đã bị thu hồi
+  INACTIVE // Không hoạt động
 }
 
 model UserShopRole {
@@ -37,7 +37,7 @@ model UserShopRole {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   shop ShopAuthorization @relation(fields: [shopId], references: [id], onDelete: Cascade)
 
   @@unique([userId, shopId])
@@ -45,22 +45,22 @@ model UserShopRole {
 }
 
 model User {
-  id        String    @id @default(auto()) @map("_id") @db.ObjectId
-  name      String
-  username  String    @unique
-  password  String
-  role      UserRole  @default(SELLER)
-  isActive  Boolean   @default(true)
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  sessions  Session[]
-  createdBy String?   @db.ObjectId
-  creator   User?     @relation("UserCreator", fields: [createdBy], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  createdUsers User[] @relation("UserCreator")
-  
+  id           String    @id @default(auto()) @map("_id") @db.ObjectId
+  name         String
+  username     String    @unique
+  password     String
+  role         UserRole  @default(SELLER)
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  sessions     Session[]
+  createdBy    String?   @db.ObjectId
+  creator      User?     @relation("UserCreator", fields: [createdBy], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  createdUsers User[]    @relation("UserCreator")
+
   // Bank relations
-  uploadedBanks BankAccount[] @relation("BankUploader")
-  assignedBanks BankAccount[] @relation("BankAssignee")
+  uploadedBanks      BankAccount[] @relation("BankUploader")
+  assignedBanks      BankAccount[] @relation("BankAssignee")
   bankHistoryActions BankHistory[]
 
   userShopRoles UserShopRole[]
@@ -68,13 +68,13 @@ model User {
   notifications Notification[]
 
   // Scheduler relations
-  createdJobs     SchedulerJob[]
-  schedulerConfigs SchedulerConfig[]
+  createdJobs             SchedulerJob[]
+  schedulerConfigs        SchedulerConfig[]
   // Organization memberships (multi-tenant)
   organizationMemberships OrganizationMember[]
   groupMemberships        ShopGroupMember[]
-  managedGroups           ShopGroup[]      @relation("GroupManager")
-  auditLogs AuditLog[]
+  managedGroups           ShopGroup[]          @relation("GroupManager")
+  auditLogs               AuditLog[]
 }
 
 enum UserRole {
@@ -95,31 +95,31 @@ model Session {
   // Active organization (tenant) context; nullable until user selects when multi-org
   activeOrgId  String?  @db.ObjectId
 }
- 
+
 enum ShopGroupRole {
   MANAGER
   MEMBER
 }
 
 model ShopGroup {
-  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  id          String  @id @default(auto()) @map("_id") @db.ObjectId
   name        String
   description String?
-  orgId       String   @db.ObjectId
-  managerId   String   @db.ObjectId
+  orgId       String  @db.ObjectId
+  managerId   String  @db.ObjectId
 
-  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  manager      User          @relation("GroupManager", fields: [managerId], references: [id], onDelete: Cascade)
+  organization Organization        @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  manager      User                @relation("GroupManager", fields: [managerId], references: [id], onDelete: Cascade)
   members      ShopGroupMember[]
   shops        ShopAuthorization[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@map("shop_groups")
   @@unique([orgId, name])
   @@index([orgId])
   @@index([managerId])
+  @@map("shop_groups")
 }
 
 model ShopGroupMember {
@@ -143,16 +143,16 @@ model ShopGroupMember {
 
 // Restored ChannelApp model (previously corrupted by patch)
 model ChannelApp {
-  id        String   @id @default(auto()) @map("_id") @db.ObjectId
-  appName   String   // Descriptive name for the app
-  channel   Channel  // Which channel this app belongs to
+  id        String  @id @default(auto()) @map("_id") @db.ObjectId
+  appName   String // Descriptive name for the app
+  channel   Channel // Which channel this app belongs to
   appId     String
-  appKey    String   @unique // Unique key for the app
-  appSecret String   // App secret
-  appUrl    String?  // Optional URL for the app
+  appKey    String  @unique // Unique key for the app
+  appSecret String // App secret
+  appUrl    String? // Optional URL for the app
   BaseUrl   String?
   // Channel-specific configuration (JSON string)
-  config    String?  // Store channel-specific settings as JSON
+  config    String? // Store channel-specific settings as JSON
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -168,21 +168,21 @@ model ChannelApp {
 
 // Rename and expand ShopAuthorization to support all channels
 model ShopAuthorization {
-  id         String  @id @default(auto()) @map("_id") @db.ObjectId
+  id String @id @default(auto()) @map("_id") @db.ObjectId
 
   // Relation to TiktokUnsettledTransaction
-  tiktokUnsettledTransactions TiktokUnsettledTransaction[] 
+  tiktokUnsettledTransactions TiktokUnsettledTransaction[]
 
   managedName String? // For TikTok: managed shop ID (if applicable)
 
   // Universal shop identification
-  shopId     String  @unique // Universal shop ID (TikTok shop ID, Amazon seller ID, etc.)
-  shopName   String? // Name of the shop/store
-  
+  shopId   String  @unique // Universal shop ID (TikTok shop ID, Amazon seller ID, etc.)
+  shopName String? // Name of the shop/store
+
   // Legacy fields (for migration compatibility)
   shopCipher String? // TikTok shopCipher (will be moved to channelData)
   region     String? // TikTok region (will be moved to channelData)
-  
+
   // Channel-specific identifiers (JSON object) - make optional for migration
   channelData String? // Store channel-specific data as JSON
   // Examples:
@@ -192,117 +192,117 @@ model ShopAuthorization {
   // Alibaba: {"memberId": "xxx"}
 
   // Authorization tokens and credentials
-  accessToken  String   // Primary access token
-  refreshToken String?  // Refresh token (if applicable)
-  expiresIn    Int?     // Token expiration time in seconds
-  scope        String?  // Granted permissions/scopes
-  
+  accessToken  String // Primary access token
+  refreshToken String? // Refresh token (if applicable)
+  expiresIn    Int? // Token expiration time in seconds
+  scope        String? // Granted permissions/scopes
+
   // Additional credentials for channels that need them (JSON)
-  credentials  String?  // Store additional credentials as JSON
+  credentials String? // Store additional credentials as JSON
   // Examples:
   // Amazon: {"secretKey": "xxx", "mwsAuthToken": "xxx"}
   // Others can store additional auth data here
 
-  status    AuthorizationStatus @default(ACTIVE)
+  status AuthorizationStatus @default(ACTIVE)
 
   // Relations - make appId optional for migration
-  appId String?   @db.ObjectId
-  app   ChannelApp? @relation(fields: [appId], references: [id], onDelete: Cascade)
-  groupId String?      @db.ObjectId
-  group   ShopGroup?   @relation(fields: [groupId], references: [id], onDelete: SetNull)
-  
+  appId   String?     @db.ObjectId
+  app     ChannelApp? @relation(fields: [appId], references: [id], onDelete: Cascade)
+  groupId String?     @db.ObjectId
+  group   ShopGroup?  @relation(fields: [groupId], references: [id], onDelete: SetNull)
+
   // Bank relations
   bankAccounts BankAccount[]
-  
+
   // Universal relations (will work for all channels)
-  payments     Payment[]
-  statements   Statement[]
-  withdrawals  Withdrawal[]
-  orders       Order[]
-  products     Product[]
+  payments      Payment[]
+  statements    Statement[]
+  withdrawals   Withdrawal[]
+  orders        Order[]
+  products      Product[]
   conversations Conversation[]
 
   userShopRoles UserShopRole[]
 
   notifications Notification[]
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
   // Organization ownership (tenant) - nullable during migration
-  orgId String @db.ObjectId
+  orgId        String       @db.ObjectId
   organization Organization @relation(fields: [orgId], references: [id])
-  
-  @@map("shop_authorizations")
+
   @@index([orgId])
   @@index([groupId])
+  @@map("shop_authorizations")
 }
 
 // Update Product model to be channel-agnostic
 model Product {
-  id                         String  @id @default(auto()) @map("_id") @db.ObjectId
-  productId                  String  @unique // Universal product ID
-  
+  id        String @id @default(auto()) @map("_id") @db.ObjectId
+  productId String @unique // Universal product ID
+
   // Channel and shop information - make optional for migration
-  channel                    Channel? // Which channel this product belongs to
-  shopId                     String? @db.ObjectId
-  shop                       ShopAuthorization? @relation(fields: [shopId], references: [id])
+  channel Channel? // Which channel this product belongs to
+  shopId  String?            @db.ObjectId
+  shop    ShopAuthorization? @relation(fields: [shopId], references: [id])
 
   // Universal product fields
-  title                      String
-  description                String
-  status                     String
-  
+  title       String
+  description String
+  status      String
+
   // Channel-specific data (JSON object)
-  channelData                String? // Store channel-specific fields as JSON
+  channelData String? // Store channel-specific fields as JSON
   // Examples:
   // TikTok: {"isNotForSale": true, "isCodAllowed": false, "isPreOwned": false, "shippingInsuranceRequirement": "xxx"}
   // Amazon: {"asin": "B07XXX", "parentAsin": "B07YYY", "category": "Electronics"}
   // Shopify: {"vendor": "Nike", "productType": "Shoes", "tags": ["summer", "sale"]}
   // Alibaba: {"category": "Machinery", "moq": 100}
-  
+
   // Pricing information (can vary by channel)
-  price                      String?
-  currency                   String?
-  
+  price    String?
+  currency String?
+
   // Timing
-  createTime                 Int?
-  updateTime                 Int?
+  createTime Int?
+  updateTime Int?
 
   // Existing relations (keep for TikTok compatibility)
-  brandId                    String? @map("brand_id") @db.ObjectId
-  auditId                    String?  @unique @map("audit_id") @db.ObjectId
-  brand                      Brand?  @relation(fields: [brandId], references: [id])
-  audit                      Audit?  @relation(fields: [auditId], references: [id])
+  brandId String? @map("brand_id") @db.ObjectId
+  auditId String? @unique @map("audit_id") @db.ObjectId
+  brand   Brand?  @relation(fields: [brandId], references: [id])
+  audit   Audit?  @relation(fields: [auditId], references: [id])
 
-  dimensions                 PackageDimension?
-  weight                     PackageWeight?
-  skus                       Sku[]
-  categories                 CategoryChain[]
-  images                     ProductImage[]
-  attributes                 ProductAttribute[]
+  dimensions PackageDimension?
+  weight     PackageWeight?
+  skus       Sku[]
+  categories CategoryChain[]
+  images     ProductImage[]
+  attributes ProductAttribute[]
 
   // ===== Added fields from channel product payload (TikTok extended) =====
   salesRegions               String[] @default([]) // API: sales_regions [] of region codes
   productSyncFailReasons     String[] @default([]) // API: product_sync_fail_reasons
-  isNotForSale               Boolean?              // API: is_not_for_sale
-  recommendedCategories      String?               // JSON array as string: [{id, local_name}]
-  listingQualityTier         String?               // API: listing_quality_tier (POOR / FAIR / GOOD ...)
-  integratedPlatformStatuses String?               // JSON array as string: [{platform, status}]
-  productFamilies            String?               // JSON array as string: product_families
+  isNotForSale               Boolean? // API: is_not_for_sale
+  recommendedCategories      String? // JSON array as string: [{id, local_name}]
+  listingQualityTier         String? // API: listing_quality_tier (POOR / FAIR / GOOD ...)
+  integratedPlatformStatuses String? // JSON array as string: [{platform, status}]
+  productFamilies            String? // JSON array as string: product_families
   hasDraft                   Boolean? @default(false) // API: has_draft
 
-  createdAt                  DateTime @default(now())
-  updatedAt                  DateTime @updatedAt
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
   // Organization scope
-  orgId String @db.ObjectId
+  orgId        String       @db.ObjectId
   organization Organization @relation(fields: [orgId], references: [id])
 }
 
 model Brand {
-  id        String   @id @default(auto()) @map("_id") @db.ObjectId
-  brandId   String   @unique
-  name      String
-  products  Product[]
+  id       String    @id @default(auto()) @map("_id") @db.ObjectId
+  brandId  String    @unique
+  name     String
+  products Product[]
 }
 
 model Audit {
@@ -315,104 +315,105 @@ model Audit {
 }
 
 model PackageDimension {
-  id        String   @id @default(auto()) @map("_id") @db.ObjectId
-  productId String   @unique @db.ObjectId
+  id        String  @id @default(auto()) @map("_id") @db.ObjectId
+  productId String  @unique @db.ObjectId
   height    String
   length    String
   width     String
   unit      String
-  product   Product  @relation(fields: [productId], references: [id])
+  product   Product @relation(fields: [productId], references: [id])
 }
 
 model PackageWeight {
-  id        String   @id @default(auto()) @map("_id") @db.ObjectId
-  productId String   @unique @db.ObjectId
+  id        String  @id @default(auto()) @map("_id") @db.ObjectId
+  productId String  @unique @db.ObjectId
   value     String
   unit      String
-  product   Product  @relation(fields: [productId], references: [id])
+  product   Product @relation(fields: [productId], references: [id])
 }
 
 model CategoryChain {
-  id         String   @id @default(auto()) @map("_id") @db.ObjectId
-  productId  String   @db.ObjectId
+  id         String  @id @default(auto()) @map("_id") @db.ObjectId
+  productId  String  @db.ObjectId
   categoryId String
   localName  String
   parentId   String
   isLeaf     Boolean
-  product    Product  @relation(fields: [productId], references: [id])
+  product    Product @relation(fields: [productId], references: [id])
 
   @@unique([productId, categoryId])
 }
 
 model ProductImage {
-  id         String   @id @default(auto()) @map("_id") @db.ObjectId
-  productId  String   @db.ObjectId
-  uri        String
-  width      Int
-  height     Int
-  urls       String[]
-  thumbUrls  String[]
-  product    Product  @relation(fields: [productId], references: [id])
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  productId String   @db.ObjectId
+  uri       String
+  width     Int
+  height    Int
+  urls      String[]
+  thumbUrls String[]
+  product   Product  @relation(fields: [productId], references: [id])
 }
 
 model ProductAttribute {
-  id         String   @id @default(auto()) @map("_id") @db.ObjectId
-  productId  String   @db.ObjectId
-  attrId     String
-  name       String
-  values     AttributeValue[]
-  product    Product  @relation(fields: [productId], references: [id])
+  id        String           @id @default(auto()) @map("_id") @db.ObjectId
+  productId String           @db.ObjectId
+  attrId    String
+  name      String
+  values    AttributeValue[]
+  product   Product          @relation(fields: [productId], references: [id])
 
   @@unique([productId, attrId])
 }
 
 model AttributeValue {
-  id                  String   @id @default(auto()) @map("_id") @db.ObjectId
-  productAttributeId  String   @db.ObjectId
-  valueId             String
-  name                String
-  productAttribute    ProductAttribute @relation(fields: [productAttributeId], references: [id])
+  id                 String           @id @default(auto()) @map("_id") @db.ObjectId
+  productAttributeId String           @db.ObjectId
+  valueId            String
+  name               String
+  productAttribute   ProductAttribute @relation(fields: [productAttributeId], references: [id])
 
   @@unique([productAttributeId, valueId])
 }
 
 model Sku {
-  id           String   @id @default(auto()) @map("_id") @db.ObjectId
-  skuId        String   @unique
-  productId    String   @db.ObjectId
-  sellerSku    String
-  price        Price?
-  inventory    Inventory[]
-  product      Product  @relation(fields: [productId], references: [id])
-  channelData                    String?
+  id          String      @id @default(auto()) @map("_id") @db.ObjectId
+  skuId       String      @unique
+  productId   String      @db.ObjectId
+  sellerSku   String
+  price       Price?
+  inventory   Inventory[]
+  product     Product     @relation(fields: [productId], references: [id])
+  channelData String?
 
   // ===== Added per-SKU extended fields from product payload =====
-  listPriceAmount               String?  // API: list_price.amount
-  listPriceCurrency             String?  // API: list_price.currency
-  externalListPrices            String?  // JSON array: external_list_prices [{source, amount, currency}]
-  preSaleType                   String?  // API: pre_sale.type (e.g. PRE_ORDER)
-  preSaleHandlingDurationDays   Int?     // API: pre_sale.fulfillment_type.handling_duration_days
-  preSaleReleaseDate            Int?     // API: pre_sale.fulfillment_type.release_date (epoch seconds)
-  skuStatus                     String?  // API: status_info.status
-  skuDeactivationSource         String?  // API: status_info.deactivation_source
+  listPriceAmount             String? // API: list_price.amount
+  listPriceCurrency           String? // API: list_price.currency
+  externalListPrices          String? // JSON array: external_list_prices [{source, amount, currency}]
+  preSaleType                 String? // API: pre_sale.type (e.g. PRE_ORDER)
+  preSaleHandlingDurationDays Int? // API: pre_sale.fulfillment_type.handling_duration_days
+  preSaleReleaseDate          Int? // API: pre_sale.fulfillment_type.release_date (epoch seconds)
+  skuStatus                   String? // API: status_info.status
+  skuDeactivationSource       String? // API: status_info.deactivation_source
 }
 
 model Price {
-  id                 String   @id @default(auto()) @map("_id") @db.ObjectId
-  skuId              String   @unique @db.ObjectId
-  currency           String
-  salePrice          String
-  taxExclusivePrice  String
-  sku                Sku     @relation(fields: [skuId], references: [id])
+  id                String @id @default(auto()) @map("_id") @db.ObjectId
+  skuId             String @unique @db.ObjectId
+  currency          String
+  salePrice         String
+  taxExclusivePrice String
+  sku               Sku    @relation(fields: [skuId], references: [id])
 }
 
 model Inventory {
-  id         String   @id @default(auto()) @map("_id") @db.ObjectId
-  skuId      String   @db.ObjectId
-  quantity   Int
+  id          String  @id @default(auto()) @map("_id") @db.ObjectId
+  skuId       String  @db.ObjectId
+  quantity    Int
   warehouseId String
-  sku        Sku     @relation(fields: [skuId], references: [id])
-  channelData                    String?
+  sku         Sku     @relation(fields: [skuId], references: [id])
+  channelData String?
+
   @@unique([skuId, warehouseId])
 }
 
@@ -426,25 +427,25 @@ model BankAccount {
   status        BankStatus @default(UNUSED)
   uploadDate    DateTime   @default(now())
   setupDate     DateTime?
-  
+
   // Relations
-  uploaderId    String @db.ObjectId
-  uploader      User   @relation("BankUploader", fields: [uploaderId], references: [id])
-  
-  assigneeId    String? @db.ObjectId
-  assignee      User?   @relation("BankAssignee", fields: [assigneeId], references: [id])
-  
-  shopId        String? @db.ObjectId
-  shop          ShopAuthorization? @relation(fields: [shopId], references: [id])
+  uploaderId String @db.ObjectId
+  uploader   User   @relation("BankUploader", fields: [uploaderId], references: [id])
+
+  assigneeId String? @db.ObjectId
+  assignee   User?   @relation("BankAssignee", fields: [assigneeId], references: [id])
+
+  shopId String?            @db.ObjectId
+  shop   ShopAuthorization? @relation(fields: [shopId], references: [id])
 
   historyActions BankHistory[]
 
   // Organization scope
-  orgId String @db.ObjectId
+  orgId        String       @db.ObjectId
   organization Organization @relation(fields: [orgId], references: [id])
 
-  @@map("bank_accounts")
   @@index([orgId])
+  @@map("bank_accounts")
 }
 
 model BankHistory {
@@ -452,19 +453,19 @@ model BankHistory {
   action    String
   details   String
   timestamp DateTime @default(now())
-  
-  // Relations
-  userId    String @db.ObjectId
-  user      User   @relation(fields: [userId], references: [id])
-  
-  bankId    String? @db.ObjectId
-  bank      BankAccount? @relation(fields: [bankId], references: [id])
 
-  @@map("bank_history")
+  // Relations
+  userId String @db.ObjectId
+  user   User   @relation(fields: [userId], references: [id])
+
+  bankId       String?      @db.ObjectId
+  bank         BankAccount? @relation(fields: [bankId], references: [id])
   // Organization scope (denormalized via bank/user)
-  orgId String @db.ObjectId
+  orgId        String       @db.ObjectId
   organization Organization @relation(fields: [orgId], references: [id])
+
   @@index([orgId])
+  @@map("bank_history")
 }
 
 enum BankStatus {
@@ -472,613 +473,629 @@ enum BankStatus {
   UNUSED
 }
 
-
 model Payment {
-  id                             String   @id @default(auto()) @map("_id") @db.ObjectId
+  id String @id @default(auto()) @map("_id") @db.ObjectId
 
-  paymentId                      String   @unique // Universal payment ID
-  channel                        Channel? // Which channel this payment belongs to - make optional for migration
-  
+  paymentId String   @unique // Universal payment ID
+  channel   Channel? // Which channel this payment belongs to - make optional for migration
+
   // Universal payment fields
-  createTime                     Int?
-  status                         String
-  
+  createTime Int?
+  status     String
+
   // Amounts (universal structure)
-  amountValue                    String?
-  amountCurrency                 String?
-  settlementAmountValue          String?
-  settlementAmountCurrency       String?
-  
+  amountValue              String?
+  amountCurrency           String?
+  settlementAmountValue    String?
+  settlementAmountCurrency String?
+
   // Channel-specific payment data (JSON)
-  channelData                    String?  // Store channel-specific fields as JSON
+  channelData String? // Store channel-specific fields as JSON
   // Examples:
   // TikTok: {"reserveAmountValue": "xx", "paymentBeforeExchangeValue": "xx", "exchangeRate": "xx"}
   // Amazon: {"feeAmount": "xx", "taxAmount": "xx"}
   // Shopify: {"processingFee": "xx", "gateway": "stripe"}
 
-  paidTime                       Int?
-  bankAccount                    String?
+  paidTime    Int?
+  bankAccount String?
 
   // Shop relation (universal) - Fix: use ObjectId reference
-  shopId                         String   @db.ObjectId
-  shop                           ShopAuthorization @relation(fields: [shopId], references: [id])
+  shopId String            @db.ObjectId
+  shop   ShopAuthorization @relation(fields: [shopId], references: [id])
 
-  createdAt                      DateTime @default(now())
-  updatedAt                      DateTime @updatedAt
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
   // Organization scope
-  orgId String @db.ObjectId
+  orgId        String       @db.ObjectId
   organization Organization @relation(fields: [orgId], references: [id])
-  
-  @@map("payments")
+
   @@index([orgId])
+  @@map("payments")
 }
 
 // Rename and unify Statement model
 model Statement {
-  id                    String   @id @default(auto()) @map("_id") @db.ObjectId
+  id String @id @default(auto()) @map("_id") @db.ObjectId
 
-  statementId           String   @unique 
-  channel               Channel? // Which channel this statement belongs to - make optional for migration
-  statementTime         Int?
+  statementId   String   @unique
+  channel       Channel? // Which channel this statement belongs to - make optional for migration
+  statementTime Int?
 
   // Universal statement fields
-  settlementAmount      String?
-  currency              String?
-  
+  settlementAmount String?
+  currency         String?
+
   // Channel-specific statement data (JSON)
-  channelData           String?  // Store channel-specific fields as JSON
+  channelData String? // Store channel-specific fields as JSON
   // Examples:
   // TikTok: {"revenueAmount": "xx", "feeAmount": "xx", "adjustmentAmount": "xx", "netSalesAmount": "xx"}
   // Amazon: {"productSales": "xx", "shippingCredits": "xx", "refunds": "xx"}
-  
-  paymentStatus         String?
-  paymentId             String?
+
+  paymentStatus String?
+  paymentId     String?
 
   // Shop relation (universal) - Fix: use ObjectId reference
-  shopId                String   @db.ObjectId
-  shop                  ShopAuthorization @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  shopId String            @db.ObjectId
+  shop   ShopAuthorization @relation(fields: [shopId], references: [id], onDelete: Cascade)
 
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
   // Organization scope
-  orgId String @db.ObjectId
+  orgId        String       @db.ObjectId
   organization Organization @relation(fields: [orgId], references: [id])
-  
-  @@map("statements")
+
   @@index([orgId])
+  @@map("statements")
 }
 
 // Rename and unify Withdrawal model
 model Withdrawal {
-  id            String   @id @default(auto()) @map("_id") @db.ObjectId
-  withdrawalId  String   @unique
-  channel       Channel? // Which channel this withdrawal belongs to - make optional for migration
-  
-  amount        Float
-  status        String
-  currency      String
-  type          String?
-  createTime    Int?
-  
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  withdrawalId String   @unique
+  channel      Channel? // Which channel this withdrawal belongs to - make optional for migration
+
+  amount     Float
+  status     String
+  currency   String
+  type       String?
+  createTime Int?
+
   // Channel-specific withdrawal data (JSON)
-  channelData   String?  // Store channel-specific fields as JSON
-  
+  channelData String? // Store channel-specific fields as JSON
+
   // Shop relation - Fix: use ObjectId reference
-  shopId        String   @db.ObjectId
-  shop          ShopAuthorization @relation(fields: [shopId], references: [id])
-  
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  shopId String            @db.ObjectId
+  shop   ShopAuthorization @relation(fields: [shopId], references: [id])
+
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
   // Organization scope
-  orgId String @db.ObjectId
+  orgId        String       @db.ObjectId
   organization Organization @relation(fields: [orgId], references: [id])
-  
-  @@map("withdrawals")
+
   @@index([orgId])
+  @@map("withdrawals")
 }
 
 // Rename and unify Order model
 model Order {
-  id                               String   @id @default(auto()) @map("_id") @db.ObjectId
-  orderId                          String   @unique // Universal order ID
-  channel                          Channel? // Which channel this order belongs to - make optional for migration
-  
+  id      String   @id @default(auto()) @map("_id") @db.ObjectId
+  orderId String   @unique // Universal order ID
+  channel Channel? // Which channel this order belongs to - make optional for migration
+
   // Universal order information
-  buyerEmail                       String?
-  buyerMessage                     String?
-  createTime                       Int?
-  updateTime                       Int?
-  status                           String
-  
+  buyerEmail   String?
+  buyerMessage String?
+  createTime   Int?
+  updateTime   Int?
+  status       String
+
   // Universal order amounts
-  totalAmount                      String?
-  currency                         String?
-  
+  totalAmount String?
+  currency    String?
+
   // Channel-specific order data (JSON)
-  channelData                      String?  // Store channel-specific fields as JSON
+  channelData String? // Store channel-specific fields as JSON
   // Examples:
   // TikTok: {"cancelOrderSlaTime": 123, "isCod": true, "fulfillmentType": "xxx", "trackingNumber": "xxx"}
   // Amazon: {"fulfillmentChannel": "AMAZON", "shipServiceLevel": "Standard"}
   // Shopify: {"financialStatus": "paid", "fulfillmentStatus": "fulfilled"}
-  
+
   // Timing fields (universal)
-  paidTime                        Int?
-  deliveryTime                    Int?
+  paidTime     Int?
+  deliveryTime Int?
 
   // SLA / deadline timestamps (TikTok specific) - Unix epoch seconds
   // Automatic cancellation deadline for unpaid/processing orders
-  cancelOrderSlaTime             Int?    // API: cancel_order_sla_time
+  cancelOrderSlaTime                 Int? // API: cancel_order_sla_time
   // Latest time seller should hand over to platform (time to ship / to submit to shipping) - platform specific
-  ttsSlaTime                      Int?    // API: tts_sla_time
+  ttsSlaTime                         Int? // API: tts_sla_time
   // Latest ready-to-ship (RTS) time specified by platform
-  rtsSlaTime                      Int?    // API: rts_sla_time
+  rtsSlaTime                         Int? // API: rts_sla_time
   // Deadline by which order should be delivered to avoid late delivery penalties
-  deliverySlaTime                 Int?    // API: delivery_sla_time
+  deliverySlaTime                    Int? // API: delivery_sla_time
   // If not delivered before this time order may auto cancel (platform rule)
-  deliveryDueTime                 Int?    // API: delivery_due_time
+  deliveryDueTime                    Int? // API: delivery_due_time
   // If not collected (moved to IN_TRANSIT) before this time order auto cancels
-  collectionDueTime               Int?    // API: collection_due_time
+  collectionDueTime                  Int? // API: collection_due_time
   // If not moved to AWAITING_COLLECTION before this time order auto cancels
-  shippingDueTime                 Int?    // API: shipping_due_time
+  shippingDueTime                    Int? // API: shipping_due_time
   // Fast dispatch / NDD incentive cutoff (TH / PH)
-  fastDispatchSlaTime             Int?    // API: fast_dispatch_sla_time
+  fastDispatchSlaTime                Int? // API: fast_dispatch_sla_time
   // Cut off time to avoid LDR (late dispatch rate) in SEA regions
-  pickUpCutOffTime                Int?    // API: pick_up_cut_off_time
+  pickUpCutOffTime                   Int? // API: pick_up_cut_off_time
   // Required delivery time commitment for selected delivery option
   deliveryOptionRequiredDeliveryTime Int? // API: delivery_option_required_delivery_time
 
   // Additional milestone / event timestamps (TikTok specific)
-  cancelTime                      Int?    // API: cancel_time (when status became CANCELLED)
-  requestCancelTime               Int?    // API: request_cancel_time (buyer requested cancellation)
-  rtsTime                         Int?    // API: rts_time (seller shipped / marked RTS)
-  collectionTime                  Int?    // API: collection_time (status became IN_TRANSIT)
-  releaseDate                     Int?    // API: release_date (for PRE_ORDER types)
-  
+  cancelTime        Int? // API: cancel_time (when status became CANCELLED)
+  requestCancelTime Int? // API: request_cancel_time (buyer requested cancellation)
+  rtsTime           Int? // API: rts_time (seller shipped / marked RTS)
+  collectionTime    Int? // API: collection_time (status became IN_TRANSIT)
+  releaseDate       Int? // API: release_date (for PRE_ORDER types)
+
   // Shop relation (universal) - Fix: use ObjectId reference
-  shopId                          String   @db.ObjectId
-  shop                            ShopAuthorization @relation(fields: [shopId], references: [id])
-  
+  shopId String            @db.ObjectId
+  shop   ShopAuthorization @relation(fields: [shopId], references: [id])
+
   // Related data (keep existing structure for TikTok compatibility)
-  lineItems                       OrderLineItem[]
-  packages                        OrderPackage[]
-  payment                         OrderPayment?
-  recipientAddress                OrderRecipientAddress?
+  lineItems        OrderLineItem[]
+  packages         OrderPackage[]
+  payment          OrderPayment?
+  recipientAddress OrderRecipientAddress?
 
-  customStatus                    String?
-  
-  createdAt                       DateTime @default(now())
-  updatedAt                       DateTime @updatedAt
+  customStatus String?
 
-  notifications Notification[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  notifications      Notification[]
   tikTokTransactions TikTokTransaction[]
-  
+
   // Add relation to unsettled transactions
   unsettledTransactions TiktokUnsettledTransaction[]
-  
-  // NEW: TikTok split attributes (from split_attributes API)
-  canSplitPackages        Boolean?          @default(false)  // maps can_split
-  splitNotAllowedReason   String?                         // maps reason when can_split = false
-  mustSplitPackages       Boolean?          @default(false) // maps must_split
-  mustSplitReasons        String?                          // JSON string array of objects: [{type, category_id, max_count}]
-  splitAttributesRaw      String?                          // Raw JSON for full split_attributes entry
 
-  @@map("orders")
+  // Add relation to OrderTrackingInfo
+  trackingInfos OrderTrackingInfo[]
+
+  // NEW: TikTok split attributes (from split_attributes API)
+  canSplitPackages      Boolean?     @default(false) // maps can_split
+  splitNotAllowedReason String? // maps reason when can_split = false
+  mustSplitPackages     Boolean?     @default(false) // maps must_split
+  mustSplitReasons      String? // JSON string array of objects: [{type, category_id, max_count}]
+  splitAttributesRaw    String? // Raw JSON for full split_attributes entry
   // Organization scope
-  orgId String @db.ObjectId
-  organization Organization @relation(fields: [orgId], references: [id])
+  orgId                 String       @db.ObjectId
+  organization          Organization @relation(fields: [orgId], references: [id])
+
   @@index([orgId])
+  @@map("orders")
 }
 
 // Rename TikTokOrderLineItem to OrderLineItem (universal)
 model OrderLineItem {
-  id                    String   @id @default(auto()) @map("_id") @db.ObjectId
-  lineItemId            String   @unique // Universal line item ID
-  
+  id         String @id @default(auto()) @map("_id") @db.ObjectId
+  lineItemId String @unique // Universal line item ID
+
   // Universal product information
-  productId             String
-  productName           String
-  skuId                 String?
-  skuName               String?
-  sellerSku             String?
-  
+  productId   String
+  productName String
+  skuId       String?
+  skuName     String?
+  sellerSku   String?
+
   // Universal pricing information
-  currency              String?
-  originalPrice         String?
-  salePrice             String?
-  
+  currency      String?
+  originalPrice String?
+  salePrice     String?
+
   // Channel-specific line item data (JSON)
-  channelData           String?  // Store channel-specific fields as JSON
+  channelData String? // Store channel-specific fields as JSON
   // Examples:
   // TikTok: {"skuType": "xxx", "skuImage": "xxx", "displayStatus": "xxx", "isGift": false}
   // Amazon: {"conditionNote": "xxx", "giftMessage": "xxx"}
   // Shopify: {"variant_id": "xxx", "requires_shipping": true}
-  
+
   // Order relation
-  orderId               String   @db.ObjectId
-  order                 Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
-  
-  @@map("order_line_items")
+  orderId String @db.ObjectId
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
   // Organization scope (denormalized for query performance)
-  orgId String @db.ObjectId
+  orgId        String       @db.ObjectId
   organization Organization @relation(fields: [orgId], references: [id])
+
   @@index([orgId])
+  @@map("order_line_items")
 }
 
 // Rename and keep other order-related models with channel support
 model OrderPayment {
-  id                                    String   @id @default(auto()) @map("_id") @db.ObjectId
-  
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+
   // Universal payment amounts
-  currency                              String?
-  totalAmount                           String?
-  subTotal                              String?
-  tax                                   String?
-  
+  currency    String?
+  totalAmount String?
+  subTotal    String?
+  tax         String?
+
   // Channel-specific payment data (JSON)
-  channelData                           String?  // Store channel-specific fields as JSON
-  
+  channelData String? // Store channel-specific fields as JSON
+
   // Order relation
-  orderId                               String   @unique @db.ObjectId
-  order                                 Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  
-  createdAt                             DateTime @default(now())
-  updatedAt                             DateTime @updatedAt
-  
+  orderId String @unique @db.ObjectId
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@map("order_payments")
 }
 
 model OrderRecipientAddress {
-  id                        String   @id @default(auto()) @map("_id") @db.ObjectId
-  
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+
   // Universal address fields
-  fullAddress               String?
-  postalCode                String?
-  
+  fullAddress String?
+  postalCode  String?
+
   // Universal name information
-  name                      String?
-  phoneNumber               String?
-  
+  name        String?
+  phoneNumber String?
+
   // Channel-specific address data (JSON)
-  channelData               String?  // Store channel-specific fields as JSON
+  channelData String? // Store channel-specific fields as JSON
   // Examples:
   // TikTok: {"addressDetail": "xxx", "regionCode": "xxx", "firstName": "xxx"}
   // Amazon: {"addressLine1": "xxx", "city": "xxx", "state": "xxx"}
   // Shopify: {"company": "xxx", "province": "xxx", "country": "xxx"}
-  
+
   // Order relation
-  orderId                   String   @unique @db.ObjectId
-  order                     Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  
+  orderId String @unique @db.ObjectId
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
   // District information (keep for TikTok compatibility)
-  districtInfo              AddressDistrict[]
-  
-  createdAt                 DateTime @default(now())
-  updatedAt                 DateTime @updatedAt
-  
+  districtInfo AddressDistrict[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@map("order_recipient_addresses")
 }
 
 model AddressDistrict {
-  id                        String   @id @default(auto()) @map("_id") @db.ObjectId
-  
-  addressLevel              String   // "L0", "L1", "L2", "L3"
-  addressLevelName          String   // "Country", "province", "city", "ward"
-  addressName               String
-  
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+
+  addressLevel     String // "L0", "L1", "L2", "L3"
+  addressLevelName String // "Country", "province", "city", "ward"
+  addressName      String
+
   // Recipient address relation
-  recipientAddressId        String   @db.ObjectId
-  recipientAddress          OrderRecipientAddress @relation(fields: [recipientAddressId], references: [id], onDelete: Cascade)
-  
-  createdAt                 DateTime @default(now())
-  updatedAt                 DateTime @updatedAt
-  
+  recipientAddressId String                @db.ObjectId
+  recipientAddress   OrderRecipientAddress @relation(fields: [recipientAddressId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@map("address_districts")
 }
 
 model OrderPackage {
-  id            String   @id @default(auto()) @map("_id") @db.ObjectId
-  packageId     String   // Package ID from channel (maps to 'id' in API)
+  id        String @id @default(auto()) @map("_id") @db.ObjectId
+  packageId String // Package ID from channel (maps to 'id' in API)
 
   // Core TikTok package fields (Search Package API 202309)
-  status                String?        // API: status
-  trackingNumber        String?        // API: tracking_number
-  shippingProviderId    String?        // API: shipping_provider_id
-  shippingProviderName  String?        // API: shipping_provider_name
+  status               String? // API: status
+  trackingNumber       String? // API: tracking_number
+  shippingProviderId   String? // API: shipping_provider_id
+  shippingProviderName String? // API: shipping_provider_name
 
   // Newly added to map API response fully
-  orderLineItemIds      String[]      // API: order_line_item_ids
-  ordersData            String?        // Raw JSON array from API: orders[]
+  orderLineItemIds String[] // API: order_line_item_ids
+  ordersData       String? // Raw JSON array from API: orders[]
 
   // Extended lifecycle / logistics metadata (some may not appear in this specific endpoint but kept for enrichment)
-  shippingType          String?        // STANDARD / EXPEDITED etc.
-  createTime            Int?           // API: create_time
-  updateTime            Int?           // API: update_time (new explicit field)
-  splitAndCombineTag    String? 
-  hasMultiSkus          Boolean?
-  noteTag               String?
-  deliveryOptionName    String?
-  deliveryOptionId    String?
-  lastMileTrackingNumber    String?
+  shippingType           String? // STANDARD / EXPEDITED etc.
+  createTime             Int? // API: create_time
+  updateTime             Int? // API: update_time (new explicit field)
+  splitAndCombineTag     String?
+  hasMultiSkus           Boolean?
+  noteTag                String?
+  deliveryOptionName     String?
+  deliveryOptionId       String?
+  lastMileTrackingNumber String?
   pickupSlotStartTime    Int?
-  pickupSlotEndTime    Int?
-  handoverMethod   String?
+  pickupSlotEndTime      Int?
+  handoverMethod         String?
 
   // Full raw payload / future fields
-  channelData           String?
+  channelData String?
 
   // Relation
-  orderId               String   @db.ObjectId
-  order                 Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId String @db.ObjectId
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  // Organization scope (denormalized)
+  orgId        String       @db.ObjectId
+  organization Organization @relation(fields: [orgId], references: [id])
 
   @@unique([orderId, packageId])
   @@index([trackingNumber])
   @@index([status])
-  @@map("order_packages")
-  // Organization scope (denormalized)
-  orgId String @db.ObjectId
-  organization Organization @relation(fields: [orgId], references: [id])
   @@index([orgId])
+  @@map("order_packages")
+}
+
+model OrderTrackingInfo {
+  id         String  @id @default(auto()) @map("_id") @db.ObjectId
+
+  orderId         String @db.ObjectId
+  order           Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  description     String
+  updateTimeMilli Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("order_tracking_info")
 }
 
 // Rename and unify Conversation model
 model Conversation {
-  id                String   @id @default(auto()) @map("_id") @db.ObjectId
-  conversationId    String   @unique // Universal conversation ID
-  channel           Channel? // Which channel this conversation belongs to - make optional for migration
-  
+  id             String   @id @default(auto()) @map("_id") @db.ObjectId
+  conversationId String   @unique // Universal conversation ID
+  channel        Channel? // Which channel this conversation belongs to - make optional for migration
+
   // Universal conversation fields
-  participantCount  Int?
-  canSendMessage    Boolean?
-  unreadCount       Int?
-  createTime        Int?
-  
+  participantCount Int?
+  canSendMessage   Boolean?
+  unreadCount      Int?
+  createTime       Int?
+
   // Channel-specific conversation data (JSON)
-  channelData       String?  // Store channel-specific fields as JSON
-  
+  channelData String? // Store channel-specific fields as JSON
+
   // Shop relation - Fix: use ObjectId reference
-  shopId            String   @db.ObjectId
-  shop              ShopAuthorization @relation(fields: [shopId], references: [id])
-  
+  shopId String            @db.ObjectId
+  shop   ShopAuthorization @relation(fields: [shopId], references: [id])
+
   // Related data
-  participants      ConversationParticipant[]
-  messages          ConversationMessage[]
-  latestMessage     ConversationMessage? @relation("LatestMessage")
+  participants  ConversationParticipant[]
+  messages      ConversationMessage[]
+  latestMessage ConversationMessage?      @relation("LatestMessage")
 
   notifications Notification[]
-  
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  
-  @@map("conversations")
+
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
   // Organization scope
-  orgId String @db.ObjectId
+  orgId        String       @db.ObjectId
   organization Organization @relation(fields: [orgId], references: [id])
+
   @@index([orgId])
+  @@map("conversations")
 }
 
 model ConversationParticipant {
-  id                String   @id @default(auto()) @map("_id") @db.ObjectId
-  participantId     String   // Universal participant ID (im_user_id, customer_id, etc.)
-  userId            String?  // Platform-specific user ID
-  role              String   // "BUYER", "SELLER", etc.
-  nickname          String?
-  avatar            String?
-  
+  id            String  @id @default(auto()) @map("_id") @db.ObjectId
+  participantId String // Universal participant ID (im_user_id, customer_id, etc.)
+  userId        String? // Platform-specific user ID
+  role          String // "BUYER", "SELLER", etc.
+  nickname      String?
+  avatar        String?
+
   // Channel-specific participant data (JSON)
-  channelData       String?  // Store channel-specific fields as JSON
+  channelData String? // Store channel-specific fields as JSON
   // Examples:
   // TikTok: {"buyerPlatform": "TIKTOK_SHOP"}
   // Amazon: {"buyerName": "xxx"}
-  
+
   // Conversation relation
-  conversationId    String   @db.ObjectId
-  conversation      Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  
+  conversationId String       @db.ObjectId
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
   // Messages sent by this participant
-  sentMessages      ConversationMessage[] @relation("MessageSender")
-  
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  
+  sentMessages ConversationMessage[] @relation("MessageSender")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@unique([conversationId, participantId])
   @@map("conversation_participants")
 }
 
 model ConversationMessage {
-  id                String   @id @default(auto()) @map("_id") @db.ObjectId
-  messageId         String   @unique // Universal message ID
-  type              String?  // "TEXT", "IMAGE", "ORDER", etc.
-  content           String?  // Message content or JSON string
-  createTime        Int?
-  isVisible         Boolean?
-  
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  messageId  String   @unique // Universal message ID
+  type       String? // "TEXT", "IMAGE", "ORDER", etc.
+  content    String? // Message content or JSON string
+  createTime Int?
+  isVisible  Boolean?
+
   // Channel-specific message data (JSON)
-  channelData       String?  // Store channel-specific fields as JSON
+  channelData String? // Store channel-specific fields as JSON
   // Examples:
   // TikTok: {"messageIndex": "xxx"}
   // Others can store specific message metadata
-  
+
   // Conversation relation
-  conversationId    String   @db.ObjectId
-  conversation      Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  
+  conversationId String       @db.ObjectId
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
   // Sender relation
-  senderId          String?  @db.ObjectId
-  sender            ConversationParticipant? @relation("MessageSender", fields: [senderId], references: [id])
-  
+  senderId String?                  @db.ObjectId
+  sender   ConversationParticipant? @relation("MessageSender", fields: [senderId], references: [id])
+
   // Latest message relation (one-to-one)
-  isLatestFor       Conversation? @relation("LatestMessage", fields: [isLatestForId], references: [id])
-  isLatestForId     String? @unique @db.ObjectId
-  
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  
-  @@map("conversation_messages")
+  isLatestFor   Conversation? @relation("LatestMessage", fields: [isLatestForId], references: [id])
+  isLatestForId String?       @unique @db.ObjectId
+
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
   // Organization scope (denormalized)
-  orgId String @db.ObjectId
+  orgId        String       @db.ObjectId
   organization Organization @relation(fields: [orgId], references: [id])
+
   @@index([orgId])
+  @@map("conversation_messages")
 }
 
 // New notification models
 model Notification {
-  id          String            @id @default(auto()) @map("_id") @db.ObjectId
-  type        NotificationType
-  title       String
-  message     String
-  data        String?           // JSON string for additional notification data
-  read        Boolean           @default(false)
-  readAt      DateTime?
-  
+  id      String           @id @default(auto()) @map("_id") @db.ObjectId
+  type    NotificationType
+  title   String
+  message String
+  data    String? // JSON string for additional notification data
+  read    Boolean          @default(false)
+  readAt  DateTime?
+
   // User relation
-  userId      String            @db.ObjectId
-  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+  userId String @db.ObjectId
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   // Optional relations based on notification type
-  orderId     String?           @db.ObjectId
-  order       Order?            @relation(fields: [orderId], references: [id], onDelete: SetNull)
-  
-  conversationId String?        @db.ObjectId
-  conversation   Conversation?  @relation(fields: [conversationId], references: [id], onDelete: SetNull)
-  
-  shopId      String?           @db.ObjectId
-  shop        ShopAuthorization? @relation(fields: [shopId], references: [id], onDelete: SetNull)
-  
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
-  
-  @@map("notifications")
+  orderId String? @db.ObjectId
+  order   Order?  @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  conversationId String?       @db.ObjectId
+  conversation   Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+
+  shopId String?            @db.ObjectId
+  shop   ShopAuthorization? @relation(fields: [shopId], references: [id], onDelete: SetNull)
+
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
   // Organization scope
-  orgId String @db.ObjectId
+  orgId        String       @db.ObjectId
   organization Organization @relation(fields: [orgId], references: [id])
+
   @@index([orgId])
+  @@map("notifications")
 }
 
 enum NotificationType {
-  NEW_ORDER          // New order received
+  NEW_ORDER // New order received
   ORDER_STATUS_CHANGE // Order status changed
-  ORDER_CANCELLED    // Order was cancelled
-  ORDER_DELIVERED    // Order was delivered
-  NEW_MESSAGE        // New message in conversation
-  PAYMENT_RECEIVED   // Payment notification
-  LOW_INVENTORY      // Stock running low
-  SYSTEM_ALERT       // System notifications
-  WEBHOOK_ERROR      // Webhook processing errors
+  ORDER_CANCELLED // Order was cancelled
+  ORDER_DELIVERED // Order was delivered
+  NEW_MESSAGE // New message in conversation
+  PAYMENT_RECEIVED // Payment notification
+  LOW_INVENTORY // Stock running low
+  SYSTEM_ALERT // System notifications
+  WEBHOOK_ERROR // Webhook processing errors
 }
 
 model TikTokTransaction {
-  id          String   @id @default(auto()) @map("_id") @db.ObjectId
-  transactionId   String?
-  shopId          String
-  statementId     String?
+  id            String  @id @default(auto()) @map("_id") @db.ObjectId
+  transactionId String?
+  shopId        String
+  statementId   String?
 
-  type            String           // ORDER, REFUND, ADJUSTMENT...
-  currency        String
-  createdTime      DateTime?   // from timestamp
+  type        String // ORDER, REFUND, ADJUSTMENT...
+  currency    String
+  createdTime DateTime? // from timestamp
 
   // Financial amounts
-  settlementAmount     Float?      // e.g. 130
-  adjustmentAmount     Float?      // e.g. 170
-  revenueAmount        Float?      // e.g. 200
-  shippingCostAmount   Float?      // e.g. -70
-  feeTaxAmount         Float?      // e.g. -30
-  reserveAmount        Float?      // e.g. 100
+  settlementAmount   Float? // e.g. 130
+  adjustmentAmount   Float? // e.g. 170
+  revenueAmount      Float? // e.g. 200
+  shippingCostAmount Float? // e.g. -70
+  feeTaxAmount       Float? // e.g. -30
+  reserveAmount      Float? // e.g. 100
 
   // Order information
-  orderId              String?
-  order                Order?      @relation(fields: [orderId], references: [orderId])
-  
-  orderCreateTime      DateTime?   // from timestamp
-  adjustmentId         String?
-  adjustmentOrderId    String?
-  associatedOrderId    String?
+  orderId String?
+  order   Order?  @relation(fields: [orderId], references: [orderId])
+
+  orderCreateTime   DateTime? // from timestamp
+  adjustmentId      String?
+  adjustmentOrderId String?
+  associatedOrderId String?
 
   // Reserve info
   reserveId            String?
-  reserveStatus        String?     // Collected, Released
+  reserveStatus        String? // Collected, Released
   estimatedReleaseTime DateTime?
 
   // Breakdown fields (kept as JSON for flexibility)
-  revenueBreakdown        Json?
-  shippingCostBreakdown   Json?
-  feeTaxBreakdown         Json?
-  supplementaryComponent  Json?
+  revenueBreakdown       Json?
+  shippingCostBreakdown  Json?
+  feeTaxBreakdown        Json?
+  supplementaryComponent Json?
 
   // Meta
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  // Organization scope (derived from shop/order) - denormalized
+  orgId        String       @db.ObjectId
+  organization Organization @relation(fields: [orgId], references: [id])
 
   @@index([shopId, statementId])
   @@index([orderId])
   @@index([type])
   @@index([reserveStatus])
-  @@map("tiktok_transactions")
-  // Organization scope (derived from shop/order) - denormalized
-  orgId String @db.ObjectId
-  organization Organization @relation(fields: [orgId], references: [id])
   @@index([orgId])
+  @@map("tiktok_transactions")
 }
 
 model TiktokUnsettledTransaction {
-  id                        String    @id @default(auto()) @map("_id") @db.ObjectId
-  shopId                    String    @map("shop_id")
-  
+  id     String @id @default(auto()) @map("_id") @db.ObjectId
+  shopId String @map("shop_id")
+
   // API Response Fields
-  transactionId             String    @unique @map("transaction_id") // maps to 'id' from API
-  adjustmentId              String?   @map("adjustment_id")
-  adjustmentOrderId         String?   @map("adjustment_order_id")
-  currency                  String?
-  estAdjustmentAmount       String?   @map("est_adjustment_amount")
-  estFeeTaxAmount           String?   @map("est_fee_tax_amount")
-  estRevenueAmount          String?   @map("est_revenue_amount")
-  estSettlementAmount       String?   @map("est_settlement_amount")
-  estShippingCostAmount     String?   @map("est_shipping_cost_amount")
-  estimatedSettlement       String?   @map("estimated_settlement")
-  feeTaxBreakdown           Json?     @map("fee_tax_breakdown")
-  orderCreateTime           DateTime? @map("order_create_time")
-  orderDeliveryTime         DateTime? @map("order_delivery_time")
-  orderId                   String?   @map("order_id")
-  revenueBreakdown          Json?     @map("revenue_breakdown")
-  shippingCostBreakdown     Json?     @map("shipping_cost_breakdown")
-  status                    String?
-  type                      String?   // Transaction type (ORDER, CHARGE_BACK, etc.)
-  unsettledReason           String?   @map("unsettled_reason")
-  
+  transactionId         String    @unique @map("transaction_id") // maps to 'id' from API
+  adjustmentId          String?   @map("adjustment_id")
+  adjustmentOrderId     String?   @map("adjustment_order_id")
+  currency              String?
+  estAdjustmentAmount   String?   @map("est_adjustment_amount")
+  estFeeTaxAmount       String?   @map("est_fee_tax_amount")
+  estRevenueAmount      String?   @map("est_revenue_amount")
+  estSettlementAmount   String?   @map("est_settlement_amount")
+  estShippingCostAmount String?   @map("est_shipping_cost_amount")
+  estimatedSettlement   String?   @map("estimated_settlement")
+  feeTaxBreakdown       Json?     @map("fee_tax_breakdown")
+  orderCreateTime       DateTime? @map("order_create_time")
+  orderDeliveryTime     DateTime? @map("order_delivery_time")
+  orderId               String?   @map("order_id")
+  revenueBreakdown      Json?     @map("revenue_breakdown")
+  shippingCostBreakdown Json?     @map("shipping_cost_breakdown")
+  status                String?
+  type                  String? // Transaction type (ORDER, CHARGE_BACK, etc.)
+  unsettledReason       String?   @map("unsettled_reason")
+
   // Metadata
-  createdAt                 DateTime  @default(now()) @map("created_at")
-  updatedAt                 DateTime  @updatedAt @map("updated_at")
-  
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
   // Relations
-  shop                       ShopAuthorization? @relation(fields: [shopId], references: [shopId])
-  
+  shop ShopAuthorization? @relation(fields: [shopId], references: [shopId])
+
   // Add relation to Order
-  order                      Order? @relation(fields: [orderId], references: [orderId])
-  
-  @@map("tiktok_unsettled_transactions")
+  order        Order?       @relation(fields: [orderId], references: [orderId])
+  // Organization scope (derived from shop/order) - denormalized
+  orgId        String       @db.ObjectId
+  organization Organization @relation(fields: [orgId], references: [id])
+
   @@index([shopId])
   @@index([type])
   @@index([status])
   @@index([orderCreateTime])
   @@index([orderId])
   @@index([adjustmentId])
-  // Organization scope (derived from shop/order) - denormalized
-  orgId String @db.ObjectId
-  organization Organization @relation(fields: [orgId], references: [id])
   @@index([orgId])
+  @@map("tiktok_unsettled_transactions")
 }
 
 // Scheduler models
 enum JobType {
-  FUNCTION_CALL     // Call internal function
-  API_CALL          // Call external/internal API
-  DATABASE_QUERY    // Execute database operations
-  WEBHOOK_TRIGGER   // Send webhook
+  FUNCTION_CALL // Call internal function
+  API_CALL // Call external/internal API
+  DATABASE_QUERY // Execute database operations
+  WEBHOOK_TRIGGER // Send webhook
 }
 
 enum JobStatus {
@@ -1098,117 +1115,117 @@ enum ExecutionStatus {
 }
 
 enum TriggerType {
-  CRON           // Cron expression
-  INTERVAL       // Fixed interval
-  ONE_TIME       // Single execution
-  EVENT_DRIVEN   // Triggered by events
+  CRON // Cron expression
+  INTERVAL // Fixed interval
+  ONE_TIME // Single execution
+  EVENT_DRIVEN // Triggered by events
 }
 
 model SchedulerJob {
-  id              String        @id @default(auto()) @map("_id") @db.ObjectId
-  name            String        // Job name
-  description     String?       // Job description
-  type            JobType       // Type of job
-  status          JobStatus     @default(ACTIVE)
-  
+  id          String    @id @default(auto()) @map("_id") @db.ObjectId
+  name        String // Job name
+  description String? // Job description
+  type        JobType // Type of job
+  status      JobStatus @default(ACTIVE)
+
   // Trigger configuration
   triggerType     TriggerType
-  cronExpression  String?       // For CRON type: "0 */5 * * * *"
-  intervalMinutes Int?          // For INTERVAL type: minutes
-  scheduledAt     DateTime?     // For ONE_TIME type
-  
+  cronExpression  String? // For CRON type: "0 */5 * * * *"
+  intervalMinutes Int? // For INTERVAL type: minutes
+  scheduledAt     DateTime? // For ONE_TIME type
+
   // Job configuration (JSON) - can include shopId in the config if needed
-  config          String        // Job-specific configuration as JSON
+  config String // Job-specific configuration as JSON
   // Examples:
   // FUNCTION_CALL: {"function": "syncOrders", "params": {"shopId": "xxx"}}
   // API_CALL: {"url": "https://api.example.com/sync", "method": "POST", "headers": {...}, "body": {...}}
   // DATABASE_QUERY: {"operation": "updateMany", "model": "product", "where": {...}, "data": {...}}
-  
+
   // Execution settings
-  timeout         Int?          @default(300000) // Timeout in milliseconds (5 minutes default)
-  retryCount      Int?          @default(3)      // Number of retries on failure
-  retryDelay      Int?          @default(60000)  // Delay between retries in milliseconds
-  
+  timeout    Int? @default(300000) // Timeout in milliseconds (5 minutes default)
+  retryCount Int? @default(3) // Number of retries on failure
+  retryDelay Int? @default(60000) // Delay between retries in milliseconds
+
   // Tags for categorization and filtering
-  tags            String[]      @default([])     // Array of tags for organization
-  
+  tags String[] @default([]) // Array of tags for organization
+
   // Metadata
-  createdBy       String?       @db.ObjectId
-  creator         User?         @relation(fields: [createdBy], references: [id])
-  
+  createdBy String? @db.ObjectId
+  creator   User?   @relation(fields: [createdBy], references: [id])
+
   // Timestamps
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
-  lastExecutedAt  DateTime?     // Last successful execution
-  nextExecutionAt DateTime?     // Next scheduled execution
-  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  lastExecutedAt  DateTime? // Last successful execution
+  nextExecutionAt DateTime? // Next scheduled execution
+
   // Relations
-  executions      JobExecution[]
-  logs            JobLog[]
+  executions   JobExecution[]
+  logs         JobLog[]
   // Organization scope (nullable for global/system jobs)
-  orgId String @db.ObjectId
-  organization Organization @relation(fields: [orgId], references: [id])
-  
-  @@map("scheduler_jobs")
+  orgId        String         @db.ObjectId
+  organization Organization   @relation(fields: [orgId], references: [id])
+
   @@index([orgId])
+  @@map("scheduler_jobs")
 }
 
 model JobExecution {
-  id              String          @id @default(auto()) @map("_id") @db.ObjectId
-  jobId           String          @db.ObjectId
-  job             SchedulerJob    @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  
+  id    String       @id @default(auto()) @map("_id") @db.ObjectId
+  jobId String       @db.ObjectId
+  job   SchedulerJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
   // Execution details
-  status          ExecutionStatus @default(PENDING)
-  startedAt       DateTime?       // When execution started
-  completedAt     DateTime?       // When execution completed
-  duration        Int?            // Execution duration in milliseconds
-  
+  status      ExecutionStatus @default(PENDING)
+  startedAt   DateTime? // When execution started
+  completedAt DateTime? // When execution completed
+  duration    Int? // Execution duration in milliseconds
+
   // Result and error information
-  result          String?         // Success result (JSON)
-  error           String?         // Error message if failed
-  stackTrace      String?         // Full stack trace for debugging
-  
+  result     String? // Success result (JSON)
+  error      String? // Error message if failed
+  stackTrace String? // Full stack trace for debugging
+
   // Retry information
-  retryCount      Int             @default(0)
-  isRetry         Boolean         @default(false)
-  parentExecutionId String?       @db.ObjectId
-  parentExecution JobExecution?   @relation("ExecutionRetries", fields: [parentExecutionId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  retries         JobExecution[]  @relation("ExecutionRetries")
-  
+  retryCount        Int            @default(0)
+  isRetry           Boolean        @default(false)
+  parentExecutionId String?        @db.ObjectId
+  parentExecution   JobExecution?  @relation("ExecutionRetries", fields: [parentExecutionId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  retries           JobExecution[] @relation("ExecutionRetries")
+
   // Metadata
-  triggeredBy     String?         // How was this execution triggered
-  executionContext String?        // Additional context (JSON)
-  
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
-  
-  @@map("job_executions")
+  triggeredBy      String? // How was this execution triggered
+  executionContext String? // Additional context (JSON)
+
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
   // Organization scope (denormalized from job)
-  orgId String @db.ObjectId
+  orgId        String       @db.ObjectId
   organization Organization @relation(fields: [orgId], references: [id])
+
   @@index([orgId])
+  @@map("job_executions")
 }
 
 model JobLog {
-  id              String          @id @default(auto()) @map("_id") @db.ObjectId
-  jobId           String          @db.ObjectId
-  job             SchedulerJob    @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  
-  executionId     String?         @db.ObjectId
-  
+  id    String       @id @default(auto()) @map("_id") @db.ObjectId
+  jobId String       @db.ObjectId
+  job   SchedulerJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  executionId String? @db.ObjectId
+
   // Log details
-  level           LogLevel        @default(INFO)
-  message         String
-  data            String?         // Additional log data (JSON)
-  
-  timestamp       DateTime        @default(now())
-  
-  @@map("job_logs")
+  level   LogLevel @default(INFO)
+  message String
+  data    String? // Additional log data (JSON)
+
+  timestamp    DateTime     @default(now())
   // Organization scope (denormalized from job)
-  orgId String @db.ObjectId
+  orgId        String       @db.ObjectId
   organization Organization @relation(fields: [orgId], references: [id])
+
   @@index([orgId])
+  @@map("job_logs")
 }
 
 enum LogLevel {
@@ -1220,53 +1237,53 @@ enum LogLevel {
 }
 
 model SchedulerConfig {
-  id              String          @id @default(auto()) @map("_id") @db.ObjectId
-  
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+
   // Global scheduler settings
-  isEnabled       Boolean         @default(true)
-  maxConcurrentJobs Int           @default(10)
-  defaultTimeout  Int             @default(300000) // 5 minutes
-  cleanupDays     Int             @default(30)     // Days to keep execution history
-  
+  isEnabled         Boolean @default(true)
+  maxConcurrentJobs Int     @default(10)
+  defaultTimeout    Int     @default(300000) // 5 minutes
+  cleanupDays       Int     @default(30) // Days to keep execution history
+
   // Notification settings
-  notifyOnFailure Boolean         @default(true)
-  notifyOnSuccess Boolean         @default(false)
-  notificationChannels String?    // JSON array of notification channels
-  
+  notifyOnFailure      Boolean @default(true)
+  notifyOnSuccess      Boolean @default(false)
+  notificationChannels String? // JSON array of notification channels
+
   // Metadata
-  updatedBy       String?         @db.ObjectId
-  updatedUser     User?           @relation(fields: [updatedBy], references: [id])
-  
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
-  
+  updatedBy   String? @db.ObjectId
+  updatedUser User?   @relation(fields: [updatedBy], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@map("scheduler_config")
 }
 
 model TikTokWebhook {
-  id                String   @id @default(auto()) @map("_id") @db.ObjectId
+  id                String  @id @default(auto()) @map("_id") @db.ObjectId
   type              Int
   ttsNotificationId String?
   shopId            String
   timestamp         Int?
   signature         String?
-  verified          Boolean  @default(false)
+  verified          Boolean @default(false)
 
   // Raw payload and parsed pieces
-  rawBody           String
-  data              Json?
-  headers           Json?
+  rawBody String
+  data    Json?
+  headers Json?
 
   // Common identifiers for quick lookup
-  orderId           String?
-  orderStatus       String?
-  cancellationId    String?
+  orderId            String?
+  orderStatus        String?
+  cancellationId     String?
   cancellationStatus String?
 
   // Processing
-  status            String   @default("RECEIVED") // RECEIVED | PROCESSED | FAILED
-  createdAt         DateTime @default(now())
-  processedAt       DateTime?
+  status      String    @default("RECEIVED") // RECEIVED | PROCESSED | FAILED
+  createdAt   DateTime  @default(now())
+  processedAt DateTime?
 
   @@index([shopId, orderId])
   @@index([createdAt])
@@ -1290,49 +1307,49 @@ enum OrganizationRole {
 }
 
 model Organization {
-  id        String   @id @default(auto()) @map("_id") @db.ObjectId
-  name      String
-  slug      String   @unique
-  status    OrganizationStatus @default(ACTIVE)
-  planId    String?
-  featureOverrides String? // JSON string
-  metadata  String? // JSON string
-  primaryContactUserId String? @db.ObjectId
-  members   OrganizationMember[]
+  id                          String                       @id @default(auto()) @map("_id") @db.ObjectId
+  name                        String
+  slug                        String                       @unique
+  status                      OrganizationStatus           @default(ACTIVE)
+  planId                      String?
+  featureOverrides            String? // JSON string
+  metadata                    String? // JSON string
+  primaryContactUserId        String?                      @db.ObjectId
+  members                     OrganizationMember[]
   // Reverse relations for tenant-scoped entities
-  shopAuthorizations      ShopAuthorization[]
-  shopGroups              ShopGroup[]
-  products                Product[]
-  bankAccounts            BankAccount[]
-  bankHistories           BankHistory[]
-  payments                Payment[]
-  statements              Statement[]
-  withdrawals             Withdrawal[]
-  orders                  Order[]
-  orderLineItems          OrderLineItem[]
-  orderPackages           OrderPackage[]
-  conversations           Conversation[]
-  conversationMessages    ConversationMessage[]
-  notifications           Notification[]
-  tiktokTransactions      TikTokTransaction[]
+  shopAuthorizations          ShopAuthorization[]
+  shopGroups                  ShopGroup[]
+  products                    Product[]
+  bankAccounts                BankAccount[]
+  bankHistories               BankHistory[]
+  payments                    Payment[]
+  statements                  Statement[]
+  withdrawals                 Withdrawal[]
+  orders                      Order[]
+  orderLineItems              OrderLineItem[]
+  orderPackages               OrderPackage[]
+  conversations               Conversation[]
+  conversationMessages        ConversationMessage[]
+  notifications               Notification[]
+  tiktokTransactions          TikTokTransaction[]
   tiktokUnsettledTransactions TiktokUnsettledTransaction[]
-  schedulerJobs           SchedulerJob[]
-  jobExecutions           JobExecution[]
-  jobLogs                 JobLog[]
-  auditLogs               AuditLog[]
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  schedulerJobs               SchedulerJob[]
+  jobExecutions               JobExecution[]
+  jobLogs                     JobLog[]
+  auditLogs                   AuditLog[]
+  createdAt                   DateTime                     @default(now())
+  updatedAt                   DateTime                     @updatedAt
 }
 
 model OrganizationMember {
-  id        String   @id @default(auto()) @map("_id") @db.ObjectId
-  orgId     String   @db.ObjectId
-  userId    String   @db.ObjectId
-  role      OrganizationRole
-  invitedBy String?  @db.ObjectId
-  inviteStatus String @default("ACCEPTED") // PENDING | ACCEPTED | DECLINED | EXPIRED
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           String           @id @default(auto()) @map("_id") @db.ObjectId
+  orgId        String           @db.ObjectId
+  userId       String           @db.ObjectId
+  role         OrganizationRole
+  invitedBy    String?          @db.ObjectId
+  inviteStatus String           @default("ACCEPTED") // PENDING | ACCEPTED | DECLINED | EXPIRED
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
 
   organization Organization @relation(fields: [orgId], references: [id])
   user         User         @relation(fields: [userId], references: [id])
@@ -1344,21 +1361,20 @@ model OrganizationMember {
 
 // ===================== Audit Logging =====================
 model AuditLog {
-  id        String   @id @default(auto()) @map("_id") @db.ObjectId
-  orgId     String   @db.ObjectId
+  id           String       @id @default(auto()) @map("_id") @db.ObjectId
+  orgId        String       @db.ObjectId
   organization Organization @relation(fields: [orgId], references: [id])
-  userId    String?  @db.ObjectId
-  user      User?    @relation(fields: [userId], references: [id])
-  action    String
-  entityId  String?  @db.ObjectId
-  entityType String?
-  metadata  String?  // JSON string
-  level     String   @default("INFO")
-  createdAt DateTime @default(now())
+  userId       String?      @db.ObjectId
+  user         User?        @relation(fields: [userId], references: [id])
+  action       String
+  entityId     String?      @db.ObjectId
+  entityType   String?
+  metadata     String? // JSON string
+  level        String       @default("INFO")
+  createdAt    DateTime     @default(now())
 
   @@index([orgId])
   @@index([userId])
   @@index([action])
   @@map("audit_logs")
 }
-
