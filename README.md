@@ -56,3 +56,6 @@ Deployment (Vercel)
 - For best caching of shipping providers, call with shopId:
   - /api/tiktok/Fulfillment/shipping-provider?shopId=SHOP_ID
 - In-memory cache is per instance; consider Redis/Vercel KV for multi-region consistency
+
+Further reading
+- [Assigning shop access with groups](./docs/assigning-groups-shops-users.md)
