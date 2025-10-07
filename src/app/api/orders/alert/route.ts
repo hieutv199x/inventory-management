@@ -83,11 +83,20 @@ export async function GET(req: NextRequest) {
             }
         });
 
+        const countProblemInTransit = await prisma.order.count({
+            where: {
+                ...baseShopWhere,
+                status: "IN_TRANSIT",
+                isProblemInTransit: true,
+            }
+        });
+
         return new Response(JSON.stringify({
             countShipingWithin24: countShipingWithin24,
             countAutoCancelled: countAutoCancelled,
             countShippingOverdue: countShippingOverdue,
             countBuyerCancelled: countBuyerCancelled,
+            countProblemInTransit: countProblemInTransit
         }), {
             status: 200,
             headers: {

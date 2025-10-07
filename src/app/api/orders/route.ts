@@ -197,7 +197,8 @@ export async function GET(req: NextRequest) {
           where.channelData.contains = '"isBuyerRequestCancel"';
           break;
         case 'countLogisticsIssue':
-          // Placeholder - no concrete logic yet; return empty by forcing false condition if desired
+          where.status = 'IN_TRANSIT';
+          where.isProblemInTransit = true;
           break;
         case 'countReturnRefund':
           // Placeholder - similar; could look for refund flags in channelData later

@@ -668,6 +668,8 @@ model Order {
   orgId                 String       @db.ObjectId
   organization          Organization @relation(fields: [orgId], references: [id])
 
+  isProblemInTransit Boolean? @default(false) // Flag for issues in transit (manual flagging)
+
   @@index([orgId])
   @@map("orders")
 }

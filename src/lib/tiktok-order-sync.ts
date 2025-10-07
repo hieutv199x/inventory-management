@@ -3,6 +3,12 @@ import { TikTokShopNodeApiClient, Order202309GetOrderListRequestBody } from "@/n
 import { NotificationService } from "@/lib/notification-service";
 import { syncOrderCanSplitOrNot } from "./tiktok-order-sync-fulfillment-state";
 import { syncUnsettledTransactions } from "./tiktok-unsettled-transactions-sync";
+import {
+    isNegativeTrackingDescription,
+    markOrderAsProblemInTransit,
+    prepareTrackingEventRecords,
+    trackingEventsIndicateProblem
+} from "@/lib/tiktok-tracking-utils";
 
 const prisma = new PrismaClient();
 
@@ -121,11 +127,16 @@ export class TikTokOrderSync {
 
     private async ensureTrackingInformation(tiktokOrderId: string, prismaOrderId: string): Promise<void> {
         try {
-            const existingCount = await prisma.orderTrackingInfo.count({
-                where: { orderId: prismaOrderId }
+            const existingTrackingInfos = await prisma.orderTrackingInfo.findMany({
+                where: { orderId: prismaOrderId },
+                select: { description: true }
             });
 
-            if (existingCount > 0) {
+            if (existingTrackingInfos.some(info => isNegativeTrackingDescription(info.description))) {
+                await markOrderAsProblemInTransit(prisma, prismaOrderId);
+            }
+
+            if (existingTrackingInfos.length > 0) {
                 return;
             }
 
@@ -144,22 +155,11 @@ export class TikTokOrderSync {
                 return;
             }
 
-            const preparedEvents = trackingEvents
-                .filter(event => event && typeof event === 'object')
-                .map(event => {
-                    const updateMillisSource = (event as any).update_time_millis
-                        ?? (event as any).updateTimeMillis
-                        ?? (event as any).update_time
-                        ?? (event as any).updateTime
-                        ?? 0;
-                    const updateMillis = Number(updateMillisSource) || 0;
-                    return {
-                        orderId: prismaOrderId,
-                        description: String(event.description ?? ''),
-                        updateTimeMilli: updateMillis
-                    };
-                })
-                .filter(event => typeof event.description === 'string');
+            if (trackingEventsIndicateProblem(trackingEvents)) {
+                await markOrderAsProblemInTransit(prisma, prismaOrderId);
+            }
+
+            const preparedEvents = prepareTrackingEventRecords(prismaOrderId, trackingEvents);
 
             if (preparedEvents.length === 0) {
                 return;

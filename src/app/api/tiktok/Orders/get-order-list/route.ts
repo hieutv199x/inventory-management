@@ -6,6 +6,12 @@ import {
 } from "@/nodejs_sdk";
 import { getUserWithShopAccess } from "@/lib/auth";
 import { syncOrderCanSplitOrNot } from "@/lib/tiktok-order-sync-fulfillment-state";
+import {
+    isNegativeTrackingDescription,
+    markOrderAsProblemInTransit,
+    prepareTrackingEventRecords,
+    trackingEventsIndicateProblem
+} from "@/lib/tiktok-tracking-utils";
 import { OrgContext, requireOrg, resolveOrgContext } from "@/lib/tenant-context";
 
 const prisma = new PrismaClient();
@@ -262,6 +268,8 @@ async function processBatch(orders: any[], shopId: string, client: any, credenti
                 });
             }
 
+            
+
             // Sync order attributes like can_split, must_split
             await syncOrderCanSplitOrNot(prisma, {
                 shop_id: shopId,
@@ -481,6 +489,14 @@ async function processBatch(orders: any[], shopId: string, client: any, credenti
                     }
                 }
             }
+
+            await ensureTrackingInformationForOrder(
+                order.id,
+                dbOrderId,
+                client,
+                credentials.accessToken,
+                shopCipher
+            );
         }
 
         const orderDbIds = Array.from(orderIdMap.values());
@@ -536,5 +552,53 @@ async function processBatch(orders: any[], shopId: string, client: any, credenti
     } catch (error) {
         console.error('Error processing batch (non-transactional):', error);
         throw error;
+    }
+}
+
+async function ensureTrackingInformationForOrder(
+    tiktokOrderId: string,
+    prismaOrderId: string,
+    client: TikTokShopNodeApiClient,
+    accessToken: string,
+    shopCipher: string | undefined
+): Promise<void> {
+    try {
+        const existingTrackingInfos = await prisma.orderTrackingInfo.findMany({
+            where: { orderId: prismaOrderId },
+            select: { description: true }
+        });
+
+        if (existingTrackingInfos.some(info => isNegativeTrackingDescription(info.description))) {
+            await markOrderAsProblemInTransit(prisma, prismaOrderId);
+        }
+
+        if (existingTrackingInfos.length > 0) {
+            return;
+        }
+
+        const trackingInfo = await client.api.FulfillmentV202309Api.OrdersOrderIdTrackingGet(
+            tiktokOrderId,
+            accessToken,
+            "application/json",
+            shopCipher
+        );
+
+        const trackingEvents = trackingInfo?.body?.data?.tracking;
+        if (!Array.isArray(trackingEvents) || trackingEvents.length === 0) {
+            return;
+        }
+
+        if (trackingEventsIndicateProblem(trackingEvents)) {
+            await markOrderAsProblemInTransit(prisma, prismaOrderId);
+        }
+
+        const preparedEvents = prepareTrackingEventRecords(prismaOrderId, trackingEvents);
+        if (preparedEvents.length === 0) {
+            return;
+        }
+
+        await prisma.orderTrackingInfo.createMany({ data: preparedEvents });
+    } catch (error) {
+        console.warn(`Failed to ensure tracking info for order ${tiktokOrderId}:`, error);
     }
 }
