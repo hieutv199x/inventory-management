@@ -72,50 +72,51 @@ async function sendTelegramMessage(params: { botToken: string; chatId: string; t
 
 function buildNewOrderMessage(payload: NewOrderTelegramPayload): string {
     const lines: string[] = [];
-    lines.push(`🛒 New order received`);
-    lines.push(`Order ID: ${payload.orderId}`);
+    lines.push(`🛒 Có đơn hàng mới`);
+    lines.push(`Mã đơn hàng: ${payload.orderId}`);
 
     if (payload.shopName) {
-        lines.push(`Shop: ${payload.shopName}`);
+        lines.push(`Cửa hàng: ${payload.shopName}`);
     }
 
     if (payload.channel) {
-        lines.push(`Channel: ${payload.channel}`);
+        lines.push(`Kênh: ${payload.channel}`);
     }
 
     const buyer = payload.buyerName || payload.buyerEmail;
     if (buyer) {
-        lines.push(`Customer: ${buyer}`);
+        lines.push(`Khách hàng: ${buyer}`);
     }
 
     const formattedTotal = formatCurrency(payload.totalAmount, payload.currency);
     if (formattedTotal) {
-        lines.push(`Total: ${formattedTotal}`);
+        lines.push(`Tổng đơn: ${formattedTotal}`);
     }
 
     if (payload.status) {
-        lines.push(`Status: ${payload.status}`);
+        lines.push(`Trạng thái: ${payload.status}`);
     }
 
     if (payload.createdAt) {
-        lines.push(`Created: ${formatTimestamp(payload.createdAt)}`);
+        lines.push(`Tạo lúc: ${formatTimestamp(payload.createdAt)}`);
     }
 
     const topLineItems = (payload.lineItems || []).slice(0, 3);
     if (topLineItems.length > 0) {
-        lines.push("Items:");
+        lines.push("Sản phẩm:");
         for (const item of topLineItems) {
             const quantity = item.quantity ?? 1;
             const price = formatCurrency(item.salePrice, payload.currency);
             const parts = [] as string[];
-            parts.push(`${quantity} × ${item.productName ?? "Unknown"}`);
+            parts.push(`${quantity} × ${item.productName ?? "Không xác định"}`);
             if (price) {
                 parts.push(price);
             }
             lines.push(` • ${parts.join(" • ")}`);
         }
         if ((payload.lineItems?.length || 0) > topLineItems.length) {
-            lines.push(` • …and ${payload.lineItems!.length - topLineItems.length} more item(s)`);
+            const remaining = payload.lineItems!.length - topLineItems.length;
+            lines.push(` • …và thêm ${remaining} sản phẩm khác`);
         }
     }
 
@@ -129,7 +130,7 @@ function formatCurrency(amount: string | number | null | undefined, currency?: s
     }
     const currencyCode = currency ?? "USD";
     try {
-        return new Intl.NumberFormat("en-US", {
+        return new Intl.NumberFormat("vi-VN", {
             style: "currency",
             currency: currencyCode,
             maximumFractionDigits: 2
@@ -143,7 +144,7 @@ function formatCurrency(amount: string | number | null | undefined, currency?: s
 function formatTimestamp(epochSeconds: number): string {
     try {
         const date = new Date(epochSeconds * 1000);
-        return date.toLocaleString("en-US", {
+        return date.toLocaleString("vi-VN", {
             timeZone: "Asia/Ho_Chi_Minh",
             hour12: false
         });
