@@ -1135,7 +1135,7 @@ export class TikTokOrderSync {
                     currency: order.payment?.currency ?? null,
                     buyerName: order.recipientAddress?.name ?? null,
                     buyerEmail: order.buyerEmail ?? null,
-                    shopName: this.credentials.managedShopName ?? this.credentials.shopName ?? "TikTok Shop",
+                    shopName: this.credentials.managedName ?? this.credentials.shopName ?? "TikTok Shop",
                     channel: 'TikTok',
                     createdAt: order.createTime ?? null,
                     lineItems: Array.isArray(order.lineItems)
