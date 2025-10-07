@@ -61,11 +61,7 @@ export async function markOrderAsProblemInTransit(prisma: PrismaClient, orderId:
     try {
         const result = await prisma.order.updateMany({
             where: {
-                id: orderId,
-                OR: [
-                    { isProblemInTransit: { equals: false } },
-                    { isProblemInTransit: { equals: null } }
-                ]
+                id: orderId
             },
             data: { isProblemInTransit: true }
         });

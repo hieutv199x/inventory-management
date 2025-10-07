@@ -96,7 +96,7 @@ export async function GET(req: NextRequest) {
             countAutoCancelled: countAutoCancelled,
             countShippingOverdue: countShippingOverdue,
             countBuyerCancelled: countBuyerCancelled,
-            countProblemInTransit: countProblemInTransit
+            countLogisticsIssue: countProblemInTransit
         }), {
             status: 200,
             headers: {

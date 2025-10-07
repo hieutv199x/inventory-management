@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { PrismaClient, Channel } from "@prisma/client";
 import { getUserWithShopAccess, getActiveShopIds } from "@/lib/auth";
 import { TikTokShopNodeApiClient } from "@/nodejs_sdk";
+import {
+    isNegativeTrackingDescription,
+    markOrderAsProblemInTransit,
+    prepareTrackingEventRecords,
+    trackingEventsIndicateProblem
+} from "@/lib/tiktok-tracking-utils";
 
 const prisma = new PrismaClient();
 
@@ -104,6 +110,10 @@ export async function GET(
         });
         let dataSource: "database" | "tiktok" = "database";
 
+        if (trackingRecords.some(record => isNegativeTrackingDescription(record.description))) {
+            await markOrderAsProblemInTransit(prisma, order.id);
+        }
+
         if (trackingRecords.length === 0) {
             const shopCipher = resolveShopCipher(order.shop.shopCipher, order.shop.channelData);
             const accessToken = order.shop.accessToken;
@@ -132,35 +142,25 @@ export async function GET(
 
                 const trackingEvents = trackingInfo?.body?.data?.tracking;
                 if (Array.isArray(trackingEvents) && trackingEvents.length > 0) {
-                    const preparedEvents = trackingEvents
-                        .filter(event => event && typeof event === "object")
-                        .map(event => {
-                            const updateMillisSource = (event as any).update_time_millis
-                                ?? (event as any).updateTimeMillis
-                                ?? (event as any).update_time
-                                ?? (event as any).updateTime
-                                ?? 0;
-                            const updateMillis = Number(updateMillisSource) || 0;
+                    if (trackingEventsIndicateProblem(trackingEvents)) {
+                        await markOrderAsProblemInTransit(prisma, order.id);
+                    }
 
-                            return {
-                                orderId: order.id,
-                                description: String((event as any).description ?? ""),
-                                updateTimeMilli: Math.trunc(updateMillis)
-                            };
-                        })
-                        .filter(event => typeof event.description === "string");
+                    const preparedEvents = prepareTrackingEventRecords(order.id, trackingEvents);
 
                     if (preparedEvents.length > 0) {
-                        await prisma.$transaction([
-                            prisma.orderTrackingInfo.deleteMany({ where: { orderId: order.id } }),
-                            prisma.orderTrackingInfo.createMany({ data: preparedEvents })
-                        ]);
+                        await prisma.orderTrackingInfo.deleteMany({ where: { orderId: order.id } });
+                        await prisma.orderTrackingInfo.createMany({ data: preparedEvents });
 
                         trackingRecords = await prisma.orderTrackingInfo.findMany({
                             where: { orderId: order.id },
                             orderBy: [{ updateTimeMilli: "desc" }]
                         });
                         dataSource = "tiktok";
+
+                        if (trackingRecords.some(record => isNegativeTrackingDescription(record.description))) {
+                            await markOrderAsProblemInTransit(prisma, order.id);
+                        }
                     }
                 }
             } catch (error: any) {
