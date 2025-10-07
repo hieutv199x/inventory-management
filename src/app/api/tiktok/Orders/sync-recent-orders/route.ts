@@ -11,8 +11,8 @@ export async function GET(req: NextRequest) {
         const pageSize = parseInt(searchParams.get('pageSize') || '50');
         const dayToSync = parseFloat(searchParams.get('dayToSync') || '1');
 
-        await sync_all_shop_orders(pageSize, dayToSync);
-        return NextResponse.json({ success: true, message: "Sync initiated" });
+    const result = await sync_all_shop_orders(pageSize, dayToSync);
+    return NextResponse.json({ success: true, message: "Sync completed", meta: result });
     } catch (err: any) {
         console.error("Error syncing recent orders:", err);
         return NextResponse.json({ 

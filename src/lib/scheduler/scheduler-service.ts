@@ -156,7 +156,8 @@ export class SchedulerService {
             // Create execution record
             const execution = await this.prisma.jobExecution.create({
                 data: {
-                    jobId: job.id,
+                    job: { connect: { id: job.id } },
+                    organization: { connect: { id: job.organizationId } },
                     status: 'RUNNING',
                     startedAt: new Date(),
                     triggeredBy

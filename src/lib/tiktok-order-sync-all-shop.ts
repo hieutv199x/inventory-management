@@ -1,73 +1,118 @@
-import { PrismaClient } from "@prisma/client";
+import type { ShopAuthorization } from "@prisma/client";
 import {
     Order202309GetOrderListRequestBody,
     TikTokShopNodeApiClient,
 } from "@/nodejs_sdk";
-import { SchedulerService } from "./scheduler/scheduler-service";
+import { prisma } from "@/lib/prisma";
 
-const prisma = new PrismaClient();
+const DEFAULT_FETCH_BATCH_SIZE = 25;
+const DEFAULT_MAX_CONCURRENCY = 2;
 
-export async function sync_all_shop_orders(page_size: number = 50, day_to_sync: number = 1) {
-    try {
-        const allShops = await prisma.shopAuthorization.findMany({
-            where: { status: 'ACTIVE', app: { channel: 'TIKTOK' } }
-        });
+type SyncableShop = Pick<ShopAuthorization, "id" | "shopId" | "shopName" | "orgId" | "accessToken">;
 
-        if (!allShops) {
-            throw new Error('No active TikTok shops found');
-        }
-
-        // Schedule individual shop sync jobs with 2-minute delays
-        for (let i = 0; i < allShops.length; i++) {
-            const shop = allShops[i];
-            const delayMinutes = i * 2; // 2 minutes delay per shop
-
-            await scheduleShopSyncJob(shop, delayMinutes, page_size, day_to_sync, shop.orgId);
-        }
-
-        return allShops.length;
-    } catch (err: any) {
-        console.error("Error getting orders:", err);
-    } finally {
-        await prisma.$disconnect();
-    }
+export interface SyncAllShopOrdersOptions {
+    /** How many shops to fetch per database query */
+    batchSize?: number;
+    /** How many shops to process concurrently within this invocation */
+    maxConcurrency?: number;
+    /** Continue processing after the provided cursor (shop id) */
+    cursor?: string | null;
 }
 
-async function scheduleShopSyncJob(shop: any, delayMinutes: number, page_size: number, day_to_sync: number, orgId: string) {
-    try {
-        const scheduledAt = new Date(Date.now() + delayMinutes * 60 * 1000);
+export async function sync_all_shop_orders(
+    page_size: number = 50,
+    day_to_sync: number = 1,
+    options: SyncAllShopOrdersOptions = {}
+) {
+    const {
+        batchSize = DEFAULT_FETCH_BATCH_SIZE,
+        maxConcurrency = DEFAULT_MAX_CONCURRENCY,
+        cursor = null,
+    } = options;
 
-        // Create a scheduler job for individual shop sync
-        const job = await prisma.schedulerJob.create({
-            data: {
-                name: `Sync Shop Orders - ${shop.shopName || shop.shopId}`,
-                description: `Automated sync of orders for shop ${shop.shopName || shop.shopId}`,
-                type: 'FUNCTION_CALL',
-                triggerType: 'ONE_TIME',
-                config: JSON.stringify({
-                    functionName: "syncSingleShopOrders",
-                    params: {
-                        shopId: shop.id,
-                        page_size: page_size,
-                        day_to_sync: day_to_sync
-                    }
-                }),
-                timeout: 600000, // 10 minutes
-                retryCount: 2,
-                retryDelay: 120000, // 2 minutes
-                nextExecutionAt: scheduledAt,
-                tags: ['shop-sync', 'auto-generated'],
-                status: 'ACTIVE',
-                orgId: orgId
+    const baseWhere = {
+        status: 'ACTIVE' as const,
+        app: { channel: 'TIKTOK' as const }
+    };
+
+    let paginationCursor: { id: string } | undefined = cursor ? { id: cursor } : undefined;
+    let totalScheduled = 0;
+    let totalSkipped = 0;
+    let totalFailed = 0;
+    const startedAt = Date.now();
+
+    while (true) {
+        const shops = await prisma.shopAuthorization.findMany({
+            where: baseWhere,
+            orderBy: { id: 'asc' },
+            take: batchSize,
+            ...(paginationCursor ? { skip: 1, cursor: paginationCursor } : {}),
+            select: {
+                id: true,
+                shopId: true,
+                shopName: true,
+                orgId: true,
+                accessToken: true
             }
         });
 
-        SchedulerService.getInstance().scheduleJob(job);
+        if (!shops.length) {
+            break;
+        }
 
-        console.log(`Scheduled shop sync job for ${shop.shopName || shop.shopId} at ${scheduledAt.toISOString()}`);
-    } catch (error) {
-        console.error(`Error scheduling job for shop ${shop.shopId}:`, error);
+        const processableShops = shops.filter(shop => {
+            if (!shop.accessToken) {
+                totalSkipped++;
+                return false;
+            }
+            return true;
+        });
+
+        await processWithConcurrency(processableShops, maxConcurrency, async (shop) => {
+            try {
+                await processShop(shop.id, day_to_sync, page_size);
+                totalScheduled++;
+            } catch (error) {
+                totalFailed++;
+                console.error(`Failed to sync shop ${shop.shopId}`, error);
+            }
+        });
+
+        paginationCursor = { id: shops[shops.length - 1].id };
+
+        // If we fetched less than batchSize, we've reached the end
+        if (shops.length < batchSize) {
+            break;
+        }
     }
+
+    return {
+        processed: totalScheduled,
+        skipped: totalSkipped,
+        failed: totalFailed,
+        nextCursor: paginationCursor?.id ?? null,
+        durationMs: Date.now() - startedAt
+    };
+}
+
+async function processWithConcurrency<T>(items: T[], concurrency: number, handler: (item: T) => Promise<void>) {
+    const queue = [...items];
+    const workers: Promise<void>[] = [];
+    const max = Math.max(concurrency, 1);
+
+    const run = async () => {
+        while (queue.length) {
+            const item = queue.shift();
+            if (!item) return;
+            await handler(item);
+        }
+    };
+
+    for (let i = 0; i < Math.min(max, queue.length); i++) {
+        workers.push(run());
+    }
+
+    await Promise.all(workers);
 }
 
 export async function processShop(shop_id: string, day_to_sync: number, page_size: number) {

@@ -1,6 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import axios from 'axios';
-import { processShop, sync_all_shop_orders } from '../tiktok-order-sync-all-shop';
+import { sync_all_shop_orders } from '../tiktok-order-sync-all-shop';
 
 export interface JobResult {
     success: boolean;
@@ -28,7 +28,7 @@ export class JobExecutor {
                     throw new Error(`Unsupported job type: ${job.type}`);
             }
         } catch (error) {
-            await this.logJobError(job.id, executionId, error);
+            await this.logJobError(job, executionId, error);
             return {
                 success: false,
                 error: error instanceof Error ? error.message : 'Unknown error'
@@ -39,13 +39,12 @@ export class JobExecutor {
     private async executeFunctionCall(config: any, job: any, executionId: string): Promise<JobResult> {
         const { functionName, params = {} } = config;
 
-        await this.logJobInfo(job.id, executionId, `Calling function: ${functionName}`);
+    await this.logJobInfo(job, executionId, `Calling function: ${functionName}`);
 
         // Map function names to actual implementations
         const functionMap: Record<string, Function> = {
             // Data sync functions
             'syncAllShopsOrders': this.syncAllShopsOrders.bind(this),
-            'syncSingleShopOrders': this.syncSingleShopOrders.bind(this),
 
             // Maintenance functions
             'cleanupOldNotifications': this.cleanupOldNotifications.bind(this),
@@ -67,7 +66,7 @@ export class JobExecutor {
         }
 
         const result = await func(params, job);
-        await this.logJobInfo(job.id, executionId, `Function completed successfully`);
+    await this.logJobInfo(job, executionId, `Function completed successfully`);
 
         return {
             success: true,
@@ -78,7 +77,7 @@ export class JobExecutor {
     private async executeApiCall(config: any, job: any, executionId: string): Promise<JobResult> {
         const { url, method = 'GET', headers = {}, body = null, timeout = 30000 } = config;
 
-        await this.logJobInfo(job.id, executionId, `Making API call: ${method} ${url}`);
+    await this.logJobInfo(job, executionId, `Making API call: ${method} ${url}`);
 
         const response = await axios({
             url,
@@ -88,7 +87,7 @@ export class JobExecutor {
             timeout
         });
 
-        await this.logJobInfo(job.id, executionId, `API call completed with status: ${response.status}`);
+    await this.logJobInfo(job, executionId, `API call completed with status: ${response.status}`);
 
         return {
             success: true,
@@ -103,7 +102,7 @@ export class JobExecutor {
     private async executeDatabaseQuery(config: any, job: any, executionId: string): Promise<JobResult> {
         const { operation, model, data, where } = config;
 
-        await this.logJobInfo(job.id, executionId, `Executing database operation: ${operation} on ${model}`);
+    await this.logJobInfo(job, executionId, `Executing database operation: ${operation} on ${model}`);
 
         let result;
         const prismaModel = (this.prisma as any)[model];
@@ -135,7 +134,7 @@ export class JobExecutor {
                 throw new Error(`Unsupported database operation: ${operation}`);
         }
 
-        await this.logJobInfo(job.id, executionId, `Database operation completed`);
+    await this.logJobInfo(job, executionId, `Database operation completed`);
 
         return {
             success: true,
@@ -146,7 +145,7 @@ export class JobExecutor {
     private async executeWebhookTrigger(config: any, job: any, executionId: string): Promise<JobResult> {
         const { url, method = 'POST', headers = {}, payload = {} } = config;
 
-        await this.logJobInfo(job.id, executionId, `Triggering webhook: ${method} ${url}`);
+    await this.logJobInfo(job, executionId, `Triggering webhook: ${method} ${url}`);
 
         const response = await axios({
             url,
@@ -158,7 +157,7 @@ export class JobExecutor {
             data: payload
         });
 
-        await this.logJobInfo(job.id, executionId, `Webhook triggered successfully`);
+    await this.logJobInfo(job, executionId, `Webhook triggered successfully`);
 
         return {
             success: true,
@@ -171,24 +170,31 @@ export class JobExecutor {
 
 
     private async syncAllShopsOrders(params: any, job: any): Promise<any> {
-        const { channel = 'TIKTOK', limit = 50, day_to_sync = 1 } = params;
+        const {
+            channel = 'TIKTOK',
+            limit = 50,
+            day_to_sync = 1,
+            batchSize,
+            maxConcurrency,
+            cursor
+        } = params;
 
-        // Get all active shops for the specified channel
-        const number_of_shop = await sync_all_shop_orders(limit, day_to_sync);
+        if (channel !== 'TIKTOK') {
+            throw new Error(`Unsupported channel for order sync: ${channel}`);
+        }
+
+        const result = await sync_all_shop_orders(limit, day_to_sync, {
+            batchSize,
+            maxConcurrency,
+            cursor
+        });
 
         return {
-            totalShops: number_of_shop
-        };
-    }
-
-    private async syncSingleShopOrders(params: any, job: any): Promise<any> {
-        const { shopId, limit = 50, day_to_sync = 1 } = params;
-
-        // Get all active shops for the specified channel
-        await processShop(shopId, day_to_sync, limit);
-
-        return {
-            shop: shopId
+            totalShops: result.processed,
+            skipped: result.skipped,
+            failed: result.failed,
+            nextCursor: result.nextCursor,
+            durationMs: result.durationMs
         };
     }
 
@@ -393,15 +399,21 @@ export class JobExecutor {
         };
     }
 
-    private async logJobInfo(jobId: string, executionId: string, message: string, data?: any): Promise<void> {
+    private async logJobInfo(job: { id: string; orgId?: string }, executionId: string, message: string, data?: any): Promise<void> {
         try {
+            const orgId = job.orgId;
+            if (!orgId) {
+                console.warn('Skipping job info log because orgId is missing', { jobId: job.id });
+                return;
+            }
             await this.prisma.jobLog.create({
                 data: {
-                    jobId,
+                    jobId: job.id,
                     executionId,
                     level: 'INFO',
                     message,
-                    data: data ? JSON.stringify(data) : undefined
+                    data: data ? JSON.stringify(data) : undefined,
+                    orgId
                 }
             });
         } catch (error) {
@@ -409,18 +421,24 @@ export class JobExecutor {
         }
     }
 
-    private async logJobError(jobId: string, executionId: string, error: any): Promise<void> {
+    private async logJobError(job: { id: string; orgId?: string }, executionId: string, error: any): Promise<void> {
         try {
+            const orgId = job.orgId;
+            if (!orgId) {
+                console.warn('Skipping job error log because orgId is missing', { jobId: job.id });
+                return;
+            }
             await this.prisma.jobLog.create({
                 data: {
-                    jobId,
+                    jobId: job.id,
                     executionId,
                     level: 'ERROR',
                     message: error instanceof Error ? error.message : 'Unknown error',
                     data: JSON.stringify({
                         stack: error instanceof Error ? error.stack : undefined,
                         error: error.toString()
-                    })
+                    }),
+                    orgId
                 }
             });
         } catch (logError) {
