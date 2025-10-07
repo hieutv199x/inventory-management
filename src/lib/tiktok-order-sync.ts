@@ -9,6 +9,7 @@ import {
     prepareTrackingEventRecords,
     trackingEventsIndicateProblem
 } from "@/lib/tiktok-tracking-utils";
+import { notifyNewOrderViaTelegram } from "@/lib/telegram-notifier";
 
 const prisma = new PrismaClient();
 
@@ -1120,6 +1121,33 @@ export class TikTokOrderSync {
                         console.error(`Failed to create fallback package ${pkg.id}:`, fallbackError);
                     }
                 }
+            }
+        }
+
+        const orgId = this.credentials.organization?.id ?? null;
+        if (!existing?.id && orgId) {
+            try {
+                await notifyNewOrderViaTelegram(prisma, {
+                    orgId,
+                    orderId: order.id,
+                    status: order.status,
+                    totalAmount: order.payment?.totalAmount ?? null,
+                    currency: order.payment?.currency ?? null,
+                    buyerName: order.recipientAddress?.name ?? null,
+                    buyerEmail: order.buyerEmail ?? null,
+                    shopName: this.credentials.shopName ?? undefined,
+                    channel: 'TikTok',
+                    createdAt: order.createTime ?? null,
+                    lineItems: Array.isArray(order.lineItems)
+                        ? order.lineItems.map((item: any) => ({
+                            productName: item.productName,
+                            quantity: item.quantity ?? item.qty ?? 1,
+                            salePrice: item.salePrice
+                        }))
+                        : []
+                });
+            } catch (error) {
+                console.warn(`Failed to dispatch Telegram notification for new order ${order.id}:`, error);
             }
         }
 

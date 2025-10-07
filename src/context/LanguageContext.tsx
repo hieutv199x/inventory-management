@@ -122,6 +122,17 @@ const translations: Record<Language, TranslationMap> = {
         'common.no': 'No',
         'common.close': 'Close',
         'common.confirm': 'Confirm',
+    // User menu
+    'userMenu.fallback_name': 'User',
+    'userMenu.fallback_email': 'user@example.com',
+    'userMenu.role_guest': 'Guest',
+    'userMenu.edit_profile': 'Edit profile',
+    'userMenu.account_settings': 'Account settings',
+    'userMenu.telegram_config': 'Telegram alerts',
+    'userMenu.unknown_org': 'Unknown organization',
+    'userMenu.no_active_org': 'Select an organization before configuring Telegram alerts.',
+    'userMenu.support': 'Support',
+    'userMenu.sign_out': 'Sign out',
         // ===== Added keys =====
         // Bank Management
         'bank.description': 'Manage bank accounts and assign to shops',
@@ -658,6 +669,17 @@ const translations: Record<Language, TranslationMap> = {
         'common.no': 'Không',
         'common.close': 'Đóng',
         'common.confirm': 'Xác nhận',
+    // User menu
+    'userMenu.fallback_name': 'Người dùng',
+    'userMenu.fallback_email': 'nguoidung@vidu.com',
+    'userMenu.role_guest': 'Khách',
+    'userMenu.edit_profile': 'Chỉnh sửa hồ sơ',
+    'userMenu.account_settings': 'Thiết lập tài khoản',
+    'userMenu.telegram_config': 'Thông báo Telegram',
+    'userMenu.unknown_org': 'Tổ chức chưa xác định',
+    'userMenu.no_active_org': 'Vui lòng chọn tổ chức trước khi cấu hình Telegram.',
+    'userMenu.support': 'Hỗ trợ',
+    'userMenu.sign_out': 'Đăng xuất',
         // ===== Added keys =====
         'bank.description': 'Quản lý tài khoản ngân hàng và gán cho shop',
         'bank.import_bank': 'Import Bank',

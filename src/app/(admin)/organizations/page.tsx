@@ -2,8 +2,9 @@
 import React, { useEffect, useState } from 'react';
 import { httpClient } from '@/lib/http-client';
 import { useOrganization } from '@/context/OrganizationContext';
-import { Loader2, UserPlus, Shield, RefreshCw, Users, Trash2, Building2, CheckCircle2, Circle, Plus, Edit2, ArrowLeft } from 'lucide-react';
+import { Loader2, UserPlus, Shield, RefreshCw, Users, Trash2, Building2, CheckCircle2, Circle, Plus, Edit2, ArrowLeft, Send } from 'lucide-react';
 import toast from 'react-hot-toast';
+import TelegramConfigModal from '@/components/organizations/TelegramConfigModal';
 
 interface Member {
     id: string;
@@ -50,6 +51,7 @@ export default function OrganizationsMembersPage() {
     const [editName, setEditName] = useState('');
     const [editStatus, setEditStatus] = useState('ACTIVE');
     const [view, setView] = useState<'orgs' | 'members'>('orgs');
+    const [telegramOrg, setTelegramOrg] = useState<OrgSummary | null>(null);
 
     const loadMembers = async () => {
         setLoading(true);
@@ -228,6 +230,11 @@ export default function OrganizationsMembersPage() {
                                             <div className="flex flex-col gap-2">
                                                 {!o.active && <button onClick={() => switchTo(o.orgId)} className="text-xs px-3 py-1 border rounded hover:bg-gray-50">Switch</button>}
                                                 {['OWNER', 'ADMIN'].includes(o.role) && <button onClick={() => startEditOrg(o)} className="text-xs inline-flex items-center gap-1 px-2 py-1 border rounded hover:bg-gray-50"><Edit2 size={12} />Edit</button>}
+                                                {(isSuperAdmin || ['OWNER', 'ADMIN'].includes(o.role)) && (
+                                                    <button onClick={() => setTelegramOrg(o)} className="text-xs inline-flex items-center gap-1 px-2 py-1 border rounded hover:bg-gray-50">
+                                                        <Send size={12} />Telegram Alerts
+                                                    </button>
+                                                )}
                                                 <button onClick={() => { switchTo(o.orgId); setView('members'); }} className="text-xs px-3 py-1 bg-gray-100 rounded hover:bg-gray-200">Members</button>
                                             </div>
                                         )}
@@ -310,6 +317,14 @@ export default function OrganizationsMembersPage() {
                         <Shield size={14} /> Changes take effect immediately. Owner cannot be reassigned here.
                     </div>
                 </div>
+            )}
+            {telegramOrg && (
+                <TelegramConfigModal
+                    orgId={telegramOrg.orgId}
+                    orgName={telegramOrg.name}
+                    onClose={() => setTelegramOrg(null)}
+                    onSaved={loadOrgs}
+                />
             )}
         </div>
     );

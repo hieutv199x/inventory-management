@@ -1338,9 +1338,24 @@ model Organization {
   schedulerJobs               SchedulerJob[]
   jobExecutions               JobExecution[]
   jobLogs                     JobLog[]
+  telegramConfig              OrganizationTelegramConfig?
   auditLogs                   AuditLog[]
   createdAt                   DateTime                     @default(now())
   updatedAt                   DateTime                     @updatedAt
+}
+
+model OrganizationTelegramConfig {
+  id        String        @id @default(auto()) @map("_id") @db.ObjectId
+  orgId     String        @unique @db.ObjectId
+  botToken  String
+  chatId    String
+  isActive  Boolean       @default(true)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@map("organization_telegram_configs")
 }
 
 model OrganizationMember {

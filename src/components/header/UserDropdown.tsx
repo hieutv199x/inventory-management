@@ -1,14 +1,33 @@
 "use client";
 import Image from "next/image";
-import Link from "next/link";
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
+import { Send } from "lucide-react";
+import toast from "react-hot-toast";
 import { useAuth } from "@/context/authContext";
+import { useOrganization } from "@/context/OrganizationContext";
+import { useLanguage } from "@/context/LanguageContext";
 import { Dropdown } from "../ui/dropdown/Dropdown";
 import { DropdownItem } from "../ui/dropdown/DropdownItem";
+import TelegramConfigModal from "@/components/organizations/TelegramConfigModal";
 
 export default function UserDropdown() {
   const [isOpen, setIsOpen] = useState(false);
+  const [showTelegramModal, setShowTelegramModal] = useState(false);
   const { user, logout } = useAuth();
+  const { organization, memberships } = useOrganization();
+  const { t } = useLanguage();
+
+  const displayName = user?.name?.trim() || t("userMenu.fallback_name");
+  const displayEmail = user?.email?.trim() || t("userMenu.fallback_email");
+  const roleLabel = user?.role ? user.role.toLowerCase() : t("userMenu.role_guest");
+  const canManageTelegram = (user?.role === "SUPER_ADMIN" || user?.role === "ADMIN");
+
+  const activeMembership = useMemo(() => {
+    if (!organization) return null;
+    return memberships.find((m) => m.orgId === organization.id) || null;
+  }, [organization, memberships]);
+
+  const orgName = activeMembership?.name || organization?.slug || t("userMenu.unknown_org");
 
 function toggleDropdown(e: React.MouseEvent<HTMLButtonElement, MouseEvent>) {
   e.stopPropagation();
@@ -27,6 +46,15 @@ function toggleDropdown(e: React.MouseEvent<HTMLButtonElement, MouseEvent>) {
     }
   };
 
+  const handleOpenTelegram = () => {
+    if (!organization?.id) {
+      toast.error(t("userMenu.no_active_org"));
+      return;
+    }
+    closeDropdown();
+    setShowTelegramModal(true);
+  };
+
   return (
     <div className="relative">
       <button
@@ -43,9 +71,9 @@ function toggleDropdown(e: React.MouseEvent<HTMLButtonElement, MouseEvent>) {
         </span>
 
         <div className="mr-1 text-left">
-          <span className="block font-medium text-theme-sm">{user?.name || 'User'}</span>
+          <span className="block font-medium text-theme-sm">{displayName}</span>
           <span className="block text-xs text-gray-500 dark:text-gray-400 capitalize">
-            {user?.role?.toLowerCase() || 'Guest'}
+            {roleLabel}
           </span>
         </div>
 
@@ -76,13 +104,13 @@ function toggleDropdown(e: React.MouseEvent<HTMLButtonElement, MouseEvent>) {
       >
         <div>
           <span className="block font-medium text-gray-700 text-theme-sm dark:text-gray-400">
-            {user?.name || 'User'}
+            {displayName}
           </span>
           <span className="mt-0.5 block text-theme-xs text-gray-500 dark:text-gray-400">
-            {user?.email || 'user@example.com'}
+            {displayEmail}
           </span>
           <span className="mt-0.5 block text-theme-xs text-blue-500 capitalize">
-            {user?.role?.toLowerCase() || 'Guest'}
+            {roleLabel}
           </span>
         </div>
 
@@ -109,7 +137,7 @@ function toggleDropdown(e: React.MouseEvent<HTMLButtonElement, MouseEvent>) {
                   fill=""
                 />
               </svg>
-              Edit profile
+              {t("userMenu.edit_profile")}
             </DropdownItem>
           </li>
           <li>
@@ -134,9 +162,21 @@ function toggleDropdown(e: React.MouseEvent<HTMLButtonElement, MouseEvent>) {
                   fill=""
                 />
               </svg>
-              Account settings
+              {t("userMenu.account_settings")}
             </DropdownItem>
           </li>
+          {canManageTelegram && (
+            <li>
+              <DropdownItem
+                tag="button"
+                onClick={handleOpenTelegram}
+                className="flex items-center gap-3 px-3 py-2 font-medium text-gray-700 rounded-lg group text-theme-sm hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-gray-300"
+              >
+                <Send className="h-5 w-5 text-gray-500 group-hover:text-gray-700 dark:text-gray-400 dark:group-hover:text-gray-300" strokeWidth={1.5} />
+                {t("userMenu.telegram_config")}
+              </DropdownItem>
+            </li>
+          )}
           <li>
             <DropdownItem
               onItemClick={closeDropdown}
@@ -159,7 +199,7 @@ function toggleDropdown(e: React.MouseEvent<HTMLButtonElement, MouseEvent>) {
                   fill=""
                 />
               </svg>
-              Support
+              {t("userMenu.support")}
             </DropdownItem>
           </li>
         </ul>
@@ -182,9 +222,16 @@ function toggleDropdown(e: React.MouseEvent<HTMLButtonElement, MouseEvent>) {
               fill=""
             />
           </svg>
-          Sign out
+          {t("userMenu.sign_out")}
         </button>
       </Dropdown>
+      {showTelegramModal && organization?.id && (
+        <TelegramConfigModal
+          orgId={organization.id}
+          orgName={orgName}
+          onClose={() => setShowTelegramModal(false)}
+        />
+      )}
     </div>
   );
 }
