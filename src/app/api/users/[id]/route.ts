@@ -6,7 +6,7 @@ import bcrypt from "bcryptjs";
 // Get user by ID
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     // Validate token and get user
@@ -19,10 +19,11 @@ export async function GET(
     }
 
     const { user: currentUser } = authResult;
+    const { id } = await params;
 
     // Users can view their own profile, or admins/managers can view any profile
     if (
-      currentUser!.id !== params.id &&
+      currentUser!.id !== id &&
       !checkRole(currentUser!.role, ["ADMIN", "MANAGER"])
     ) {
       return NextResponse.json(
@@ -32,10 +33,11 @@ export async function GET(
     }
 
     const user = await prisma.user.findUnique({
-      where: { id: params.id },
+      where: { id },
       select: {
         id: true,
         name: true,
+        username: true,
         email: true,
         role: true,
         isActive: true,
@@ -64,7 +66,7 @@ export async function GET(
 // Update user
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     // Validate token and get user
@@ -79,7 +81,7 @@ export async function PUT(
     const { user: currentUser } = authResult;
 
     // Check if user has permission (Admin or Manager, or updating own profile)
-    const { id } = params;
+    const { id } = await params;
     const isOwnProfile = currentUser!.id === id;
     const hasAdminAccess = checkRole(currentUser!.role, ["ADMIN", "MANAGER"]);
 
@@ -90,11 +92,11 @@ export async function PUT(
       );
     }
 
-    const { name, email, role, password } = await request.json();
+    const { name, email, role, password, currentPassword } = await request.json();
 
-    if (!name || !email) {
+    if (!name) {
       return NextResponse.json(
-        { error: "Name and email are required" },
+        { error: "Name is required" },
         { status: 400 }
       );
     }
@@ -102,6 +104,15 @@ export async function PUT(
     // Check if user exists
     const existingUser = await prisma.user.findUnique({
       where: { id },
+      select: {
+        id: true,
+        name: true,
+        username: true,
+        email: true,
+        password: true,
+        role: true,
+        isActive: true,
+      },
     });
 
     if (!existingUser) {
@@ -111,10 +122,13 @@ export async function PUT(
       );
     }
 
-    // Check if email is already taken by another user
-    if (email !== existingUser.email) {
-      const emailExists = await prisma.user.findUnique({
-        where: { email },
+    // Check if email is already taken by another user (if provided)
+    if (email && email !== existingUser.email) {
+      const emailExists = await prisma.user.findFirst({
+        where: { 
+          email: email,
+          id: { not: id } // Exclude current user
+        },
       });
 
       if (emailExists) {
@@ -126,7 +140,10 @@ export async function PUT(
     }
 
     // Build update data
-    const updateData: any = { name, email };
+    const updateData: any = { name };
+    if (email !== undefined) {
+      updateData.email = email;
+    }
 
     // Only admins can change roles
     if (
@@ -146,8 +163,35 @@ export async function PUT(
       );
     }
 
-    // Password update
+    // Password update with current password validation
     if (password) {
+      // For own profile, require current password validation
+      if (isOwnProfile) {
+        if (!currentPassword) {
+          return NextResponse.json(
+            { error: "Current password is required to change password" },
+            { status: 400 }
+          );
+        }
+
+        // Verify current password
+        const isCurrentPasswordValid = await bcrypt.compare(currentPassword, existingUser.password);
+        if (!isCurrentPasswordValid) {
+          return NextResponse.json(
+            { error: "Current password is incorrect" },
+            { status: 400 }
+          );
+        }
+      }
+
+      // Validate new password strength
+      if (password.length < 6) {
+        return NextResponse.json(
+          { error: "New password must be at least 6 characters long" },
+          { status: 400 }
+        );
+      }
+
       updateData.password = await bcrypt.hash(password, 12);
     }
 
@@ -157,8 +201,10 @@ export async function PUT(
       select: {
         id: true,
         name: true,
+        username: true,
         email: true,
         role: true,
+        isActive: true,
       },
     });
 
@@ -175,7 +221,7 @@ export async function PUT(
 // Delete user (Admin only)
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     // Validate token and get user
@@ -197,7 +243,7 @@ export async function DELETE(
       );
     }
 
-    const { id } = params;
+    const { id } = await params;
 
     // Prevent self-deletion
     if (user!.id === id) {

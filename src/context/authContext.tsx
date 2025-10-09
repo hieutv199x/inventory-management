@@ -1,14 +1,16 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { httpClient } from '@/lib/http-client';
 
 interface User {
   id: string;
-  email: string;
+  username: string;
+  email?: string;
   name: string;
   role: 'ADMIN' | 'MANAGER' | 'ACCOUNTANT' | 'SELLER' | 'RESOURCE' | 'SUPER_ADMIN';
+  isActive?: boolean;
 }
 
 interface AuthContextType {
@@ -16,6 +18,7 @@ interface AuthContextType {
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -73,6 +76,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
 
+  const clearAuthData = useCallback(() => {
+    setUser(null);
+    clearStoredAuthData();
+    httpClient.clearAuthToken();
+    console.log("Authentication data cleared");
+  }, []);
+
+  const logout = useCallback(() => {
+    clearAuthData();
+    router.push('/signin');
+  }, [clearAuthData, router]);
+
   // Check for existing session on mount
   useEffect(() => {
     const checkAuth = async () => {
@@ -115,7 +130,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     checkAuth();
-  }, [router]);
+  }, [router, clearAuthData]);
 
   // Auto-refresh session when it's close to expiring
   useEffect(() => {
@@ -149,7 +164,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Check every 5 minutes
     const interval = setInterval(checkAndRefreshSession, 5 * 60 * 1000);
     return () => clearInterval(interval);
-  }, [user]);
+  }, [user, logout]);
 
   const login = async (username: string, password: string) => {
     try {
@@ -172,20 +187,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const logout = () => {
-    clearAuthData();
-    router.push('/signin');
-  };
-
-  const clearAuthData = () => {
-    setUser(null);
-    clearStoredAuthData();
-    httpClient.clearAuthToken();
-    console.log("Authentication data cleared");
+  const refreshUser = async () => {
+    try {
+      const data = await httpClient.get('/auth/me');
+      if (data.user) {
+        setUser(data.user);
+        // Update stored user data
+        const storedAuth = getStoredAuthData();
+        if (storedAuth) {
+          storeAuthData(storedAuth.token, data.user);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to refresh user data:', error);
+    }
   };
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, logout }}>
+    <AuthContext.Provider value={{ user, isLoading, login, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );
