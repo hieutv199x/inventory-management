@@ -1,6 +1,8 @@
 "use client";
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { FaUsers, FaPlus, FaEdit, FaTrash, FaTimes, FaSearch, FaLayerGroup, FaUserPlus, FaStore } from 'react-icons/fa';
+
+const ASSIGN_MODAL_SHOP_PAGE_SIZE = 20;
 import { userShopRoleApi, userApi, shopApi, shopGroupApi } from '@/lib/api-client';
 import { Modal } from '@/components/ui/modal';
 import Button from '@/components/ui/button/Button';
@@ -82,6 +84,12 @@ interface ShopGroup {
   shopCount: number;
 }
 
+interface AssignFormData {
+  userId: string;
+  shopIds: string[];
+  role: UserShopRole['role'];
+}
+
 export default function PermissionsPage() {
   const { t } = useLanguage();
   const { user } = useAuth();
@@ -97,10 +105,10 @@ export default function PermissionsPage() {
   const [showAssignShopGroupModal, setShowAssignShopGroupModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedRole, setSelectedRole] = useState<UserShopRole | null>(null);
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<AssignFormData>({
     userId: '',
-    shopId: '',
-    role: 'SELLER' as UserShopRole['role']
+    shopIds: [],
+    role: 'SELLER'
   });
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -123,6 +131,8 @@ export default function PermissionsPage() {
   const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
   const [shopSelectPortalTarget, setShopSelectPortalTarget] = useState<HTMLElement | null>(null);
   const [userSelectPortalTarget, setUserSelectPortalTarget] = useState<HTMLElement | null>(null);
+  const [assignModalShopFilter, setAssignModalShopFilter] = useState('');
+  const [assignModalShopPage, setAssignModalShopPage] = useState(1);
   const canCreateGroups = useMemo(() => ['ADMIN', 'SUPER_ADMIN'].includes(user?.role ?? ''), [user?.role]);
 
   const roleColors = {
@@ -423,6 +433,84 @@ export default function PermissionsPage() {
     return shops.filter((shop) => shop.groupId && allowedGroupIds.has(shop.groupId));
   }, [isGroupManagerContext, shops, managedGroups]);
 
+  const sortedAssignableShops = useMemo(() => {
+    return [...assignableShops].sort((a, b) => {
+      const nameA = a.managedName ?? a.shopName ?? a.shopId ?? '';
+      const nameB = b.managedName ?? b.shopName ?? b.shopId ?? '';
+      return nameA.localeCompare(nameB, undefined, { sensitivity: 'base' });
+    });
+  }, [assignableShops]);
+
+  const filteredAssignableShops = useMemo(() => {
+    if (!assignModalShopFilter) {
+      return sortedAssignableShops;
+    }
+
+    const keyword = assignModalShopFilter.trim().toLowerCase();
+    if (!keyword) {
+      return sortedAssignableShops;
+    }
+
+    return sortedAssignableShops.filter((shop) => {
+      const displayName = shop.managedName ?? shop.shopName ?? shop.shopId ?? '';
+      const shopCode = shop.shopId ?? '';
+      const groupName = shop.groupName ?? '';
+      return (
+        displayName.toLowerCase().includes(keyword) ||
+        shopCode.toLowerCase().includes(keyword) ||
+        groupName.toLowerCase().includes(keyword)
+      );
+    });
+  }, [assignModalShopFilter, sortedAssignableShops]);
+
+  const totalFilteredAssignableShops = filteredAssignableShops.length;
+
+  const paginatedAssignableShops = useMemo(() => {
+    const start = (assignModalShopPage - 1) * ASSIGN_MODAL_SHOP_PAGE_SIZE;
+    const end = start + ASSIGN_MODAL_SHOP_PAGE_SIZE;
+    return filteredAssignableShops.slice(start, end);
+  }, [assignModalShopPage, filteredAssignableShops]);
+
+  const assignModalPageCount = useMemo(() => {
+    return Math.max(1, Math.ceil(totalFilteredAssignableShops / ASSIGN_MODAL_SHOP_PAGE_SIZE));
+  }, [totalFilteredAssignableShops]);
+
+  useEffect(() => {
+    if (assignModalShopPage > assignModalPageCount) {
+      setAssignModalShopPage(assignModalPageCount);
+    }
+  }, [assignModalPageCount, assignModalShopPage]);
+
+  const areAllAssignableShopsSelected = useMemo(() => {
+    if (filteredAssignableShops.length === 0) {
+      return false;
+    }
+
+    const selectedSet = new Set(formData.shopIds);
+    return filteredAssignableShops.every((shop) => selectedSet.has(shop.id));
+  }, [filteredAssignableShops, formData.shopIds]);
+
+  const handleToggleShopSelection = useCallback((shopId: string) => {
+    setFormData((prev) => {
+      const isSelected = prev.shopIds.includes(shopId);
+      const nextShopIds = isSelected
+        ? prev.shopIds.filter((id) => id !== shopId)
+        : [...prev.shopIds, shopId];
+      return { ...prev, shopIds: nextShopIds };
+    });
+    setError('');
+  }, []);
+
+  const handleToggleAllAssignableShops = useCallback(() => {
+    setFormData((prev) => ({
+      ...prev,
+      shopIds: areAllAssignableShopsSelected
+        ? prev.shopIds.filter((shopId) => !filteredAssignableShops.some((shop) => shop.id === shopId))
+        : Array.from(new Set([...prev.shopIds, ...filteredAssignableShops.map((shop) => shop.id)]))
+    }));
+    setError('');
+  }, [areAllAssignableShopsSelected, filteredAssignableShops]);
+
   const shopSelectInputId = useMemo(
     () => (selectedGroup ? `add-shop-to-group-select-${selectedGroup.id}` : 'add-shop-to-group-select'),
     [selectedGroup]
@@ -509,10 +597,14 @@ export default function PermissionsPage() {
       setFormData((prev) => ({ ...prev, userId: '' }));
     }
 
-    if (formData.shopId && !assignableShops.some((shopItem) => shopItem.id === formData.shopId)) {
-      setFormData((prev) => ({ ...prev, shopId: '' }));
+    if (formData.shopIds.length > 0) {
+      const allowedShopIds = new Set(assignableShops.map((shopItem) => shopItem.id));
+      const filteredShopIds = formData.shopIds.filter((shopId) => allowedShopIds.has(shopId));
+      if (filteredShopIds.length !== formData.shopIds.length) {
+        setFormData((prev) => ({ ...prev, shopIds: filteredShopIds }));
+      }
     }
-  }, [showAssignModal, assignableUsers, assignableShops, formData.userId, formData.shopId]);
+  }, [showAssignModal, assignableUsers, assignableShops, formData.userId, formData.shopIds]);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -563,17 +655,53 @@ export default function PermissionsPage() {
     setLoading(true);
     setError('');
 
-    try {
-      await userShopRoleApi.create(formData);
-      setSuccess('Phân quyền thành công');
-      setShowAssignModal(false);
-      setFormData({ userId: '', shopId: '', role: 'SELLER' });
-      await fetchUserRoles(pagination.page, searchTerm, selectedShop);
-    } catch (error: any) {
-      setError(error.message);
-    } finally {
+    if (!formData.userId) {
+      setError(t('permissions.assign_modal.select_user'));
       setLoading(false);
+      return;
     }
+
+    const uniqueShopIds = Array.from(new Set(formData.shopIds));
+    if (uniqueShopIds.length === 0) {
+      setError(t('permissions.assign_modal.select_shop'));
+      setLoading(false);
+      return;
+    }
+
+    let successCount = 0;
+    let lastErrorMessage: string | null = null;
+
+    for (const shopId of uniqueShopIds) {
+      try {
+        await userShopRoleApi.create({
+          userId: formData.userId,
+          shopId,
+          role: formData.role
+        });
+        successCount += 1;
+      } catch (error: any) {
+        console.error('Error assigning role:', error);
+        lastErrorMessage = error?.message || t('permissions.assign_modal.generic_error');
+      }
+    }
+
+    if (successCount > 0) {
+      const successMessage = successCount > 1
+        ? t('permissions.assign_modal.success_multiple', { count: successCount })
+        : t('permissions.assign_modal.success_single');
+      setSuccess(successMessage);
+      setShowAssignModal(false);
+      setFormData({ userId: '', shopIds: [], role: 'SELLER' });
+      await fetchUserRoles(pagination.page, searchTerm, selectedShop);
+    }
+
+    if (lastErrorMessage && successCount < uniqueShopIds.length) {
+      setError(lastErrorMessage);
+    } else if (successCount > 0) {
+      setError('');
+    }
+
+    setLoading(false);
   };
 
   // Update role
@@ -804,7 +932,7 @@ export default function PermissionsPage() {
     setSelectedRole(userRole);
     setFormData({
       userId: userRole.userId,
-      shopId: userRole.shopId,
+      shopIds: [userRole.shopId],
       role: userRole.role
     });
     setShowEditModal(true);
@@ -814,7 +942,9 @@ export default function PermissionsPage() {
     setShowAssignModal(false);
     setShowEditModal(false);
     setSelectedRole(null);
-    setFormData({ userId: '', shopId: '', role: 'SELLER' });
+    setFormData({ userId: '', shopIds: [], role: 'SELLER' });
+    setAssignModalShopFilter('');
+    setAssignModalShopPage(1);
     setError('');
   };
 
@@ -1319,19 +1449,145 @@ export default function PermissionsPage() {
 
             <div>
               <Label>{t('permissions.assign_modal.shop')}</Label>
-              <select
-                value={formData.shopId}
-                onChange={(e) => setFormData(prev => ({ ...prev, shopId: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white vietnamese-text"
-                required
-              >
-                <option value="">{t('permissions.assign_modal.select_shop')}</option>
-                {assignableShops.map(shop => (
-                  <option key={shop.id} value={shop.id}>
-                    {shop.shopName}
-                  </option>
-                ))}
-              </select>
+              {paginatedAssignableShops.length === 0 ? (
+                <div className="py-2 text-sm text-gray-500 dark:text-gray-400 vietnamese-text">
+                  {t('permissions.assign_modal.no_shops_available')}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex-1">
+                      <div className="relative">
+                        <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 h-4 w-4" />
+                        <input
+                          type="text"
+                          value={assignModalShopFilter}
+                          onChange={(e) => {
+                            setAssignModalShopFilter(e.target.value);
+                            setAssignModalShopPage(1);
+                          }}
+                          placeholder={t('permissions.assign_modal.filter_placeholder')}
+                          className="w-full pl-10 pr-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500 vietnamese-text"
+                        />
+                      </div>
+                      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 vietnamese-text">
+                        {t('permissions.assign_modal.shop_helper', { count: totalFilteredAssignableShops })}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 justify-between sm:justify-end">
+                      <button
+                        type="button"
+                        onClick={handleToggleAllAssignableShops}
+                        className="text-sm text-brand-600 hover:text-brand-700 dark:text-brand-300 dark:hover:text-brand-200 font-medium"
+                      >
+                        {areAllAssignableShopsSelected
+                          ? t('permissions.assign_modal.clear_all')
+                          : t('permissions.assign_modal.select_all')}
+                      </button>
+                      <span className="text-xs text-gray-500 dark:text-gray-400 vietnamese-text">
+                        {t('permissions.assign_modal.pagination_summary', {
+                          page: assignModalShopPage,
+                          totalPages: assignModalPageCount
+                        })}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="max-h-60 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-md divide-y divide-gray-200 dark:divide-gray-700">
+                    <ul className="divide-y divide-gray-200 dark:divide-gray-700">
+                      {paginatedAssignableShops.map((shop) => {
+                        const displayName = shop.managedName ?? shop.shopName ?? shop.shopId ?? 'N/A';
+                        const secondary = shop.shopId;
+                        const groupName = shop.groupName;
+                        const isSelected = formData.shopIds.includes(shop.id);
+
+                        return (
+                          <li key={shop.id} className="bg-white dark:bg-gray-800">
+                            <label className="flex items-start gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                              <input
+                                type="checkbox"
+                                className="mt-1 h-4 w-4 rounded border-gray-300 text-brand-500 focus:ring-brand-500"
+                                checked={isSelected}
+                                onChange={() => handleToggleShopSelection(shop.id)}
+                              />
+                              <div className="flex-1">
+                                <div className="text-sm font-medium text-gray-900 dark:text-white vietnamese-text">
+                                  {displayName}
+                                </div>
+                                {(secondary || groupName) && (
+                                  <div className="mt-0.5 text-xs text-gray-500 dark:text-gray-400 vietnamese-text space-x-2">
+                                    {secondary && <span>{t('permissions.assign_modal.shop_code', { code: secondary })}</span>}
+                                    {groupName && <span>{t('permissions.assign_modal.shop_group', { group: groupName })}</span>}
+                                  </div>
+                                )}
+                              </div>
+                            </label>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+
+                  {assignModalPageCount > 1 && (
+                    <div className="flex items-center justify-between text-sm text-gray-600 dark:text-gray-400">
+                      <button
+                        type="button"
+                        onClick={() => setAssignModalShopPage((prev) => Math.max(1, prev - 1))}
+                        disabled={assignModalShopPage === 1}
+                        className="px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {t('permissions.assign_modal.prev_page')}
+                      </button>
+                      <div className="flex items-center gap-2">
+                        <span>
+                          {t('permissions.assign_modal.page_indicator', {
+                            page: assignModalShopPage,
+                            total: assignModalPageCount
+                          })}
+                        </span>
+                        <div className="flex gap-1">
+                          {Array.from({ length: assignModalPageCount }).slice(0, 5).map((_, index) => {
+                            let pageNumber = index + 1;
+                            if (assignModalPageCount > 5) {
+                              const halfWindow = Math.floor(5 / 2);
+                              const windowStart = Math.max(1, assignModalShopPage - halfWindow);
+                              const windowEnd = Math.min(assignModalPageCount, windowStart + 4);
+                              const adjustedStart = Math.max(1, windowEnd - 4);
+                              pageNumber = adjustedStart + index;
+                              if (pageNumber > assignModalPageCount) {
+                                pageNumber = assignModalPageCount;
+                              }
+                            }
+
+                            return (
+                              <button
+                                key={pageNumber}
+                                type="button"
+                                onClick={() => setAssignModalShopPage(pageNumber)}
+                                className={`px-2.5 py-1 border rounded-md ${
+                                  assignModalShopPage === pageNumber
+                                    ? 'bg-brand-500 text-white border-brand-500'
+                                    : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
+                                }`}
+                              >
+                                {pageNumber}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setAssignModalShopPage((prev) => Math.min(assignModalPageCount, prev + 1))}
+                        disabled={assignModalShopPage === assignModalPageCount}
+                        className="px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {t('permissions.assign_modal.next_page')}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             <div>

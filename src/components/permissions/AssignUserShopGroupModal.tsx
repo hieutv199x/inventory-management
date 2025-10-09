@@ -254,7 +254,7 @@ const AssignUserShopGroupModal: React.FC<AssignUserShopGroupModalProps> = ({
               <option value="">{t('permissions.assign_modal.select_shop')}</option>
               {(formState.groupId ? availableShops : shops).map((shop) => (
                 <option key={shop.id} value={shop.id}>
-                  {shop.shopName}
+                  {shop.managedName || shop.shopName}
                   {shop.shopId ? ` (${shop.shopId})` : ''}
                 </option>
               ))}
