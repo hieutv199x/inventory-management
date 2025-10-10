@@ -32,7 +32,7 @@ export async function GET(
       );
     }
 
-    const user = await prisma.user.findUnique({
+    const user = (await prisma.user.findUnique({
       where: { id },
       select: {
         id: true,
@@ -44,7 +44,7 @@ export async function GET(
         createdAt: true,
         updatedAt: true,
       },
-    });
+    } as any)) as any;
 
     if (!user) {
       return NextResponse.json(
@@ -102,7 +102,7 @@ export async function PUT(
     }
 
     // Check if user exists
-    const existingUser = await prisma.user.findUnique({
+    const existingUser = (await prisma.user.findUnique({
       where: { id },
       select: {
         id: true,
@@ -113,7 +113,7 @@ export async function PUT(
         role: true,
         isActive: true,
       },
-    });
+    } as any)) as any;
 
     if (!existingUser) {
       return NextResponse.json(
@@ -125,11 +125,11 @@ export async function PUT(
     // Check if email is already taken by another user (if provided)
     if (email && email !== existingUser.email) {
       const emailExists = await prisma.user.findFirst({
-        where: { 
+        where: {
           email: email,
-          id: { not: id } // Exclude current user
+          id: { not: id }, // Exclude current user
         },
-      });
+      } as any);
 
       if (emailExists) {
         return NextResponse.json(
@@ -195,7 +195,7 @@ export async function PUT(
       updateData.password = await bcrypt.hash(password, 12);
     }
 
-    const updatedUser = await prisma.user.update({
+    const updatedUser = (await prisma.user.update({
       where: { id },
       data: updateData,
       select: {
@@ -206,7 +206,7 @@ export async function PUT(
         role: true,
         isActive: true,
       },
-    });
+    } as any)) as any;
 
     return NextResponse.json({ user: updatedUser });
   } catch (error) {
@@ -234,6 +234,7 @@ export async function DELETE(
     }
 
     const { user } = authResult;
+    const actorId = user!.id;
 
     // Check if user has permission (Admin only)
     if (!checkRole(user!.role, ["ADMIN"])) {
@@ -265,9 +266,26 @@ export async function DELETE(
       );
     }
 
-    // Delete user (this will cascade delete user shop roles due to foreign key constraints)
-    await prisma.user.delete({
-      where: { id },
+    if (checkRole(existingUser.role, ["ADMIN", "SUPER_ADMIN"])) {
+      return NextResponse.json(
+        { error: "Administrative accounts cannot be deleted" },
+        { status: 400 }
+      );
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.session.deleteMany({ where: { userId: id } });
+      await tx.notification.deleteMany({ where: { userId: id } });
+      await tx.userShopRole.deleteMany({ where: { userId: id } });
+      await tx.organizationMember.deleteMany({ where: { userId: id } });
+      await tx.shopGroupMember.deleteMany({ where: { userId: id } });
+  await tx.schedulerConfig.updateMany({ where: { updatedBy: id }, data: { updatedBy: null } });
+      await tx.schedulerJob.updateMany({ where: { createdBy: id }, data: { createdBy: actorId } });
+      await tx.user.updateMany({ where: { createdBy: id }, data: { createdBy: null } });
+      await tx.auditLog.updateMany({ where: { userId: id }, data: { userId: null } });
+      await tx.shopGroup.updateMany({ where: { managerId: id }, data: { managerId: actorId } });
+
+      await tx.user.delete({ where: { id } });
     });
 
     return NextResponse.json({ message: "User deleted successfully" });

@@ -6,6 +6,7 @@ import { Modal } from '@/components/ui/modal';
 import Button from '@/components/ui/button/Button';
 import Label from '@/components/form/Label';
 import Input from '@/components/form/input/InputField';
+import { useLanguage } from '@/context/LanguageContext';
 
 type SystemRole = 'SUPER_ADMIN' | 'ADMIN' | 'MANAGER' | 'ACCOUNTANT' | 'SELLER' | 'RESOURCE';
 
@@ -113,12 +114,15 @@ const normalizeUsers = (incoming: any[] = []): User[] =>
   });
 
 export default function UserRolesPage() {
+  const { t } = useLanguage();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showResetPasswordModal, setShowResetPasswordModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [userToDelete, setUserToDelete] = useState<User | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     username: '',
@@ -140,6 +144,7 @@ export default function UserRolesPage() {
     totalPages: 0
   });
   const [searchLoading, setSearchLoading] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   const systemRoleColors = {
     SUPER_ADMIN: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200',
@@ -325,16 +330,28 @@ export default function UserRolesPage() {
     }
   };
 
-  // Delete user
-  const handleDeleteUser = async (userId: string) => {
-    if (!confirm('Are you sure you want to delete this user?')) return;
+  const openDeleteModal = (user: User) => {
+    setUserToDelete(user);
+    setShowDeleteModal(true);
+    setError('');
+  };
+
+  const handleConfirmDeleteUser = async () => {
+    if (!userToDelete) return;
+
+    setDeleteLoading(true);
+    setError('');
 
     try {
-      await userApi.delete(userId);
-      setSuccess('User deleted successfully');
+      await userApi.delete(userToDelete.id);
+      setSuccess(t('userManagement.deleteModal.success'));
+      setShowDeleteModal(false);
+      setUserToDelete(null);
       await fetchUsers(pagination.page, searchTerm);
     } catch (error: any) {
       setError(error.message);
+    } finally {
+      setDeleteLoading(false);
     }
   };
 
@@ -411,9 +428,12 @@ export default function UserRolesPage() {
     setShowAddModal(false);
     setShowEditModal(false);
     setShowResetPasswordModal(false);
+    setShowDeleteModal(false);
     setSelectedUser(null);
+    setUserToDelete(null);
     setFormData({ name: '', username: '', role: 'SELLER', password: '' });
     setResetPasswordData({ newPassword: '', confirmPassword: '' });
+    setDeleteLoading(false);
     setError('');
   };
 
@@ -748,7 +768,7 @@ export default function UserRolesPage() {
                   </button>
 
                   <button
-                    onClick={() => handleDeleteUser(user.id)}
+                    onClick={() => openDeleteModal(user)}
                     className="flex-1 px-3 py-1.5 text-xs font-medium text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 border border-red-300 rounded hover:bg-red-50 dark:hover:bg-red-900 transition-colors flex items-center justify-center space-x-1"
                   >
                     <FaTrash className="h-3 w-3" title='Xóa' />
@@ -955,7 +975,7 @@ export default function UserRolesPage() {
                           </button>
 
                           <button
-                            onClick={() => handleDeleteUser(user.id)}
+                            onClick={() => openDeleteModal(user)}
                             className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300 inline-flex items-center space-x-1"
                           >
                             <FaTrash className="h-3 w-3" title='Xóa' />
@@ -1024,6 +1044,58 @@ export default function UserRolesPage() {
             Trang {pagination.page} / {pagination.totalPages}
           </div>
         </div>
+      )}
+
+      {/* Delete User Modal */}
+      {showDeleteModal && userToDelete && (
+        <Modal isOpen={showDeleteModal} onClose={closeModals} className="max-w-lg p-6">
+          <div className="space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-100 text-red-600 dark:bg-red-500/20 dark:text-red-300">
+                <FaUserSlash className="h-5 w-5" />
+              </div>
+              <div className="space-y-1">
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+                  {t('userManagement.deleteModal.title')}
+                </h2>
+                <p className="text-sm text-gray-600 dark:text-gray-300">
+                  {t('userManagement.deleteModal.warning', { name: userToDelete.name })}
+                </p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  @{userToDelete.username}
+                </p>
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-red-100 bg-red-50 p-4 dark:border-red-500/30 dark:bg-red-500/10">
+              <p className="text-sm text-red-700 dark:text-red-200">
+                {t('userManagement.deleteModal.details')}
+              </p>
+            </div>
+
+            <div className="flex justify-end gap-3 pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={closeModals}
+                disabled={deleteLoading}
+                className="min-w-[120px]"
+              >
+                {t('common.cancel')}
+              </Button>
+              <Button
+                type="button"
+                onClick={handleConfirmDeleteUser}
+                disabled={deleteLoading}
+                className="min-w-[150px] !bg-red-600 hover:!bg-red-700 !text-white"
+              >
+                {deleteLoading
+                  ? t('userManagement.deleteModal.loading')
+                  : t('userManagement.deleteModal.confirmLabel')}
+              </Button>
+            </div>
+          </div>
+        </Modal>
       )}
 
       {/* Add User Modal */}

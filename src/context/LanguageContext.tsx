@@ -122,6 +122,13 @@ const translations: Record<Language, TranslationMap> = {
         'common.no': 'No',
         'common.close': 'Close',
         'common.confirm': 'Confirm',
+    // User Management
+    'userManagement.deleteModal.title': 'Delete user',
+    'userManagement.deleteModal.warning': 'Deleting {name} will revoke their access immediately.',
+    'userManagement.deleteModal.details': 'We\'ll remove their sessions, organization memberships, shop permissions, and personal notifications. Orders, financial records, products, and shops stay untouched.',
+    'userManagement.deleteModal.confirmLabel': 'Delete user',
+    'userManagement.deleteModal.loading': 'Deleting...',
+    'userManagement.deleteModal.success': 'User deleted successfully',
     // User menu
     'userMenu.fallback_name': 'User',
     'userMenu.fallback_email': 'user@example.com',
@@ -683,6 +690,13 @@ const translations: Record<Language, TranslationMap> = {
         'common.no': 'Không',
         'common.close': 'Đóng',
         'common.confirm': 'Xác nhận',
+    // User Management
+    'userManagement.deleteModal.title': 'Xóa người dùng',
+    'userManagement.deleteModal.warning': 'Xóa {name} sẽ thu hồi quyền truy cập ngay lập tức.',
+    'userManagement.deleteModal.details': 'Hệ thống sẽ xóa phiên đăng nhập, quyền thành viên tổ chức, quyền truy cập cửa hàng và thông báo cá nhân. Đơn hàng, dữ liệu tài chính, sản phẩm và cửa hàng vẫn được giữ nguyên.',
+    'userManagement.deleteModal.confirmLabel': 'Xác nhận xóa',
+    'userManagement.deleteModal.loading': 'Đang xóa...',
+    'userManagement.deleteModal.success': 'Xóa người dùng thành công',
     // User menu
     'userMenu.fallback_name': 'Người dùng',
     'userMenu.fallback_email': 'nguoidung@vidu.com',
