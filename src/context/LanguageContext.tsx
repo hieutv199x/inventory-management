@@ -839,7 +839,7 @@ const translations: Record<Language, TranslationMap> = {
     'permissions.assign_modal.success_single': 'Phân quyền người dùng vào cửa hàng thành công.',
     'permissions.assign_modal.success_multiple': 'Phân quyền người dùng vào {count} cửa hàng thành công.',
     'permissions.assign_modal.generic_error': 'Không thể phân quyền cho một số cửa hàng. Vui lòng thử lại.',
-    'permissions.assign_modal.shop_helper': 'Chọn một hoặc nhiều cửa hàng để cấp quyền truy cập. Có {count, number} cửa hàng phù hợp bộ lọc.',
+    'permissions.assign_modal.shop_helper': 'Chọn một hoặc nhiều cửa hàng để cấp quyền truy cập.',
     'permissions.assign_modal.select_all': 'Chọn tất cả',
     'permissions.assign_modal.clear_all': 'Bỏ chọn hết',
     'permissions.assign_modal.shop_code': 'Mã: {code}',

@@ -1422,7 +1422,7 @@ export default function PermissionsPage() {
 
       {/* Assign Role Modal */}
       {showAssignModal && (
-        <Modal isOpen={showAssignModal} onClose={closeModals} className="max-w-lg p-6">
+        <Modal isOpen={showAssignModal} onClose={closeModals} className="max-w-lg p-6 max-h-full overflow-y-auto">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white vietnamese-text">
               {t('permissions.assign_modal.title')}
@@ -1471,7 +1471,7 @@ export default function PermissionsPage() {
                         />
                       </div>
                       <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 vietnamese-text">
-                        {t('permissions.assign_modal.shop_helper', { count: totalFilteredAssignableShops })}
+                        {t('permissions.assign_modal.shop_helper')}
                       </p>
                     </div>
                     <div className="flex items-center gap-2 justify-between sm:justify-end">
