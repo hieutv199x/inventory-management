@@ -273,20 +273,18 @@ export async function DELETE(
       );
     }
 
-    await prisma.$transaction(async (tx) => {
-      await tx.session.deleteMany({ where: { userId: id } });
-      await tx.notification.deleteMany({ where: { userId: id } });
-      await tx.userShopRole.deleteMany({ where: { userId: id } });
-      await tx.organizationMember.deleteMany({ where: { userId: id } });
-      await tx.shopGroupMember.deleteMany({ where: { userId: id } });
-  await tx.schedulerConfig.updateMany({ where: { updatedBy: id }, data: { updatedBy: null } });
-      await tx.schedulerJob.updateMany({ where: { createdBy: id }, data: { createdBy: actorId } });
-      await tx.user.updateMany({ where: { createdBy: id }, data: { createdBy: null } });
-      await tx.auditLog.updateMany({ where: { userId: id }, data: { userId: null } });
-      await tx.shopGroup.updateMany({ where: { managerId: id }, data: { managerId: actorId } });
+    await prisma.session.deleteMany({ where: { userId: id } });
+    await prisma.notification.deleteMany({ where: { userId: id } });
+    await prisma.userShopRole.deleteMany({ where: { userId: id } });
+    await prisma.organizationMember.deleteMany({ where: { userId: id } });
+    await prisma.shopGroupMember.deleteMany({ where: { userId: id } });
+    await prisma.schedulerConfig.updateMany({ where: { updatedBy: id }, data: { updatedBy: null } });
+    await prisma.schedulerJob.updateMany({ where: { createdBy: id }, data: { createdBy: actorId } });
+    await prisma.user.updateMany({ where: { createdBy: id }, data: { createdBy: null } });
+    await prisma.auditLog.updateMany({ where: { userId: id }, data: { userId: null } });
+    await prisma.shopGroup.updateMany({ where: { managerId: id }, data: { managerId: actorId } });
 
-      await tx.user.delete({ where: { id } });
-    });
+    await prisma.user.delete({ where: { id } });
 
     return NextResponse.json({ message: "User deleted successfully" });
   } catch (error) {
