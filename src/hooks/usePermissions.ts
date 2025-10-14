@@ -2,7 +2,7 @@
 
 import { useAuth } from "@/context/authContext";
 
-type UserRole = "ADMIN" | "MANAGER" | "ACCOUNTANT" | "SELLER" | "RESOURCE";
+type UserRole = "ADMIN" | "MANAGER" | "ACCOUNTANT" | "SELLER" | "RESOURCE" | "SHOP_CONNECTOR" | "SUPER_ADMIN";
 
 interface PermissionConfig {
   users: {

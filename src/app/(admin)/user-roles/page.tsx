@@ -8,7 +8,7 @@ import Label from '@/components/form/Label';
 import Input from '@/components/form/input/InputField';
 import { useLanguage } from '@/context/LanguageContext';
 
-type SystemRole = 'SUPER_ADMIN' | 'ADMIN' | 'MANAGER' | 'ACCOUNTANT' | 'SELLER' | 'RESOURCE';
+type SystemRole = 'SUPER_ADMIN' | 'ADMIN' | 'MANAGER' | 'ACCOUNTANT' | 'SELLER' | 'RESOURCE' | 'SHOP_CONNECTOR';
 
 type ShopRole = 'OWNER' | 'MANAGER' | 'STAFF' | 'VIEWER';
 
@@ -135,7 +135,7 @@ export default function UserRolesPage() {
   });
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
+  const [viewMode, setViewMode] = useState<'grid' | 'table'>('table');
   const [searchTerm, setSearchTerm] = useState('');
   const [pagination, setPagination] = useState({
     page: 1,
@@ -152,7 +152,8 @@ export default function UserRolesPage() {
     MANAGER: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
     ACCOUNTANT: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
     SELLER: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200',
-    RESOURCE: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200'
+    RESOURCE: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
+    SHOP_CONNECTOR: 'bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200'
   };
 
   const shopRoleColors = {
@@ -294,7 +295,7 @@ export default function UserRolesPage() {
 
     try {
       await userApi.create(formData);
-      setSuccess('User created successfully');
+      setSuccess('Tạo mới thành công');
       setShowAddModal(false);
       setFormData({ name: '', username: '', role: 'SELLER', password: '' });
       await fetchUsers(pagination.page, searchTerm);
@@ -1149,6 +1150,7 @@ export default function UserRolesPage() {
                   <option value="MANAGER">Quản lý</option>
                   <option value="ACCOUNTANT">Kế toán</option>
                   <option value="RESOURCE">Tài nguyên</option>
+                  <option value="SHOP_CONNECTOR">Người kết nối cửa hàng</option>
                 </select>
               </div>
 
@@ -1236,6 +1238,7 @@ export default function UserRolesPage() {
                   <option value="MANAGER">Quản lý</option>
                   <option value="ACCOUNTANT">Kế toán</option>
                   <option value="RESOURCE">Tài nguyên</option>
+                  <option value="SHOP_CONNECTOR">Người kết nối cửa hàng</option>
                 </select>
               </div>
 

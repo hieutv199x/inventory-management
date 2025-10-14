@@ -77,6 +77,7 @@ export const getUserWithShopAccess = async (
     }
 
     const isAdmin = ['ADMIN', 'SUPER_ADMIN'].includes(currentUser.role as string);
+    const canAddShops = ['ADMIN', 'SUPER_ADMIN', 'MANAGER', 'SHOP_CONNECTOR'].includes(currentUser.role as string);
     const activeOrgId = orgContext.org?.id ?? null;
 
     if (isAdmin && includeShopIds) {
@@ -137,6 +138,7 @@ export const getUserWithShopAccess = async (
         managedGroupIds,
         isAdmin,
         isManager: managedGroupIds.length > 0,
+        canAddShops,
         activeOrgId
     };
 };

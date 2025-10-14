@@ -84,6 +84,7 @@ enum UserRole {
   ACCOUNTANT
   SELLER
   SUPER_ADMIN
+  SHOP_CONNECTOR
 }
 
 model Session {
