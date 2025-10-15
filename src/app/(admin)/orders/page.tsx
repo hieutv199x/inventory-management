@@ -128,20 +128,49 @@ export default function OrdersPage() {
     const [showSplitModal, setShowSplitModal] = useState(false);
     const [syncingDetail, setSyncingDetail] = useState<string | null>(null);
 
-    // Helper function to get date with timezone offset
-    const getDateWithTimezone = (date: Date) => {
+    // Helper function to format date for input (YYYY-MM-DD in local timezone)
+    const getDateInputValue = (date: Date) => {
         const offset = date.getTimezoneOffset() * 60000; // Convert to milliseconds
         const localTime = new Date(date.getTime() - offset);
-        return localTime.toISOString().slice(0, 16);
+        return localTime.toISOString().slice(0, 10);
     };
 
     // Updated filter and search states with default date range using browser timezone
+    const pad2 = (value: number) => value.toString().padStart(2, '0');
+    const buildLocalDate = (dateStr?: string, hours = 0, minutes = 0, seconds = 0, milliseconds = 0) => {
+        if (!dateStr) return null;
+        const [year, month, day] = dateStr.split('-').map(Number);
+        if (!year || !month || !day) return null;
+        return new Date(year, month - 1, day, hours, minutes, seconds, milliseconds);
+    };
+    const getStartOfDayDate = (dateStr?: string) => buildLocalDate(dateStr, 0, 0, 0, 0);
+    const getEndOfDayDate = (dateStr?: string) => buildLocalDate(dateStr, 23, 59, 59, 999);
+    const parseDateBoundary = (value?: string, boundary: 'start' | 'end' = 'start') => {
+        if (!value) return null;
+        if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+            return boundary === 'start' ? getStartOfDayDate(value) : getEndOfDayDate(value);
+        }
+        const parsed = new Date(value);
+        if (Number.isNaN(parsed.getTime())) return null;
+        return parsed;
+    };
+    const formatDateTimeParam = (date: Date | null) => {
+        if (!date) return '';
+        const year = date.getFullYear();
+        const month = pad2(date.getMonth() + 1);
+        const day = pad2(date.getDate());
+        const hours = pad2(date.getHours());
+        const minutes = pad2(date.getMinutes());
+        const seconds = pad2(date.getSeconds());
+        return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`;
+    };
+
     const [filters, setFilters] = useState({
         shopId: '',
         status: '',
         customStatus: '', // Added customStatus filter
-        dateFrom: getDateWithTimezone(new Date(Date.now() - 24 * 60 * 60 * 1000)), // 1 day ago
-        dateTo: getDateWithTimezone(new Date(Date.now() + 24 * 60 * 60 * 1000)), // 1 day from now
+        dateFrom: getDateInputValue(new Date(Date.now() - 24 * 60 * 60 * 1000)), // 1 day ago (start of day)
+        dateTo: getDateInputValue(new Date(Date.now() + 24 * 60 * 60 * 1000)), // 1 day from now (end of day)
         keyword: '',
     });
 
@@ -316,8 +345,10 @@ export default function OrdersPage() {
                 if (filters.status) params.append('status', filters.status);
                 if (filters.customStatus) params.append('customStatus', filters.customStatus);
                 if (filters.keyword || options?.keyword) params.append('keyword', (options?.keyword || filters.keyword));
-                if (filters.dateFrom) params.append('dateFrom', filters.dateFrom);
-                if (filters.dateTo) params.append('dateTo', filters.dateTo);
+                const dateFromParam = formatDateTimeParam(getStartOfDayDate(filters.dateFrom));
+                if (dateFromParam) params.append('dateFrom', dateFromParam);
+                const dateToParam = formatDateTimeParam(getEndOfDayDate(filters.dateTo));
+                if (dateToParam) params.append('dateTo', dateToParam);
                 if (alertFilter) params.append('alert', alertFilter);
 
                 const response = await httpClient.get(`/orders?${params.toString()}`);
@@ -485,12 +516,14 @@ export default function OrdersPage() {
         showLoading(t('orders.syncing_orders'));
         setSyncing(true);
         try {
+            const createTimeGeDate = parseDateBoundary(dateFrom, 'start');
+            const createTimeLtDate = parseDateBoundary(dateTo, 'end');
             const response = await httpClient.post('/tiktok/Orders/get-order-list', {
                 shop_id: shopId,
                 sync: true,
                 filters: {
-                    createTimeGe: dateFrom ? Math.floor(new Date(dateFrom).getTime() / 1000) : undefined,
-                    createTimeLt: dateTo ? Math.floor(new Date(dateTo).getTime() / 1000) : undefined,
+                    createTimeGe: createTimeGeDate ? Math.floor(createTimeGeDate.getTime() / 1000) : undefined,
+                    createTimeLt: createTimeLtDate ? Math.floor(createTimeLtDate.getTime() / 1000) : undefined,
                 },
                 page_size: 50,
             });
@@ -514,10 +547,12 @@ export default function OrdersPage() {
         }
         showLoading(t('orders.syncing_unsettled_transactions'));
         try {
+            const searchStart = getStartOfDayDate(filters.dateFrom);
+            const searchEnd = getEndOfDayDate(filters.dateTo);
             const response = await httpClient.post('/tiktok/Finance/sync-unsettled-transactions', {
                 shop_id: filters.shopId,
-                search_time_ge: filters.dateFrom ? Math.floor(new Date(filters.dateFrom).getTime() / 1000) : undefined,
-                search_time_lt: filters.dateTo ? Math.floor(new Date(filters.dateTo).getTime() / 1000) : undefined,
+                search_time_ge: searchStart ? Math.floor(searchStart.getTime() / 1000) : undefined,
+                search_time_lt: searchEnd ? Math.floor(searchEnd.getTime() / 1000) : undefined,
                 page_size: 50,
             });
 
@@ -1111,7 +1146,7 @@ export default function OrdersPage() {
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2 dark:text-gray-400">{t('orders.from_date')}</label>
                         <input
-                            type="datetime-local"
+                            type="date"
                             value={filters.dateFrom}
                             onChange={(e) => handleFilterChange('dateFrom', e.target.value)}
                             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white"
@@ -1121,7 +1156,7 @@ export default function OrdersPage() {
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2 dark:text-gray-400">{t('orders.to_date')}</label>
                         <input
-                            type="datetime-local"
+                            type="date"
                             value={filters.dateTo}
                             onChange={(e) => handleFilterChange('dateTo', e.target.value)}
                             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white"

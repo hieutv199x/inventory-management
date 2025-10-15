@@ -194,7 +194,7 @@ export async function GET(req: NextRequest) {
           where.status = { not: 'CANCELLED' };
           (where.channelData ??= {});
           // Keep simple contains match (string JSON) to align with alert endpoint
-          where.channelData.contains = '"isBuyerRequestCancel"';
+          where.channelData.contains = '"isBuyerRequestCancel":"true"';
           break;
         case 'countLogisticsIssue':
           where.status = 'IN_TRANSIT';
