@@ -193,8 +193,9 @@ export async function GET(req: NextRequest) {
           // buyer requested cancellation but not cancelled yet
           where.status = { not: 'CANCELLED' };
           (where.channelData ??= {});
-          // Keep simple contains match (string JSON) to align with alert endpoint
-          where.channelData.contains = '"isBuyerRequestCancel"';
+          // Check for isBuyerRequestCancel: "true" in JSON (match alert endpoint)
+          where.channelData.contains = '"isBuyerRequestCancel":"true"';
+          console.log('Filtering orders with countBuyerCancelled alert, where:', where);
           break;
         case 'countLogisticsIssue':
           where.status = 'IN_TRANSIT';
