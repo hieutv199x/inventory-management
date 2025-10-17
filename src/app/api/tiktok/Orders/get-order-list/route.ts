@@ -13,6 +13,7 @@ import {
     trackingEventsIndicateProblem
 } from "@/lib/tiktok-tracking-utils";
 import { OrgContext, requireOrg, resolveOrgContext } from "@/lib/tenant-context";
+import { triggerTrackingForOrders } from "@/lib/fulfillment-tracking";
 
 const prisma = new PrismaClient();
 
@@ -201,12 +202,13 @@ async function processBatch(orders: any[], shopId: string, client: any, credenti
         const orderIds = orders.map(o => o.id);
         const existingOrders = await prisma.order.findMany({
             where: { orderId: { in: orderIds } },
-            select: { id: true, orderId: true }
+            select: { id: true, orderId: true, status: true }
         });
 
-        const existingOrderMap = new Map(existingOrders.map(o => [o.orderId, o.id]));
+        const existingOrderMap = new Map(existingOrders.map(o => [o.orderId, { id: o.id, status: o.status }]));
         const newOrders: any[] = [];
         const updateOrders: any[] = [];
+        const statusChangedOrderIds: string[] = [];
 
         for (const order of orders) {
             const createTime = order.createTime || Math.floor(Date.now() / 1000);
@@ -259,8 +261,14 @@ async function processBatch(orders: any[], shopId: string, client: any, credenti
                 deliveryOptionRequiredDeliveryTime: order.deliveryOptionRequiredDeliveryTime || null
             };
 
-            if (existingOrderMap.has(order.id)) {
-                updateOrders.push({ orderData: { ...orderData }, dbId: existingOrderMap.get(order.id) });
+            const existingRecord = existingOrderMap.get(order.id);
+
+            if (existingRecord) {
+                updateOrders.push({ orderData: { ...orderData }, dbId: existingRecord.id });
+
+                if (existingRecord.status !== (order.status || "UNKNOWN")) {
+                    statusChangedOrderIds.push(order.id);
+                }
             } else {
                 newOrders.push({
                     ...orderData, shopId,
@@ -304,7 +312,8 @@ async function processBatch(orders: any[], shopId: string, client: any, credenti
             where: { orderId: { in: orderIds } },
             select: { id: true, orderId: true }
         });
-        const orderIdMap = new Map(allOrders.map(o => [o.orderId, o.id]));
+    const orderIdMap = new Map(allOrders.map(o => [o.orderId, o.id]));
+    const orderDbIds = Array.from(orderIdMap.values());
 
         // 5. Collect related entities
         const allLineItems: any[] = [];
@@ -499,7 +508,13 @@ async function processBatch(orders: any[], shopId: string, client: any, credenti
             );
         }
 
-        const orderDbIds = Array.from(orderIdMap.values());
+        const ordersToTrigger = Array.from(new Set(statusChangedOrderIds))
+            .map(orderId => orderIdMap.get(orderId))
+            .filter((value): value is string => Boolean(value));
+
+        if (ordersToTrigger.length > 0) {
+            await triggerTrackingForOrders(prisma, ordersToTrigger);
+        }
 
         // 6. Replace related entities (delete + recreate for batch consistency)
         if (allLineItems.length > 0) {

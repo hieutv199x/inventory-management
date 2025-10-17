@@ -18,7 +18,8 @@ const translations: Record<Language, TranslationMap> = {
     en: {
         // Navigation
         'nav.products': 'Products',
-        'nav.orders': 'Orders',
+    'nav.orders': 'Orders',
+    'nav.fulfillment': 'Fulfillment Tracking',
         'nav.bank': 'Bank Management',
         'nav.revenue': 'Revenue',
         'nav.connect_shop': 'Connect Shop',
@@ -85,6 +86,27 @@ const translations: Record<Language, TranslationMap> = {
         'orders.items': 'item(s)',
         'orders.track': 'Track',
         'orders.subtotal': 'Subtotal',
+
+    // Fulfillment Tracking
+    'fulfillmentTracking.title': 'Fulfillment Tracking',
+    'fulfillmentTracking.subtitle': 'Monitor logistics states and timeline events.',
+    'fulfillmentTracking.searchPlaceholder': 'Search tracking number, order ID, provider...',
+    'fulfillmentTracking.refresh': 'Refresh',
+    'fulfillmentTracking.noResults': 'No fulfillment records found.',
+    'fulfillmentTracking.table.trackingNumber': 'Tracking Number',
+    'fulfillmentTracking.table.provider': 'Provider',
+    'fulfillmentTracking.table.status': 'Status',
+    'fulfillmentTracking.table.shop': 'Shop',
+    'fulfillmentTracking.table.order': 'Order',
+    'fulfillmentTracking.table.lastEvent': 'Last Event',
+    'fulfillmentTracking.table.timeline': 'Timeline',
+    'fulfillmentTracking.timeline.category': 'Category',
+    'fulfillmentTracking.timeline.empty': 'No timeline entries yet.',
+    'fulfillmentTracking.toggle.show': 'Show timeline',
+    'fulfillmentTracking.toggle.hide': 'Hide timeline',
+    'fulfillmentTracking.pagination.prev': 'Previous',
+    'fulfillmentTracking.pagination.next': 'Next',
+    'fulfillmentTracking.pagination.summary': 'Page {page} of {totalPages}',
 
         // Chat
         'chat.title': 'Customer Chat',
@@ -587,7 +609,8 @@ const translations: Record<Language, TranslationMap> = {
     vi: {
         // Navigation
         'nav.products': 'Sản phẩm',
-        'nav.orders': 'Đơn hàng',
+    'nav.orders': 'Đơn hàng',
+    'nav.fulfillment': 'Theo dõi giao vận',
         'nav.bank': 'Quản lý bank',
         'nav.revenue': 'Tiền về',
         'nav.connect_shop': 'Kết nối Shop',
@@ -655,6 +678,27 @@ const translations: Record<Language, TranslationMap> = {
         'orders.items': 'sản phẩm',
         'orders.track': 'Theo dõi',
         'orders.subtotal': 'Tạm tính',
+
+    // Theo dõi giao vận
+    'fulfillmentTracking.title': 'Quản lý giao vận',
+    'fulfillmentTracking.subtitle': 'Theo dõi trạng thái giao vận và các mốc thời gian.',
+    'fulfillmentTracking.searchPlaceholder': 'Tìm mã vận đơn, mã đơn hàng, nhà vận chuyển...',
+    'fulfillmentTracking.refresh': 'Làm mới',
+    'fulfillmentTracking.noResults': 'Chưa có bản ghi giao vận.',
+    'fulfillmentTracking.table.trackingNumber': 'Mã vận đơn',
+    'fulfillmentTracking.table.provider': 'Nhà vận chuyển',
+    'fulfillmentTracking.table.status': 'Trạng thái',
+    'fulfillmentTracking.table.shop': 'Cửa hàng',
+    'fulfillmentTracking.table.order': 'Đơn hàng',
+    'fulfillmentTracking.table.lastEvent': 'Mốc gần nhất',
+    'fulfillmentTracking.table.timeline': 'Timeline',
+    'fulfillmentTracking.timeline.category': 'Nhóm trạng thái',
+    'fulfillmentTracking.timeline.empty': 'Chưa có mốc thời gian.',
+    'fulfillmentTracking.toggle.show': 'Xem timeline',
+    'fulfillmentTracking.toggle.hide': 'Ẩn timeline',
+    'fulfillmentTracking.pagination.prev': 'Trước',
+    'fulfillmentTracking.pagination.next': 'Sau',
+    'fulfillmentTracking.pagination.summary': 'Trang {page} / {totalPages}',
 
         // Chat
         'chat.title': 'Trò chuyện khách hàng',

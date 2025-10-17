@@ -15,7 +15,7 @@ import {
 } from "../icons/index";
 import { FaMoneyCheckAlt, FaUsersCog, FaAppStore } from "react-icons/fa";
 import { AiOutlineShopping } from "react-icons/ai";
-import { MessageCircle, Grid2X2Plus, AlertTriangle } from "lucide-react";
+import { MessageCircle, Grid2X2Plus, AlertTriangle, Truck } from "lucide-react";
 import { LanguageSwitcher } from '@/components/ui/LanguageSwitcher';
 
 type NavItem = {
@@ -39,6 +39,12 @@ const productItems: NavItem[] = [
     name: "nav.orders",
     path: "/orders",
     roles: ["ADMIN", "MANAGER", "SELLER"]
+  },
+  {
+    icon: <Truck size={24} />,
+    name: "nav.fulfillment",
+    path: "/fulfillment/tracking",
+    roles: ["ADMIN", "MANAGER", "SELLER", "ACCOUNTANT"]
   },
 ];
 

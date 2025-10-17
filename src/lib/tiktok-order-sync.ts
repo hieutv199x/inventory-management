@@ -10,6 +10,7 @@ import {
     trackingEventsIndicateProblem
 } from "@/lib/tiktok-tracking-utils";
 import { notifyNewOrderViaTelegram } from "@/lib/telegram-notifier";
+import { syncFulfillmentTrackingStateFromPackage, triggerTrackingForOrders } from "@/lib/fulfillment-tracking";
 
 const prisma = new PrismaClient();
 
@@ -703,6 +704,8 @@ export class TikTokOrderSync {
                 'PackagesPackageIdGet'
             );
 
+            const packageDetail = packageDetailResult?.body?.data;
+
             let packageData: any = {
                 orderId: orderId,
                 packageId: pkg.id
@@ -713,9 +716,7 @@ export class TikTokOrderSync {
                 fetchedAt: Date.now()
             };
 
-            if (packageDetailResult?.body?.data) {
-                const packageDetail = packageDetailResult.body.data;
-
+            if (packageDetail) {
                 // Map API response to model fields - only include non-undefined values
                 const apiFields: any = {};
 
@@ -767,7 +768,7 @@ export class TikTokOrderSync {
             // Prepare data for upsert - separate update and create data
             const { orderId: _, packageId: __, ...updateData } = packageData;
 
-            await prisma.orderPackage.upsert({
+            const persistedPackage = await prisma.orderPackage.upsert({
                 where: {
                     orderId_packageId: {
                         orderId: orderId,
@@ -776,6 +777,20 @@ export class TikTokOrderSync {
                 },
                 update: { ...updateData, orgId: this.credentials.organization?.id },
                 create: { ...packageData, orgId: this.credentials.organization?.id }
+            });
+
+            await syncFulfillmentTrackingStateFromPackage(prisma, {
+                orderId,
+                orderPackageId: persistedPackage.id,
+                trackingNumber: persistedPackage.trackingNumber ?? packageDetail?.trackingNumber ?? pkg?.trackingNumber ?? null,
+                status: persistedPackage.status ?? null,
+                providerName: persistedPackage.shippingProviderName ?? null,
+                providerId: persistedPackage.shippingProviderId ?? null,
+                providerType: persistedPackage.shippingType ?? null,
+                providerServiceLevel: persistedPackage.deliveryOptionName ?? persistedPackage.deliveryOptionId ?? null,
+                providerTrackingUrl: (packageDetail as any)?.trackingUrl ?? null,
+                shopId: this.credentials.id,
+                orgId: this.credentials.organization?.id ?? null,
             });
 
             console.log(`Upserted package ${pkg.id} for order ${orderId}`);
@@ -805,7 +820,7 @@ export class TikTokOrderSync {
 
                 const { orderId: _, packageId: __, ...updateFallbackData } = fallbackData;
 
-                await prisma.orderPackage.upsert({
+                const persistedPackage = await prisma.orderPackage.upsert({
                     where: {
                         orderId_packageId: {
                             orderId: orderId,
@@ -814,6 +829,20 @@ export class TikTokOrderSync {
                     },
                     update: { ...updateFallbackData, orgId: this.credentials.organization?.id },
                     create: { ...fallbackData, orgId: this.credentials.organization?.id }
+                });
+
+                await syncFulfillmentTrackingStateFromPackage(prisma, {
+                    orderId,
+                    orderPackageId: persistedPackage.id,
+                    trackingNumber: persistedPackage.trackingNumber ?? pkg?.trackingNumber ?? null,
+                    status: persistedPackage.status ?? null,
+                    providerName: persistedPackage.shippingProviderName ?? null,
+                    providerId: persistedPackage.shippingProviderId ?? null,
+                    providerType: persistedPackage.shippingType ?? null,
+                    providerServiceLevel: persistedPackage.deliveryOptionName ?? persistedPackage.deliveryOptionId ?? null,
+                    providerTrackingUrl: null,
+                    shopId: this.credentials.id,
+                    orgId: this.credentials.organization?.id ?? null,
                 });
             } catch (fallbackError) {
                 console.error(`Failed to upsert fallback package ${pkg.id}:`, fallbackError);
@@ -887,8 +916,10 @@ export class TikTokOrderSync {
 
         const existing = await prisma.order.findUnique({
             where: { orderId: order.id },
-            select: { id: true }
+            select: { id: true, status: true }
         });
+
+        const isUpdate = Boolean(existing?.id);
 
         const persistedOrder = await prisma.order.upsert({
             where: { orderId: order.id },
@@ -923,7 +954,7 @@ export class TikTokOrderSync {
         });
 
         // If updating, clear old associations to reinsert fresh data (safe transactional cleanup)
-        if (existing?.id) {
+        if (isUpdate) {
             try {
                 console.log(`Cleaning previous associations for order ${order.id} (${persistedOrder.id})`);
                 await prisma.orderLineItem.deleteMany({ where: { orderId: persistedOrder.id } });
@@ -1023,6 +1054,8 @@ export class TikTokOrderSync {
                         this.shopCipher
                     );
 
+                    const packageDetail = packageDetailResult?.body?.data;
+
                     let packageData: any = {
                         orderId: persistedOrder.id,
                         packageId: pkg.id
@@ -1033,9 +1066,7 @@ export class TikTokOrderSync {
                         fetchedAt: Date.now()
                     };
 
-                    if (packageDetailResult?.body?.data) {
-                        const packageDetail = packageDetailResult.body.data;
-
+                    if (packageDetail) {
                         // Map API response to model fields - only include non-undefined values
                         const apiFields: any = {};
 
@@ -1084,8 +1115,22 @@ export class TikTokOrderSync {
 
                     packageData.channelData = JSON.stringify(packageChannelData);
 
-                    await prisma.orderPackage.create({
+                    const persistedPackage = await prisma.orderPackage.create({
                         data: { ...packageData, orgId: this.credentials.organization?.id }
+                    });
+
+                    await syncFulfillmentTrackingStateFromPackage(prisma, {
+                        orderId: persistedOrder.id,
+                        orderPackageId: persistedPackage.id,
+                        trackingNumber: persistedPackage.trackingNumber ?? packageDetail?.trackingNumber ?? pkg?.trackingNumber ?? null,
+                        status: persistedPackage.status ?? null,
+                        providerName: persistedPackage.shippingProviderName ?? null,
+                        providerId: persistedPackage.shippingProviderId ?? null,
+                        providerType: persistedPackage.shippingType ?? null,
+                        providerServiceLevel: persistedPackage.deliveryOptionName ?? persistedPackage.deliveryOptionId ?? null,
+                        providerTrackingUrl: (packageDetail as any)?.trackingUrl ?? null,
+                        shopId: this.credentials.id,
+                        orgId: this.credentials.organization?.id ?? null,
                     });
 
                     // Sync order attributes
@@ -1104,7 +1149,7 @@ export class TikTokOrderSync {
 
                     // Still create package with basic info if API call fails
                     try {
-                        await prisma.orderPackage.create({
+                        const persistedPackage = await prisma.orderPackage.create({
                             data: {
                                 orderId: persistedOrder.id,
                                 packageId: pkg.id,
@@ -1116,6 +1161,19 @@ export class TikTokOrderSync {
                                 }),
                                 orgId: this.credentials.organization?.id
                             }
+                        });
+
+                        await syncFulfillmentTrackingStateFromPackage(prisma, {
+                            orderId: persistedOrder.id,
+                            orderPackageId: persistedPackage.id,
+                            trackingNumber: persistedPackage.trackingNumber ?? pkg?.trackingNumber ?? null,
+                            status: persistedPackage.status ?? null,
+                            providerName: persistedPackage.shippingProviderName ?? null,
+                            providerId: persistedPackage.shippingProviderId ?? null,
+                            providerType: persistedPackage.shippingType ?? null,
+                            providerServiceLevel: persistedPackage.deliveryOptionName ?? persistedPackage.deliveryOptionId ?? null,
+                            shopId: this.credentials.id,
+                            orgId: this.credentials.organization?.id ?? null,
                         });
                     } catch (fallbackError) {
                         console.error(`Failed to create fallback package ${pkg.id}:`, fallbackError);
@@ -1149,6 +1207,10 @@ export class TikTokOrderSync {
             } catch (error) {
                 console.warn(`Failed to dispatch Telegram notification for new order ${order.id}:`, error);
             }
+        }
+
+        if (isUpdate && existing?.status !== persistedOrder.status) {
+            await triggerTrackingForOrders(prisma, [persistedOrder.id]);
         }
 
         return persistedOrder.id;

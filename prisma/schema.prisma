@@ -222,6 +222,7 @@ model ShopAuthorization {
   orders        Order[]
   products      Product[]
   conversations Conversation[]
+  fulfillmentTrackingStates FulfillmentTrackingState[]
 
   userShopRoles UserShopRole[]
 
@@ -657,7 +658,8 @@ model Order {
   unsettledTransactions TiktokUnsettledTransaction[]
 
   // Add relation to OrderTrackingInfo
-  trackingInfos OrderTrackingInfo[]
+  trackingInfos             OrderTrackingInfo[]
+  fulfillmentTrackingStates FulfillmentTrackingState[]
 
   // NEW: TikTok split attributes (from split_attributes API)
   canSplitPackages      Boolean?     @default(false) // maps can_split
@@ -818,6 +820,7 @@ model OrderPackage {
   // Relation
   orderId String @db.ObjectId
   order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  fulfillmentTrackingStates FulfillmentTrackingState[]
 
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
@@ -844,6 +847,68 @@ model OrderTrackingInfo {
   updatedAt DateTime @updatedAt
 
   @@map("order_tracking_info")
+}
+
+model FulfillmentTrackingState {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+
+  orderId String @db.ObjectId
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  orderPackageId String?        @db.ObjectId
+  orderPackage   OrderPackage?  @relation(fields: [orderPackageId], references: [id], onDelete: SetNull)
+
+  shopId String            @db.ObjectId
+  shop   ShopAuthorization @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  trackingNumber        String
+  providerName          String?
+  providerType          String?
+  providerServiceLevel  String?
+  providerTrackingUrl   String?
+  status                String?
+
+  timelineEntries FulfillmentTrackingEntry[]
+
+  orgId        String       @db.ObjectId
+  organization Organization @relation(fields: [orgId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([orderId, trackingNumber])
+  @@index([trackingNumber])
+  @@index([status])
+  @@index([shopId])
+  @@index([orgId])
+  @@map("fulfillment_tracking_states")
+}
+
+model FulfillmentTrackingEntry {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+
+  trackingStateId String                   @db.ObjectId
+  trackingState   FulfillmentTrackingState @relation(fields: [trackingStateId], references: [id], onDelete: Cascade)
+
+  trackingNumber String
+  category       String
+  title          String
+  description    String
+  occurredAt     DateTime?
+  sequence       Int        @default(0)
+  source         String?
+
+  orgId        String       @db.ObjectId
+  organization Organization @relation(fields: [orgId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([trackingStateId, occurredAt])
+  @@index([trackingNumber])
+  @@index([category])
+  @@index([orgId])
+  @@map("fulfillment_tracking_entries")
 }
 
 // Rename and unify Conversation model
@@ -1339,6 +1404,8 @@ model Organization {
   schedulerJobs               SchedulerJob[]
   jobExecutions               JobExecution[]
   jobLogs                     JobLog[]
+  fulfillmentTrackingStates   FulfillmentTrackingState[]
+  fulfillmentTrackingEntries  FulfillmentTrackingEntry[]
   telegramConfig              OrganizationTelegramConfig?
   auditLogs                   AuditLog[]
   createdAt                   DateTime                     @default(now())
