@@ -15,6 +15,7 @@ export interface PackageTrackingSyncPayload {
   providerType?: string | null;
   providerServiceLevel?: string | null;
   providerTrackingUrl?: string | null;
+  postCode?: string | null;
 }
 
 const normalize = (value?: string | null) => {
@@ -31,6 +32,7 @@ const toProviderSlug = (providerId?: string | null, providerName?: string | null
 interface TrackingJob {
   tracking_id: string;
   provider: string;
+  post_code?: string;
 }
 
 interface TriggerOptions {
@@ -92,6 +94,7 @@ export async function syncFulfillmentTrackingStateFromPackage(
     providerType,
     providerServiceLevel,
     providerTrackingUrl,
+    postCode,
   }: PackageTrackingSyncPayload
 ) {
   const normalizedTrackingNumber = normalize(trackingNumber);
@@ -105,12 +108,43 @@ export async function syncFulfillmentTrackingStateFromPackage(
   }
 
   let resolvedShopId = normalize(shopId);
-  if (!resolvedShopId) {
-    const order = await prisma.order.findUnique({
+  let resolvedPostCode = normalize(postCode);
+
+  let orderLookup:
+    | {
+        shopId?: string | null;
+        recipientAddress?: { postalCode?: string | null } | null;
+        channelData?: string | null;
+      }
+    | null = null;
+
+  if (!resolvedShopId || !resolvedPostCode) {
+    orderLookup = await prisma.order.findUnique({
       where: { id: orderId },
-      select: { shopId: true },
+      select: {
+        shopId: true,
+        recipientAddress: { select: { postalCode: true } },
+        channelData: true,
+      },
     });
-    resolvedShopId = normalize(order?.shopId);
+  }
+
+  if (!resolvedShopId) {
+    resolvedShopId = normalize(orderLookup?.shopId);
+  }
+
+  if (!resolvedPostCode) {
+    resolvedPostCode = normalize(orderLookup?.recipientAddress?.postalCode);
+    if (!resolvedPostCode && orderLookup?.channelData) {
+      try {
+        const parsed = JSON.parse(orderLookup.channelData);
+        resolvedPostCode = normalize(
+          parsed?.recipientAddress?.postalCode ?? parsed?.postalCode ?? parsed?.recipient?.postalCode ?? null
+        );
+      } catch (error) {
+        console.warn("Failed to parse order channelData for postal code", { orderId, error });
+      }
+    }
   }
 
   if (!resolvedShopId) {
@@ -156,13 +190,17 @@ export async function syncFulfillmentTrackingStateFromPackage(
     return;
   }
 
+  const job: TrackingJob = {
+    tracking_id: normalizedTrackingNumber,
+    provider: providerName?.toLocaleLowerCase() || providerSlug,
+  };
+
+  if (resolvedPostCode) {
+    job.post_code = resolvedPostCode;
+  }
+
   await triggerTrackingService({
-    jobs: [
-      {
-        tracking_id: normalizedTrackingNumber,
-        provider: providerSlug,
-      },
-    ],
+    jobs: [job],
   });
 }
 
@@ -180,6 +218,11 @@ export async function triggerTrackingForOrders(
       id: true,
       shopId: true,
       channelData: true,
+      recipientAddress: {
+        select: {
+          postalCode: true,
+        },
+      },
       packages: {
         select: {
           trackingNumber: true,
@@ -195,6 +238,25 @@ export async function triggerTrackingForOrders(
 
   for (const order of orders) {
     const trackingNumbers = new Set<string>();
+    let parsedChannelData: any = null;
+
+    if (order.channelData) {
+      try {
+        parsedChannelData = JSON.parse(order.channelData);
+      } catch (error) {
+        console.warn("Failed to parse order channelData for tracking", { orderId: order.id, error });
+        parsedChannelData = null;
+      }
+    }
+
+    const orderPostalCode =
+      normalize(order.recipientAddress?.postalCode) ??
+      normalize(
+        parsedChannelData?.recipientAddress?.postalCode ??
+          parsedChannelData?.postalCode ??
+          parsedChannelData?.recipient?.postalCode ??
+          null
+      );
 
     for (const pkg of order.packages) {
       const normalized = normalize(pkg.trackingNumber);
@@ -209,25 +271,41 @@ export async function triggerTrackingForOrders(
       seenJobs.add(key);
 
       trackingNumbers.add(normalized);
-      jobs.push({ tracking_id: normalized, provider: providerSlug });
+      const job: TrackingJob = {
+        tracking_id: normalized,
+        provider: pkg.shippingProviderName?.toLocaleLowerCase() || providerSlug,
+      };
+
+      if (orderPostalCode) {
+        job.post_code = orderPostalCode;
+      }
+
+      jobs.push(job);
     }
 
-    if (trackingNumbers.size === 0 && order.channelData) {
-      try {
-        const parsed = JSON.parse(order.channelData);
-        const fallbackTracking = normalize(parsed?.trackingNumber);
-        const providerSlug = toProviderSlug(parsed?.shippingProviderId, parsed?.shippingProvider);
+    if (trackingNumbers.size === 0 && parsedChannelData) {
+      const fallbackTracking = normalize(parsedChannelData?.trackingNumber);
+      const providerSlug = toProviderSlug(
+        parsedChannelData?.shippingProviderId,
+        parsedChannelData?.shippingProvider
+      );
 
-        if (fallbackTracking && providerSlug && !trackingNumbers.has(fallbackTracking)) {
-          const key = `${fallbackTracking}|${providerSlug}`;
-          if (!seenJobs.has(key)) {
-            seenJobs.add(key);
-            trackingNumbers.add(fallbackTracking);
-            jobs.push({ tracking_id: fallbackTracking, provider: providerSlug });
+      if (fallbackTracking && providerSlug && !trackingNumbers.has(fallbackTracking)) {
+        const key = `${fallbackTracking}|${providerSlug}`;
+        if (!seenJobs.has(key)) {
+          seenJobs.add(key);
+          trackingNumbers.add(fallbackTracking);
+          const job: TrackingJob = {
+            tracking_id: fallbackTracking,
+            provider: providerSlug,
+          };
+
+          if (orderPostalCode) {
+            job.post_code = orderPostalCode;
           }
+
+          jobs.push(job);
         }
-      } catch (error) {
-        console.warn("Failed to parse order channelData for tracking", { orderId: order.id, error });
       }
     }
   }

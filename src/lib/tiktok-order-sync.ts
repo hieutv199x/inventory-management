@@ -173,6 +173,37 @@ export class TikTokOrderSync {
         }
     }
 
+    private async notifyOrderViaTelegram(order: any, reason: string): Promise<void> {
+        const orgId = this.credentials.organization?.id ?? null;
+        if (!orgId) {
+            return;
+        }
+
+        try {
+            await notifyNewOrderViaTelegram(prisma, {
+                orgId,
+                orderId: order.id,
+                status: order.status,
+                totalAmount: order.payment?.totalAmount ?? null,
+                currency: order.payment?.currency ?? null,
+                buyerName: order.recipientAddress?.name ?? null,
+                buyerEmail: order.buyerEmail ?? null,
+                shopName: this.credentials.managedName ?? this.credentials.shopName ?? "TikTok Shop",
+                channel: 'TikTok',
+                createdAt: order.createTime ?? null,
+                lineItems: Array.isArray(order.lineItems)
+                    ? order.lineItems.map((item: any) => ({
+                        productName: item.productName,
+                        quantity: item.quantity ?? item.qty ?? 1,
+                        salePrice: item.salePrice
+                    }))
+                    : [],
+            });
+        } catch (error) {
+            console.warn(`Failed to dispatch Telegram notification (${reason}) for order ${order.id}:`, error);
+        }
+    }
+
     async syncOrders(options: OrderSyncOptions): Promise<OrderSyncResult> {
         const startTime = Date.now();
         let syncResults: OrderSyncResult = {
@@ -394,10 +425,12 @@ export class TikTokOrderSync {
             const orderIds = orders.map(o => o.id);
             const existingOrders = await prisma.order.findMany({
                 where: { orderId: { in: orderIds }, orgId: this.credentials.organization?.id },
-                select: { id: true, orderId: true }
+                select: { id: true, orderId: true, status: true }
             });
 
-            const existingOrderMap = new Map(existingOrders.map(o => [o.orderId, o.id]));
+            const existingOrderMap = new Map<string, { id: string; status: string }>(
+                existingOrders.map(o => [o.orderId, { id: o.id, status: o.status }])
+            );
 
             for (const order of orders) {
                 try {
@@ -482,7 +515,9 @@ export class TikTokOrderSync {
                     };
 
                     if (existingOrderMap.has(order.id)) {
-                        const prismaOrderId = existingOrderMap.get(order.id)!;
+                        const existingEntry = existingOrderMap.get(order.id)!;
+                        const prismaOrderId = existingEntry.id;
+                        const previousStatus = existingEntry.status;
                         // Update existing order with price details
                         await prisma.order.update({
                             where: { id: prismaOrderId },
@@ -525,6 +560,15 @@ export class TikTokOrderSync {
                             search_time_lt: Math.floor(new Date().setHours(23, 59, 59, 999) / 1000),
                             page_size: 10
                         });
+
+                        const previousStatusUpper = (previousStatus ?? "").toUpperCase();
+                        const newStatusUpper = (orderData.status ?? "UNKNOWN").toUpperCase();
+
+                        if (newStatusUpper === "AWAITING_SHIPMENT" && newStatusUpper !== previousStatusUpper) {
+                            await this.notifyOrderViaTelegram(order, "status awaiting_shipment");
+                        }
+
+                        existingEntry.status = orderData.status ?? existingEntry.status;
 
                         updated++;
                     } else {
@@ -1182,34 +1226,18 @@ export class TikTokOrderSync {
             }
         }
 
-        const orgId = this.credentials.organization?.id ?? null;
-        if (!existing?.id && orgId) {
-            try {
-                await notifyNewOrderViaTelegram(prisma, {
-                    orgId,
-                    orderId: order.id,
-                    status: order.status,
-                    totalAmount: order.payment?.totalAmount ?? null,
-                    currency: order.payment?.currency ?? null,
-                    buyerName: order.recipientAddress?.name ?? null,
-                    buyerEmail: order.buyerEmail ?? null,
-                    shopName: this.credentials.managedName ?? this.credentials.shopName ?? "TikTok Shop",
-                    channel: 'TikTok',
-                    createdAt: order.createTime ?? null,
-                    lineItems: Array.isArray(order.lineItems)
-                        ? order.lineItems.map((item: any) => ({
-                            productName: item.productName,
-                            quantity: item.quantity ?? item.qty ?? 1,
-                            salePrice: item.salePrice
-                        }))
-                        : []
-                });
-            } catch (error) {
-                console.warn(`Failed to dispatch Telegram notification for new order ${order.id}:`, error);
-            }
+        if (!existing?.id) {
+            await this.notifyOrderViaTelegram(order, "new order");
         }
 
         if (isUpdate && existing?.status !== persistedOrder.status) {
+            const previousStatusUpper = (existing?.status ?? "").toUpperCase();
+            const newStatusUpper = (persistedOrder.status ?? "").toUpperCase();
+
+            if (newStatusUpper === "AWAITING_SHIPMENT" && newStatusUpper !== previousStatusUpper) {
+                await this.notifyOrderViaTelegram(order, "status awaiting_shipment");
+            }
+
             await triggerTrackingForOrders(prisma, [persistedOrder.id]);
         }
 

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, Prisma } from "@prisma/client";
 import {
     Order202309GetOrderListRequestBody,
     TikTokShopNodeApiClient,
@@ -276,8 +276,6 @@ async function processBatch(orders: any[], shopId: string, client: any, credenti
                 });
             }
 
-            
-
             // Sync order attributes like can_split, must_split
             await syncOrderCanSplitOrNot(prisma, {
                 shop_id: shopId,
@@ -312,8 +310,8 @@ async function processBatch(orders: any[], shopId: string, client: any, credenti
             where: { orderId: { in: orderIds } },
             select: { id: true, orderId: true }
         });
-    const orderIdMap = new Map(allOrders.map(o => [o.orderId, o.id]));
-    const orderDbIds = Array.from(orderIdMap.values());
+        const orderIdMap = new Map(allOrders.map(o => [o.orderId, o.id]));
+        const orderDbIds = Array.from(orderIdMap.values());
 
         // 5. Collect related entities
         const allLineItems: any[] = [];
@@ -508,14 +506,6 @@ async function processBatch(orders: any[], shopId: string, client: any, credenti
             );
         }
 
-        const ordersToTrigger = Array.from(new Set(statusChangedOrderIds))
-            .map(orderId => orderIdMap.get(orderId))
-            .filter((value): value is string => Boolean(value));
-
-        if (ordersToTrigger.length > 0) {
-            await triggerTrackingForOrders(prisma, ordersToTrigger);
-        }
-
         // 6. Replace related entities (delete + recreate for batch consistency)
         if (allLineItems.length > 0) {
             await prisma.orderLineItem.deleteMany({ where: { orderId: { in: orderDbIds } } });
@@ -562,6 +552,101 @@ async function processBatch(orders: any[], shopId: string, client: any, credenti
         if (allPackages.length > 0) {
             await prisma.orderPackage.deleteMany({ where: { orderId: { in: orderDbIds } } });
             await prisma.orderPackage.createMany({ data: allPackages });
+
+            const packagesWithTracking = allPackages.filter(pkg => {
+                if (typeof pkg.trackingNumber !== "string") {
+                    return false;
+                }
+                return pkg.trackingNumber.trim().length > 0;
+            });
+
+            if (packagesWithTracking.length > 0) {
+                const now = new Date();
+                const candidateMap = new Map<string, Prisma.FulfillmentTrackingStateCreateManyInput>();
+
+                for (const pkg of packagesWithTracking) {
+                    const trackingNumber = pkg.trackingNumber.trim();
+                    const key = `${pkg.orderId}:${trackingNumber}`;
+                    if (candidateMap.has(key)) {
+                        continue;
+                    }
+
+                    candidateMap.set(key, {
+                        orderId: pkg.orderId,
+                        trackingNumber,
+                        shopId: shopId,
+                        providerName: pkg.shippingProviderName ?? undefined,
+                        providerType: pkg.shippingType ?? undefined,
+                        providerServiceLevel: pkg.deliveryOptionName ?? undefined,
+                        status: pkg.status ?? undefined,
+                        orgId: pkg.orgId ?? org.id,
+                        createdAt: now,
+                        updatedAt: now,
+                    });
+                }
+
+                const candidateEntries = Array.from(candidateMap.entries());
+                if (candidateEntries.length > 0) {
+                    const existingStates = await prisma.fulfillmentTrackingState.findMany({
+                        where: {
+                            OR: candidateEntries.map(([, state]) => ({
+                                orderId: state.orderId,
+                                trackingNumber: state.trackingNumber,
+                            })),
+                        },
+                        select: { orderId: true, trackingNumber: true },
+                    });
+
+                    const existingKeys = new Set(
+                        existingStates.map(state => `${state.orderId}:${state.trackingNumber}`)
+                    );
+
+                    const statesToInsert = candidateEntries
+                        .filter(([key]) => !existingKeys.has(key))
+                        .map(([, state]) => state);
+
+                    if (statesToInsert.length > 0) {
+                        const orderPackagesForStates = await prisma.orderPackage.findMany({
+                            where: {
+                                OR: statesToInsert.map(state => ({
+                                    orderId: state.orderId,
+                                    trackingNumber: state.trackingNumber,
+                                })),
+                            },
+                            select: { id: true, orderId: true, trackingNumber: true },
+                        });
+
+                        const orderPackageIdMap = new Map<string, string>(
+                            orderPackagesForStates.flatMap(pkg => {
+                                if (typeof pkg.trackingNumber !== "string") {
+                                    return [] as Array<[string, string]>;
+                                }
+                                const trackingNumber = pkg.trackingNumber.trim();
+                                if (trackingNumber.length === 0) {
+                                    return [] as Array<[string, string]>;
+                                }
+                                return [[`${pkg.orderId}:${trackingNumber}`, pkg.id]];
+                            })
+                        );
+
+                        const statesWithPackageLink = statesToInsert.map(state => {
+                            const key = `${state.orderId}:${state.trackingNumber}`;
+                            const orderPackageId = orderPackageIdMap.get(key);
+                            return orderPackageId ? { ...state, orderPackageId } : state;
+                        });
+
+                        await prisma.fulfillmentTrackingState.createMany({
+                            data: statesWithPackageLink,
+                        });
+                    }
+                }
+
+                // call triggerTrackingForOrders for these orders
+                await triggerTrackingForOrders(prisma, Array.from(new Set(packagesWithTracking.map(p => {
+                    return p.orderId;
+                }))).filter((v): v is string => v !== null));
+                
+            }
         }
 
     } catch (error) {
