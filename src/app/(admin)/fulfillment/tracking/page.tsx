@@ -65,6 +65,16 @@ interface ApiResponse {
   error?: string;
 }
 
+interface ProcessingSummary {
+  warning: number;
+  critical: number;
+}
+
+interface ProcessingSummaryResponse {
+  data?: ProcessingSummary;
+  error?: string;
+}
+
 type BadgeColor =
   | 'primary'
   | 'success'
@@ -81,6 +91,11 @@ const DEFAULT_PAGINATION: PaginationMeta = {
   itemsPerPage: 20,
   hasNext: false,
   hasPrev: false,
+};
+
+const DEFAULT_PROCESSING_SUMMARY: ProcessingSummary = {
+  warning: 0,
+  critical: 0,
 };
 
 const formatDateTime = (value?: string | null) => {
@@ -157,6 +172,7 @@ export default function FulfillmentTrackingPage() {
   const [pageSize] = useState<number>(20);
   const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
   const [syncingStates, setSyncingStates] = useState<Record<string, boolean>>({});
+  const [processingSummary, setProcessingSummary] = useState<ProcessingSummary>(DEFAULT_PROCESSING_SUMMARY);
 
   const fetchStates = useCallback(async () => {
     setIsLoading(true);
@@ -203,6 +219,38 @@ export default function FulfillmentTrackingPage() {
     fetchStates();
   }, [fetchStates]);
 
+  const fetchProcessingSummary = useCallback(async () => {
+    try {
+      const params = new URLSearchParams();
+
+      if (selectedShopId) {
+        params.append('shopAuthId', selectedShopId);
+      }
+
+      const queryString = params.toString();
+      const response = await httpClient.get<ProcessingSummaryResponse>(
+        `/fulfillment/tracking-states/processing-summary${queryString ? `?${queryString}` : ''}`
+      );
+
+      if (response?.error) {
+        throw new Error(response.error);
+      }
+
+      const summary = response?.data ?? DEFAULT_PROCESSING_SUMMARY;
+      setProcessingSummary({
+        warning: summary.warning ?? 0,
+        critical: summary.critical ?? 0,
+      });
+    } catch (error) {
+      console.error('Failed to load processing summary', error);
+      setProcessingSummary({ ...DEFAULT_PROCESSING_SUMMARY });
+    }
+  }, [selectedShopId]);
+
+  useEffect(() => {
+    fetchProcessingSummary();
+  }, [fetchProcessingSummary]);
+
   const handleSearchSubmit = useCallback(
     (event: React.FormEvent<HTMLFormElement>) => {
       event.preventDefault();
@@ -221,6 +269,7 @@ export default function FulfillmentTrackingPage() {
 
   const handleRefresh = () => {
     fetchStates();
+    fetchProcessingSummary();
   };
 
   const handleSyncState = useCallback(async (trackingStateId: string) => {
@@ -232,6 +281,7 @@ export default function FulfillmentTrackingPage() {
       await httpClient.post(`/fulfillment/tracking-states/${trackingStateId}/sync`);
       toast.success(t('fulfillmentTracking.toast.syncSuccess'));
       await fetchStates();
+      await fetchProcessingSummary();
     } catch (error) {
       const message = error instanceof Error ? error.message : t('fulfillmentTracking.toast.syncError');
       toast.error(message || t('fulfillmentTracking.toast.syncError'));
@@ -242,12 +292,36 @@ export default function FulfillmentTrackingPage() {
         return next;
       });
     }
-  }, [fetchStates, t]);
+  }, [fetchProcessingSummary, fetchStates, t]);
 
   const canGoPrev = pagination.hasPrev && page > 1;
   const canGoNext = pagination.hasNext;
 
   const tableRows = useMemo(() => states, [states]);
+
+  const warningBoardClasses = processingSummary.warning > 0
+    ? 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-400/40 dark:bg-amber-500/10 dark:text-amber-100'
+    : 'border-gray-200 bg-white text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
+
+  const warningCountClasses = processingSummary.warning > 0
+    ? 'text-3xl font-semibold text-amber-600 dark:text-amber-200'
+    : 'text-3xl font-semibold text-gray-700 dark:text-gray-100';
+
+  const warningBadgeClasses = processingSummary.warning > 0
+    ? 'rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:bg-amber-500/20 dark:text-amber-100'
+    : 'rounded-full bg-gray-100 px-2 py-0.5 text-xs font-semibold text-gray-500 dark:bg-gray-800 dark:text-gray-300';
+
+  const criticalBoardClasses = processingSummary.critical > 0
+    ? 'border-red-300 bg-red-50 text-red-900 dark:border-red-400/40 dark:bg-red-500/10 dark:text-red-100'
+    : 'border-gray-200 bg-white text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
+
+  const criticalCountClasses = processingSummary.critical > 0
+    ? 'text-3xl font-semibold text-red-600 dark:text-red-200'
+    : 'text-3xl font-semibold text-gray-700 dark:text-gray-100';
+
+  const criticalBadgeClasses = processingSummary.critical > 0
+    ? 'rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700 dark:bg-red-500/20 dark:text-red-100'
+    : 'rounded-full bg-gray-100 px-2 py-0.5 text-xs font-semibold text-gray-500 dark:bg-gray-800 dark:text-gray-300';
 
   return (
     <div className="space-y-6">
@@ -329,6 +403,58 @@ export default function FulfillmentTrackingPage() {
         </div>
       )}
 
+      <div className="space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+            {t('fulfillmentTracking.kanban.title')}
+          </h2>
+          <span className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
+            {formatDateTime(new Date().toISOString())}
+          </span>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className={`rounded-lg border px-5 py-4 shadow-sm transition ${warningBoardClasses}`}>
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-semibold">
+                {t('fulfillmentTracking.kanban.warning.title')}
+              </span>
+              <span className={warningBadgeClasses}>8-9d</span>
+            </div>
+            <p className={`${warningCountClasses} mt-2`}>{processingSummary.warning}</p>
+            <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
+              {t('fulfillmentTracking.kanban.warning.description')}
+            </p>
+            {processingSummary.warning > 0 && (
+              <p className="mt-2 text-xs font-medium text-amber-700 dark:text-amber-200">
+                {t('fulfillmentTracking.alert.processingWarning', {
+                  count: processingSummary.warning,
+                })}
+              </p>
+            )}
+          </div>
+
+          <div className={`rounded-lg border px-5 py-4 shadow-sm transition ${criticalBoardClasses}`}>
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-semibold">
+                {t('fulfillmentTracking.kanban.critical.title')}
+              </span>
+              <span className={criticalBadgeClasses}>10+d</span>
+            </div>
+            <p className={`${criticalCountClasses} mt-2`}>{processingSummary.critical}</p>
+            <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
+              {t('fulfillmentTracking.kanban.critical.description')}
+            </p>
+            {processingSummary.critical > 0 && (
+              <p className="mt-2 text-xs font-medium text-red-700 dark:text-red-200">
+                {t('fulfillmentTracking.alert.processingCritical', {
+                  count: processingSummary.critical,
+                })}
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
       <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
         <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
           <thead className="bg-gray-50 dark:bg-gray-800">
@@ -532,11 +658,10 @@ export default function FulfillmentTrackingPage() {
             type="button"
             disabled={!canGoPrev}
             onClick={() => canGoPrev && setPage((prev) => Math.max(1, prev - 1))}
-            className={`inline-flex items-center justify-center rounded-md border px-3 py-1.5 text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 ${
-              canGoPrev
-                ? 'border-gray-300 bg-white text-gray-700 shadow-sm hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-white'
-                : 'cursor-not-allowed border-gray-200 bg-gray-100 text-gray-400 dark:border-gray-800 dark:bg-gray-800 dark:text-gray-500'
-            }`}
+            className={`inline-flex items-center justify-center rounded-md border px-3 py-1.5 text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 ${canGoPrev
+              ? 'border-gray-300 bg-white text-gray-700 shadow-sm hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-white'
+              : 'cursor-not-allowed border-gray-200 bg-gray-100 text-gray-400 dark:border-gray-800 dark:bg-gray-800 dark:text-gray-500'
+              }`}
           >
             {t('fulfillmentTracking.pagination.prev')}
           </button>
@@ -544,11 +669,10 @@ export default function FulfillmentTrackingPage() {
             type="button"
             disabled={!canGoNext}
             onClick={() => canGoNext && setPage((prev) => prev + 1)}
-            className={`inline-flex items-center justify-center rounded-md border px-3 py-1.5 text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 ${
-              canGoNext
-                ? 'border-gray-300 bg-white text-gray-700 shadow-sm hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-white'
-                : 'cursor-not-allowed border-gray-200 bg-gray-100 text-gray-400 dark:border-gray-800 dark:bg-gray-800 dark:text-gray-500'
-            }`}
+            className={`inline-flex items-center justify-center rounded-md border px-3 py-1.5 text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 ${canGoNext
+              ? 'border-gray-300 bg-white text-gray-700 shadow-sm hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-white'
+              : 'cursor-not-allowed border-gray-200 bg-gray-100 text-gray-400 dark:border-gray-800 dark:bg-gray-800 dark:text-gray-500'
+              }`}
           >
             {t('fulfillmentTracking.pagination.next')}
           </button>
