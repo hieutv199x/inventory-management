@@ -9,6 +9,7 @@ import {
   RefreshCcw,
   Search,
 } from 'lucide-react';
+import { toast } from 'react-hot-toast';
 
 import { httpClient } from '@/lib/http-client';
 import ShopSelector from '@/components/ui/ShopSelector';
@@ -88,16 +89,16 @@ const formatDateTime = (value?: string | null) => {
   if (Number.isNaN(parsed.getTime())) {
     return 'N/A';
   }
-  return format(parsed, 'PPpp');
+  return format(parsed, "PPpp 'GMT'xxx");
 };
 
 const resolveStatusColor = (status?: string | null): BadgeColor => {
   if (!status) return 'light';
   const normalized = status.toLowerCase();
-  if (normalized.includes('deliver')) return 'success';
-  if (normalized.includes('fail') || normalized.includes('cancel')) return 'error';
-  if (normalized.includes('out for')) return 'warning';
-  if (normalized.includes('transit') || normalized.includes('processing')) return 'info';
+  if (normalized === 'completed' || normalized.includes('deliver')) return 'success';
+  if (normalized === 'cancelled' || normalized.includes('cancel') || normalized.includes('fail')) return 'error';
+  if (normalized === 'processing') return 'warning';
+  if (normalized === 'fulfilling' || normalized.includes('transit')) return 'info';
   return 'primary';
 };
 
@@ -155,6 +156,7 @@ export default function FulfillmentTrackingPage() {
   const [page, setPage] = useState<number>(1);
   const [pageSize] = useState<number>(20);
   const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
+  const [syncingStates, setSyncingStates] = useState<Record<string, boolean>>({});
 
   const fetchStates = useCallback(async () => {
     setIsLoading(true);
@@ -221,6 +223,27 @@ export default function FulfillmentTrackingPage() {
     fetchStates();
   };
 
+  const handleSyncState = useCallback(async (trackingStateId: string) => {
+    if (!trackingStateId) return;
+
+    setSyncingStates((prev) => ({ ...prev, [trackingStateId]: true }));
+
+    try {
+      await httpClient.post(`/fulfillment/tracking-states/${trackingStateId}/sync`);
+      toast.success(t('fulfillmentTracking.toast.syncSuccess'));
+      await fetchStates();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : t('fulfillmentTracking.toast.syncError');
+      toast.error(message || t('fulfillmentTracking.toast.syncError'));
+    } finally {
+      setSyncingStates((prev) => {
+        const next = { ...prev };
+        delete next[trackingStateId];
+        return next;
+      });
+    }
+  }, [fetchStates, t]);
+
   const canGoPrev = pagination.hasPrev && page > 1;
   const canGoNext = pagination.hasNext;
 
@@ -251,9 +274,6 @@ export default function FulfillmentTrackingPage() {
           </div>
 
           <div className="flex flex-col gap-2">
-            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-              {t('common.status')}
-            </label>
             <select
               value={statusFilter}
               onChange={(event) => {
@@ -263,11 +283,10 @@ export default function FulfillmentTrackingPage() {
               className="w-56 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
             >
               <option value="">{t('orders.all_status')}</option>
-              <option value="DELIVERED">Delivered</option>
-              <option value="OUT_FOR_DELIVERY">Out for delivery</option>
-              <option value="IN_TRANSIT">In transit</option>
-              <option value="PROCESSING">Processing</option>
-              <option value="FAILED">Failed</option>
+              <option value="PROCESSING">{t('fulfillmentTracking.status.processing')}</option>
+              <option value="FULFILLING">{t('fulfillmentTracking.status.fulfilling')}</option>
+              <option value="COMPLETED">{t('fulfillmentTracking.status.completed')}</option>
+              <option value="CANCELLED">{t('fulfillmentTracking.status.cancelled')}</option>
             </select>
           </div>
         </div>
@@ -333,6 +352,9 @@ export default function FulfillmentTrackingPage() {
                 {t('fulfillmentTracking.table.lastEvent')}
               </th>
               <th scope="col" className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                {t('fulfillmentTracking.table.sync')}
+              </th>
+              <th scope="col" className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
                 {t('fulfillmentTracking.table.timeline')}
               </th>
             </tr>
@@ -340,7 +362,7 @@ export default function FulfillmentTrackingPage() {
           <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
             {isLoading && (
               <tr>
-                <td colSpan={7} className="px-4 py-6 text-center text-sm text-gray-500 dark:text-gray-300">
+                <td colSpan={8} className="px-4 py-6 text-center text-sm text-gray-500 dark:text-gray-300">
                   <span className="inline-flex items-center gap-2">
                     <Loader2 className="h-4 w-4 animate-spin" />
                     {t('common.loading')}
@@ -351,7 +373,7 @@ export default function FulfillmentTrackingPage() {
 
             {!isLoading && tableRows.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-6 text-center text-sm text-gray-500 dark:text-gray-300">
+                <td colSpan={8} className="px-4 py-6 text-center text-sm text-gray-500 dark:text-gray-300">
                   {t('fulfillmentTracking.noResults')}
                 </td>
               </tr>
@@ -366,6 +388,9 @@ export default function FulfillmentTrackingPage() {
               const orderLabel = state.order?.orderId || 'N/A';
               const lastEventLabel = latestEntry ? `${formatDateTime(latestEntry.occurredAt)}${latestEntry.title ? ` · ${latestEntry.title}` : ''}` : 'N/A';
               const isExpanded = Boolean(expandedRows[state.id]);
+              const isSyncing = Boolean(syncingStates[state.id]);
+              const isCompletedStatus = (state.status ?? '').toLowerCase() === 'completed';
+              const isSyncDisabled = isSyncing || isCompletedStatus;
 
               return (
                 <React.Fragment key={state.id}>
@@ -409,6 +434,25 @@ export default function FulfillmentTrackingPage() {
                     <td className="px-4 py-3 text-right text-sm">
                       <button
                         type="button"
+                        onClick={() => {
+                          if (isCompletedStatus) return;
+                          handleSyncState(state.id);
+                        }}
+                        disabled={isSyncDisabled}
+                        title={isCompletedStatus ? t('fulfillmentTracking.sync.disabledCompleted') : undefined}
+                        className="inline-flex items-center gap-1 rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-700 dark:text-gray-100 dark:hover:bg-gray-800"
+                      >
+                        {isSyncing ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <RefreshCcw className="h-4 w-4" />
+                        )}
+                        {t('fulfillmentTracking.table.sync')}
+                      </button>
+                    </td>
+                    <td className="px-4 py-3 text-right text-sm">
+                      <button
+                        type="button"
                         onClick={() => handleToggleRow(state.id)}
                         className="inline-flex items-center gap-1 rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 dark:border-gray-700 dark:text-gray-100 dark:hover:bg-gray-800"
                       >
@@ -429,7 +473,7 @@ export default function FulfillmentTrackingPage() {
 
                   {isExpanded && (
                     <tr className="bg-gray-50 dark:bg-gray-900/60">
-                      <td colSpan={7} className="px-6 py-5">
+                      <td colSpan={8} className="px-6 py-5">
                         {state.timelineEntries.length === 0 ? (
                           <p className="text-sm text-gray-500 dark:text-gray-400">
                             {t('fulfillmentTracking.timeline.empty')}
