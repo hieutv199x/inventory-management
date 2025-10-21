@@ -32,6 +32,10 @@
         {
             "path": "/api/jobs/refresh-token",
             "schedule": "0 0 */3 * *"
+        },
+        {
+            "path": "/api/jobs/tracking-alerts",
+            "schedule": "0 2 * * *"
         }
     ]
 }
