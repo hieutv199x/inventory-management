@@ -1449,51 +1449,52 @@ export default function PermissionsPage() {
 
             <div>
               <Label>{t('permissions.assign_modal.shop')}</Label>
-              {paginatedAssignableShops.length === 0 ? (
-                <div className="py-2 text-sm text-gray-500 dark:text-gray-400 vietnamese-text">
-                  {t('permissions.assign_modal.no_shops_available')}
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="flex-1">
-                      <div className="relative">
-                        <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 h-4 w-4" />
-                        <input
-                          type="text"
-                          value={assignModalShopFilter}
-                          onChange={(e) => {
-                            setAssignModalShopFilter(e.target.value);
-                            setAssignModalShopPage(1);
-                          }}
-                          placeholder={t('permissions.assign_modal.filter_placeholder')}
-                          className="w-full pl-10 pr-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500 vietnamese-text"
-                        />
-                      </div>
-                      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 vietnamese-text">
-                        {t('permissions.assign_modal.shop_helper')}
-                      </p>
+              <div className="space-y-3">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex-1">
+                    <div className="relative">
+                      <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 h-4 w-4" />
+                      <input
+                        type="text"
+                        value={assignModalShopFilter}
+                        onChange={(e) => {
+                          setAssignModalShopFilter(e.target.value);
+                          setAssignModalShopPage(1);
+                        }}
+                        placeholder={t('permissions.assign_modal.filter_placeholder')}
+                        className="w-full pl-10 pr-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500 vietnamese-text"
+                      />
                     </div>
-                    <div className="flex items-center gap-2 justify-between sm:justify-end">
-                      <button
-                        type="button"
-                        onClick={handleToggleAllAssignableShops}
-                        className="text-sm text-brand-600 hover:text-brand-700 dark:text-brand-300 dark:hover:text-brand-200 font-medium"
-                      >
-                        {areAllAssignableShopsSelected
-                          ? t('permissions.assign_modal.clear_all')
-                          : t('permissions.assign_modal.select_all')}
-                      </button>
-                      <span className="text-xs text-gray-500 dark:text-gray-400 vietnamese-text">
-                        {t('permissions.assign_modal.pagination_summary', {
-                          page: assignModalShopPage,
-                          totalPages: assignModalPageCount
-                        })}
-                      </span>
-                    </div>
+                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 vietnamese-text">
+                      {t('permissions.assign_modal.shop_helper')}
+                    </p>
                   </div>
+                  <div className="flex items-center gap-2 justify-between sm:justify-end">
+                    <button
+                      type="button"
+                      onClick={handleToggleAllAssignableShops}
+                      className="text-sm text-brand-600 hover:text-brand-700 dark:text-brand-300 dark:hover:text-brand-200 font-medium"
+                      disabled={paginatedAssignableShops.length === 0}
+                    >
+                      {areAllAssignableShopsSelected
+                        ? t('permissions.assign_modal.clear_all')
+                        : t('permissions.assign_modal.select_all')}
+                    </button>
+                    <span className="text-xs text-gray-500 dark:text-gray-400 vietnamese-text">
+                      {t('permissions.assign_modal.pagination_summary', {
+                        page: assignModalShopPage,
+                        totalPages: assignModalPageCount
+                      })}
+                    </span>
+                  </div>
+                </div>
 
-                  <div className="max-h-60 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-md divide-y divide-gray-200 dark:divide-gray-700">
+                {paginatedAssignableShops.length === 0 ? (
+                  <div className="py-2 text-sm text-gray-500 dark:text-gray-400 vietnamese-text">
+                    {t('permissions.assign_modal.no_shops_available')}
+                  </div>
+                ) : (
+                  <div className="max-h-50 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-md divide-y divide-gray-200 dark:divide-gray-700">
                     <ul className="divide-y divide-gray-200 dark:divide-gray-700">
                       {paginatedAssignableShops.map((shop) => {
                         const displayName = shop.managedName ?? shop.shopName ?? shop.shopId ?? 'N/A';
@@ -1527,67 +1528,67 @@ export default function PermissionsPage() {
                       })}
                     </ul>
                   </div>
+                )}
 
-                  {assignModalPageCount > 1 && (
-                    <div className="flex items-center justify-between text-sm text-gray-600 dark:text-gray-400">
-                      <button
-                        type="button"
-                        onClick={() => setAssignModalShopPage((prev) => Math.max(1, prev - 1))}
-                        disabled={assignModalShopPage === 1}
-                        className="px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        {t('permissions.assign_modal.prev_page')}
-                      </button>
-                      <div className="flex items-center gap-2">
-                        <span>
-                          {t('permissions.assign_modal.page_indicator', {
-                            page: assignModalShopPage,
-                            total: assignModalPageCount
-                          })}
-                        </span>
-                        <div className="flex gap-1">
-                          {Array.from({ length: assignModalPageCount }).slice(0, 5).map((_, index) => {
-                            let pageNumber = index + 1;
-                            if (assignModalPageCount > 5) {
-                              const halfWindow = Math.floor(5 / 2);
-                              const windowStart = Math.max(1, assignModalShopPage - halfWindow);
-                              const windowEnd = Math.min(assignModalPageCount, windowStart + 4);
-                              const adjustedStart = Math.max(1, windowEnd - 4);
-                              pageNumber = adjustedStart + index;
-                              if (pageNumber > assignModalPageCount) {
-                                pageNumber = assignModalPageCount;
-                              }
+                {assignModalPageCount > 1 && paginatedAssignableShops.length > 0 && (
+                  <div className="flex items-center justify-between text-sm text-gray-600 dark:text-gray-400">
+                    <button
+                      type="button"
+                      onClick={() => setAssignModalShopPage((prev) => Math.max(1, prev - 1))}
+                      disabled={assignModalShopPage === 1}
+                      className="px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {t('permissions.assign_modal.prev_page')}
+                    </button>
+                    <div className="flex items-center gap-2">
+                      <span>
+                        {t('permissions.assign_modal.page_indicator', {
+                          page: assignModalShopPage,
+                          total: assignModalPageCount
+                        })}
+                      </span>
+                      <div className="flex gap-1">
+                        {Array.from({ length: assignModalPageCount }).slice(0, 5).map((_, index) => {
+                          let pageNumber = index + 1;
+                          if (assignModalPageCount > 5) {
+                            const halfWindow = Math.floor(5 / 2);
+                            const windowStart = Math.max(1, assignModalShopPage - halfWindow);
+                            const windowEnd = Math.min(assignModalPageCount, windowStart + 4);
+                            const adjustedStart = Math.max(1, windowEnd - 4);
+                            pageNumber = adjustedStart + index;
+                            if (pageNumber > assignModalPageCount) {
+                              pageNumber = assignModalPageCount;
                             }
+                          }
 
-                            return (
-                              <button
-                                key={pageNumber}
-                                type="button"
-                                onClick={() => setAssignModalShopPage(pageNumber)}
-                                className={`px-2.5 py-1 border rounded-md ${
-                                  assignModalShopPage === pageNumber
-                                    ? 'bg-brand-500 text-white border-brand-500'
-                                    : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
-                                }`}
-                              >
-                                {pageNumber}
-                              </button>
-                            );
-                          })}
-                        </div>
+                          return (
+                            <button
+                              key={pageNumber}
+                              type="button"
+                              onClick={() => setAssignModalShopPage(pageNumber)}
+                              className={`px-2.5 py-1 border rounded-md ${
+                                assignModalShopPage === pageNumber
+                                  ? 'bg-brand-500 text-white border-brand-500'
+                                  : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
+                              }`}
+                            >
+                              {pageNumber}
+                            </button>
+                          );
+                        })}
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => setAssignModalShopPage((prev) => Math.min(assignModalPageCount, prev + 1))}
-                        disabled={assignModalShopPage === assignModalPageCount}
-                        className="px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        {t('permissions.assign_modal.next_page')}
-                      </button>
                     </div>
-                  )}
-                </div>
-              )}
+                    <button
+                      type="button"
+                      onClick={() => setAssignModalShopPage((prev) => Math.min(assignModalPageCount, prev + 1))}
+                      disabled={assignModalShopPage === assignModalPageCount}
+                      className="px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {t('permissions.assign_modal.next_page')}
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
 
             <div>
