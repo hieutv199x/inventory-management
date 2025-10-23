@@ -641,11 +641,6 @@ async function processBatch(orders: any[], shopId: string, client: any, credenti
                     }
                 }
 
-                // call triggerTrackingForOrders for these orders
-                await triggerTrackingForOrders(prisma, Array.from(new Set(packagesWithTracking.map(p => {
-                    return p.orderId;
-                }))).filter((v): v is string => v !== null));
-                
             }
         }
 

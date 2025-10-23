@@ -1422,7 +1422,7 @@ export default function PermissionsPage() {
 
       {/* Assign Role Modal */}
       {showAssignModal && (
-        <Modal isOpen={showAssignModal} onClose={closeModals} className="max-w-lg p-6 max-h-full overflow-y-auto">
+        <Modal isOpen={showAssignModal} onClose={closeModals} className="p-6 max-h-full overflow-y-auto w-[70vw] max-w-[70vw]">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white vietnamese-text">
               {t('permissions.assign_modal.title')}
@@ -1494,8 +1494,8 @@ export default function PermissionsPage() {
                     {t('permissions.assign_modal.no_shops_available')}
                   </div>
                 ) : (
-                  <div className="max-h-50 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-md divide-y divide-gray-200 dark:divide-gray-700">
-                    <ul className="divide-y divide-gray-200 dark:divide-gray-700">
+                  <div className="max-h-96 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-md p-3">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                       {paginatedAssignableShops.map((shop) => {
                         const displayName = shop.managedName ?? shop.shopName ?? shop.shopId ?? 'N/A';
                         const secondary = shop.shopId;
@@ -1503,30 +1503,30 @@ export default function PermissionsPage() {
                         const isSelected = formData.shopIds.includes(shop.id);
 
                         return (
-                          <li key={shop.id} className="bg-white dark:bg-gray-800">
-                            <label className="flex items-start gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                          <div key={shop.id} className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md">
+                            <label className="flex items-start gap-3 px-3 py-2.5 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors rounded-md">
                               <input
                                 type="checkbox"
                                 className="mt-1 h-4 w-4 rounded border-gray-300 text-brand-500 focus:ring-brand-500"
                                 checked={isSelected}
                                 onChange={() => handleToggleShopSelection(shop.id)}
                               />
-                              <div className="flex-1">
-                                <div className="text-sm font-medium text-gray-900 dark:text-white vietnamese-text">
+                              <div className="flex-1 min-w-0">
+                                <div className="text-sm font-medium text-gray-900 dark:text-white vietnamese-text truncate">
                                   {displayName}
                                 </div>
                                 {(secondary || groupName) && (
-                                  <div className="mt-0.5 text-xs text-gray-500 dark:text-gray-400 vietnamese-text space-x-2">
-                                    {secondary && <span>{t('permissions.assign_modal.shop_code', { code: secondary })}</span>}
-                                    {groupName && <span>{t('permissions.assign_modal.shop_group', { group: groupName })}</span>}
+                                  <div className="mt-0.5 text-xs text-gray-500 dark:text-gray-400 vietnamese-text space-y-0.5">
+                                    {secondary && <div className="truncate">{t('permissions.assign_modal.shop_code', { code: secondary })}</div>}
+                                    {groupName && <div className="truncate">{t('permissions.assign_modal.shop_group', { group: groupName })}</div>}
                                   </div>
                                 )}
                               </div>
                             </label>
-                          </li>
+                          </div>
                         );
                       })}
-                    </ul>
+                    </div>
                   </div>
                 )}
 
