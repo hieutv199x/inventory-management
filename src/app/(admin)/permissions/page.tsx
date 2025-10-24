@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { FaUsers, FaPlus, FaEdit, FaTrash, FaTimes, FaSearch, FaLayerGroup, FaUserPlus, FaStore } from 'react-icons/fa';
+import { FaUsers, FaPlus, FaEdit, FaTrash, FaTimes, FaSearch, FaLayerGroup, FaUserPlus, FaStore, FaChevronDown, FaChevronRight } from 'react-icons/fa';
 
 const ASSIGN_MODAL_SHOP_PAGE_SIZE = 20;
 import { userShopRoleApi, userApi, shopApi, shopGroupApi } from '@/lib/api-client';
@@ -28,6 +28,7 @@ interface UserShopRole {
   shop: {
     id: string;
     shopName: string;
+    managedName?: string | null;
   };
 }
 
@@ -96,6 +97,7 @@ export default function PermissionsPage() {
   const userId = user?.id ?? null;
   const userRole = user?.role ?? null;
   const [userRoles, setUserRoles] = useState<UserShopRole[]>([]);
+  const [allUserRoles, setAllUserRoles] = useState<UserShopRole[]>([]); // Store all roles for client-side filtering
   const [users, setUsers] = useState<User[]>([]);
   const [shops, setShops] = useState<Shop[]>([]);
   const [loading, setLoading] = useState(true);
@@ -207,25 +209,19 @@ export default function PermissionsPage() {
     [mapShopGroup]
   );
 
-  // Fetch user roles with pagination and search
-  const fetchUserRoles = async (page = 1, search = '', shopFilter = 'all') => {
+  // Fetch all user roles once
+  const fetchUserRoles = async () => {
     try {
       setSearchLoading(true);
       const params = new URLSearchParams({
-        page: page.toString(),
-        limit: pagination.limit.toString(),
-        ...(search && { search }),
-        ...(shopFilter !== 'all' && { shopId: shopFilter })
+        page: '1',
+        limit: '1000' // Fetch all at once
       });
 
       const data = await userShopRoleApi.getAll(`?${params}`);
-      setUserRoles(data.userRoles || []);
-      setPagination({
-        page: data.pagination?.page || 1,
-        limit: data.pagination?.limit || 10,
-        total: data.pagination?.total || 0,
-        totalPages: data.pagination?.totalPages || 0
-      });
+      const roles = data.userRoles || [];
+      setAllUserRoles(roles);
+      setUserRoles(roles); // Initially show all
     } catch (error: any) {
       console.error('Error fetching user roles:', error);
       setError('Không thể tải danh sách quyền người dùng');
@@ -235,15 +231,46 @@ export default function PermissionsPage() {
     }
   };
 
-  // Debounced search
-  useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      fetchUserRoles(1, searchTerm, selectedShop);
-      setPagination(prev => ({ ...prev, page: 1 }));
-    }, 500); // 500ms delay
+  // Client-side filtering of user roles
+  const filteredUserRoles = useMemo(() => {
+    let filtered = allUserRoles;
 
-    return () => clearTimeout(timeoutId);
-  }, [searchTerm, selectedShop]);
+    // Apply search filter
+    if (searchTerm) {
+      const searchLower = searchTerm.toLowerCase();
+      filtered = filtered.filter(role => 
+        role.user.name.toLowerCase().includes(searchLower) ||
+        role.user.username.toLowerCase().includes(searchLower) ||
+        role.shop.shopName.toLowerCase().includes(searchLower) ||
+        (role.shop.managedName && role.shop.managedName.toLowerCase().includes(searchLower))
+      );
+    }
+
+    // Apply shop filter
+    if (selectedShop !== 'all') {
+      filtered = filtered.filter(role => role.shopId === selectedShop);
+    }
+
+    return filtered;
+  }, [allUserRoles, searchTerm, selectedShop]);
+
+  // Client-side pagination
+  const paginatedUserRoles = useMemo(() => {
+    const startIndex = (pagination.page - 1) * pagination.limit;
+    const endIndex = startIndex + pagination.limit;
+    return filteredUserRoles.slice(startIndex, endIndex);
+  }, [filteredUserRoles, pagination.page, pagination.limit]);
+
+  // Update pagination totals when filtered results change
+  useEffect(() => {
+    const totalPages = Math.ceil(filteredUserRoles.length / pagination.limit) || 1;
+    setPagination(prev => ({
+      ...prev,
+      total: filteredUserRoles.length,
+      totalPages,
+      page: Math.min(prev.page, totalPages) // Ensure page is within bounds
+    }));
+  }, [filteredUserRoles.length, pagination.limit]);
 
   // Fetch users for dropdown
   const fetchUsers = async () => {
@@ -568,6 +595,33 @@ export default function PermissionsPage() {
     setGroupShopForm({ shopIds: selected.map((option) => option.value) });
   }, []);
 
+  // Group user roles by user (using paginated results)
+  const groupedUserRoles = useMemo(() => {
+    const grouped = new Map<string, {
+      user: UserShopRole['user'];
+      roles: UserShopRole[];
+      shopCount: number;
+    }>();
+
+    paginatedUserRoles.forEach((userRole) => {
+      const existing = grouped.get(userRole.userId);
+      if (existing) {
+        existing.roles.push(userRole);
+        existing.shopCount = existing.roles.length;
+      } else {
+        grouped.set(userRole.userId, {
+          user: userRole.user,
+          roles: [userRole],
+          shopCount: 1
+        });
+      }
+    });
+
+    return Array.from(grouped.values()).sort((a, b) => 
+      a.user.name.localeCompare(b.user.name)
+    );
+  }, [paginatedUserRoles]);
+
   useEffect(() => {
     if (!canCreateGroups && showCreateGroupModal) {
       setShowCreateGroupModal(false);
@@ -616,37 +670,14 @@ export default function PermissionsPage() {
     setUserSelectPortalTarget(target);
   }, []);
 
-  // Handle pagination
+  // Handle pagination (client-side only)
   const handlePageChange = (newPage: number) => {
     setPagination(prev => ({ ...prev, page: newPage }));
-    fetchUserRoles(newPage, searchTerm, selectedShop);
   };
 
-  // Handle page size change
+  // Handle page size change (client-side only)
   const handlePageSizeChange = (newLimit: number) => {
     setPagination(prev => ({ ...prev, limit: newLimit, page: 1 }));
-    const params = new URLSearchParams({
-      page: '1',
-      limit: newLimit.toString(),
-      ...(searchTerm && { search: searchTerm }),
-      ...(selectedShop !== 'all' && { shopId: selectedShop })
-    });
-
-    setSearchLoading(true);
-    userShopRoleApi.getAll(`?${params}`).then(data => {
-      setUserRoles(data.userRoles || []);
-      setPagination({
-        page: data.pagination?.page || 1,
-        limit: data.pagination?.limit || newLimit,
-        total: data.pagination?.total || 0,
-        totalPages: data.pagination?.totalPages || 0
-      });
-    }).catch(error => {
-      console.error('Error fetching user roles:', error);
-      setError('Không thể tải danh sách quyền người dùng');
-    }).finally(() => {
-      setSearchLoading(false);
-    });
   };
 
   // Assign role to user
@@ -692,7 +723,7 @@ export default function PermissionsPage() {
       setSuccess(successMessage);
       setShowAssignModal(false);
       setFormData({ userId: '', shopIds: [], role: 'SELLER' });
-      await fetchUserRoles(pagination.page, searchTerm, selectedShop);
+      await fetchUserRoles();
     }
 
     if (lastErrorMessage && successCount < uniqueShopIds.length) {
@@ -717,7 +748,7 @@ export default function PermissionsPage() {
       setSuccess('Cập nhật quyền thành công');
       setShowEditModal(false);
       setSelectedRole(null);
-      await fetchUserRoles(pagination.page, searchTerm, selectedShop);
+      await fetchUserRoles();
     } catch (error: any) {
       setError(error.message);
     } finally {
@@ -732,7 +763,7 @@ export default function PermissionsPage() {
     try {
       await userShopRoleApi.delete(roleId);
       setSuccess('Đã xóa người dùng khỏi cửa hàng thành công');
-      await fetchUserRoles(pagination.page, searchTerm, selectedShop);
+      await fetchUserRoles();
     } catch (error: any) {
       setError(error.message);
     }
@@ -798,7 +829,7 @@ export default function PermissionsPage() {
       setSuccess(t('permissions.groups.add_user_success'));
       await Promise.all([
         fetchGroups(),
-        fetchUserRoles(pagination.page, searchTerm, selectedShop)
+        fetchUserRoles()
       ]);
       closeGroupModals();
     } catch (error: any) {
@@ -867,7 +898,7 @@ export default function PermissionsPage() {
       await Promise.all([
         fetchGroups(),
         refreshSelectedGroup(selectedGroup.id),
-        fetchUserRoles(pagination.page, searchTerm, selectedShop)
+        fetchUserRoles()
       ]);
 
       if (cascadeFailures.length > 0) {
@@ -936,6 +967,47 @@ export default function PermissionsPage() {
       role: userRole.role
     });
     setShowEditModal(true);
+  };
+
+  const openEditModalForUser = (groupedUser: { user: UserShopRole['user']; roles: UserShopRole[]; shopCount: number }) => {
+    // Use the first role as selectedRole for reference
+    setSelectedRole(groupedUser.roles[0]);
+    setFormData({
+      userId: groupedUser.user.id,
+      shopIds: groupedUser.roles.map(r => r.shopId),
+      role: groupedUser.roles[0].role // Use first role as default
+    });
+    setShowEditModal(true);
+  };
+
+  const handleRemoveUserPermissions = async (groupedUser: { user: UserShopRole['user']; roles: UserShopRole[]; shopCount: number }) => {
+    const confirmMessage = `Bạn có chắc chắn muốn xóa tất cả quyền truy cập của ${groupedUser.user.name} (${groupedUser.shopCount} cửa hàng)?`;
+    if (!confirm(confirmMessage)) return;
+
+    setLoading(true);
+    let successCount = 0;
+    let errorCount = 0;
+
+    for (const role of groupedUser.roles) {
+      try {
+        await userShopRoleApi.delete(role.id);
+        successCount++;
+      } catch (error: any) {
+        console.error('Error removing role:', error);
+        errorCount++;
+      }
+    }
+
+    if (successCount > 0) {
+      setSuccess(`Đã xóa ${successCount} quyền truy cập của ${groupedUser.user.name}`);
+      await fetchUserRoles();
+    }
+
+    if (errorCount > 0) {
+      setError(`Không thể xóa ${errorCount} quyền truy cập`);
+    }
+
+    setLoading(false);
   };
 
   const closeModals = () => {
@@ -1153,7 +1225,7 @@ export default function PermissionsPage() {
                                       key={shop.id}
                                       className="inline-flex items-center px-2.5 py-1 rounded-full bg-brand-50 dark:bg-brand-900/30 text-xs text-brand-700 dark:text-brand-200 vietnamese-text"
                                     >
-                                      {shop.managedName ?? shop.shopName ?? 'N/A'}
+                                      {shop.managedName || shop.shopName || 'N/A'}
                                     </span>
                                   ))}
                                   {extraShops > 0 && (
@@ -1221,7 +1293,7 @@ export default function PermissionsPage() {
         >
           <option value="all">{t('permissions.all_shops')}</option>
           {shops.map(shop => (
-            <option key={shop.id} value={shop.id}>{shop.shopName}</option>
+            <option key={shop.id} value={shop.id}>{shop.managedName || shop.shopName}</option>
           ))}
         </select>
         {(searchTerm || selectedShop !== 'all') && (
@@ -1301,7 +1373,7 @@ export default function PermissionsPage() {
               </tr>
             </thead>
             <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-              {userRoles.length === 0 ? (
+              {groupedUserRoles.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
                     {(searchTerm || selectedShop !== 'all')
@@ -1311,51 +1383,69 @@ export default function PermissionsPage() {
                   </td>
                 </tr>
               ) : (
-                userRoles.map((userRole) => (
-                  <tr key={userRole.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center">
-                        <div className="h-10 w-10 bg-brand-500 rounded-full flex items-center justify-center text-white font-medium">
-                          {userRole.user.name?.charAt(0).toUpperCase() || 'U'}
+                groupedUserRoles.map((groupedUser) => (
+                  <tr key={groupedUser.user.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                    <td className="px-6 py-4">
+                      <div className="flex items-center space-x-3">
+                        <div className="h-10 w-10 bg-brand-500 rounded-full flex items-center justify-center text-white font-medium flex-shrink-0">
+                          {groupedUser.user.name?.charAt(0).toUpperCase() || 'U'}
                         </div>
-                        <div className="ml-4">
-                          <div className="text-sm font-medium text-gray-900 dark:text-white vietnamese-text">
-                            {userRole.user.name}
+                        <div>
+                          <div className="text-sm font-semibold text-gray-900 dark:text-white vietnamese-text">
+                            {groupedUser.user.name}
                           </div>
                           <div className="text-sm text-gray-500 dark:text-gray-400 vietnamese-text">
-                            {userRole.user.username}
+                            {groupedUser.user.username}
                           </div>
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900 dark:text-white vietnamese-text">
-                        {userRole.shop.shopName}
+                    <td className="px-6 py-4">
+                      <div className="flex flex-wrap gap-2">
+                        {groupedUser.roles.map((userRole) => (
+                          <div 
+                            key={userRole.id}
+                            className="inline-flex items-center px-3 py-1 rounded-lg bg-gray-100 dark:bg-gray-700 text-sm text-gray-900 dark:text-white vietnamese-text border border-gray-200 dark:border-gray-600"
+                          >
+                            {userRole.shop.managedName || userRole.shop.shopName}
+                          </div>
+                        ))}
+                      </div>
+                      <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                        {groupedUser.shopCount} {groupedUser.shopCount === 1 ? 'shop' : 'shops'}
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-2 py-1 text-xs font-semibold rounded-full ${roleColors[userRole.role]}`}>
-                        {userRole.role}
-                      </span>
+                    <td className="px-6 py-4">
+                      <div className="flex flex-wrap gap-2">
+                        {Array.from(new Set(groupedUser.roles.map(r => r.role))).map((role) => (
+                          <span key={role} className={`px-2 py-1 text-xs font-semibold rounded-full ${roleColors[role]}`}>
+                            {role}
+                          </span>
+                        ))}
+                      </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                      {new Date(userRole.createdAt).toLocaleDateString()}
+                      {new Date(groupedUser.roles[0].createdAt).toLocaleDateString()}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                      <button
-                        onClick={() => openEditModal(userRole)}
-                        className="text-brand-600 hover:text-brand-900 dark:text-brand-400 dark:hover:text-brand-300 inline-flex items-center space-x-1"
-                      >
-                        <FaEdit className="h-3 w-3" />
-                        <span>{t('permissions.edit')}</span>
-                      </button>
-                      <button
-                        onClick={() => handleRemoveRole(userRole.id)}
-                        className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300 inline-flex items-center space-x-1"
-                      >
-                        <FaTrash className="h-3 w-3" />
-                        <span>{t('permissions.delete')}</span>
-                      </button>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center space-x-2">
+                        <button
+                          onClick={() => openEditModalForUser(groupedUser)}
+                          className="text-brand-600 hover:text-brand-900 dark:text-brand-400 dark:hover:text-brand-300 inline-flex items-center space-x-1 px-2 py-1"
+                          title="Sửa quyền truy cập"
+                        >
+                          <FaEdit className="h-3.5 w-3.5" />
+                          <span className="text-sm">{t('permissions.edit')}</span>
+                        </button>
+                        <button
+                          onClick={() => handleRemoveUserPermissions(groupedUser)}
+                          className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300 inline-flex items-center space-x-1 px-2 py-1"
+                          title="Xóa tất cả quyền truy cập"
+                        >
+                          <FaTrash className="h-3.5 w-3.5" />
+                          <span className="text-sm">{t('permissions.delete')}</span>
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -2214,7 +2304,7 @@ export default function PermissionsPage() {
         onSuccess={async (message) => {
           setSuccess(message);
           setError('');
-          await fetchUserRoles(pagination.page, searchTerm, selectedShop);
+          await fetchUserRoles();
           await fetchGroups();
         }}
         onError={(message) => {

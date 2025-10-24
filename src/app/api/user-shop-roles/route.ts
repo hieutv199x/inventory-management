@@ -146,6 +146,7 @@ export async function GET(request: NextRequest) {
                 shopId: true,
                 shopName: true,
                 status: true,
+                managedName: true,
                 app: {
                   select: {
                     channel: true,
@@ -237,7 +238,8 @@ export async function POST(request: NextRequest) {
         shopName: true,
         status: true,
         orgId: true,
-        groupId: true
+        groupId: true,
+        managedName: true
       }
     });
 
@@ -358,7 +360,8 @@ export async function POST(request: NextRequest) {
           id: shop.id,
           shopId: shop.shopId,
           shopName: shop.shopName,
-          status: shop.status
+          status: shop.status,
+          managedName: shop.managedName
         }
       }
     });
