@@ -56,22 +56,8 @@ export async function PUT(
       );
     }
 
-    // Prevent downgrading the last owner
-    if (existingRole.role === 'OWNER' && role !== 'OWNER') {
-      const ownerCount = await prisma.userShopRole.count({
-        where: {
-          shopId: existingRole.shopId,
-          role: 'OWNER'
-        }
-      });
-
-      if (ownerCount <= 1) {
-        return NextResponse.json(
-          { error: 'Cannot remove the last owner of a shop' },
-          { status: 400 }
-        );
-      }
-    }
+    // Note: Removed the restriction for updating the last owner's role
+    // This allows full flexibility in permission management
 
     const updatedUserRole = await prisma.userShopRole.update({
       where: { id },
@@ -81,7 +67,7 @@ export async function PUT(
           select: {
             id: true,
             name: true,
-            email: true
+            username: true
           }
         },
         shop: {
@@ -140,22 +126,8 @@ export async function DELETE(
       );
     }
 
-    // Prevent removing the last owner
-    if (existingRole.role === 'OWNER') {
-      const ownerCount = await prisma.userShopRole.count({
-        where: {
-          shopId: existingRole.shopId,
-          role: 'OWNER'
-        }
-      });
-
-      if (ownerCount <= 1) {
-        return NextResponse.json(
-          { error: 'Cannot remove the last owner of a shop' },
-          { status: 400 }
-        );
-      }
-    }
+    // Note: Removed the restriction for deleting the last owner
+    // This allows full flexibility in permission management
 
     await prisma.userShopRole.delete({
       where: { id }

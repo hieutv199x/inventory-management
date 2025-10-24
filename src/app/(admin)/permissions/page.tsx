@@ -735,7 +735,7 @@ export default function PermissionsPage() {
     setLoading(false);
   };
 
-  // Update role
+  // Update role - handle multiple shops, add new shops, remove unselected shops, update role
   const handleUpdateRole = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedRole) return;
@@ -744,13 +744,72 @@ export default function PermissionsPage() {
     setError('');
 
     try {
-      await userShopRoleApi.update(selectedRole.id, { role: formData.role });
-      setSuccess('Cập nhật quyền thành công');
-      setShowEditModal(false);
-      setSelectedRole(null);
-      await fetchUserRoles();
+      const userId = formData.userId;
+      const newShopIds = new Set(formData.shopIds);
+      const existingRoles = allUserRoles.filter(r => r.userId === userId);
+      const existingShopIds = new Set(existingRoles.map(r => r.shopId));
+
+      // Determine shops to add and remove
+      const shopsToAdd = Array.from(newShopIds).filter(shopId => !existingShopIds.has(shopId));
+      const shopsToRemove = existingRoles.filter(role => !newShopIds.has(role.shopId));
+      const shopsToUpdate = existingRoles.filter(role => newShopIds.has(role.shopId));
+
+      let successCount = 0;
+      let errorCount = 0;
+
+      // Add new shop permissions
+      for (const shopId of shopsToAdd) {
+        try {
+          await userShopRoleApi.create({
+            userId,
+            shopId,
+            role: formData.role
+          });
+          successCount++;
+        } catch (error: any) {
+          console.error('Error adding shop permission:', error);
+          errorCount++;
+        }
+      }
+
+      // Update existing shop permissions (role change)
+      for (const role of shopsToUpdate) {
+        if (role.role !== formData.role) {
+          try {
+            await userShopRoleApi.update(role.id, { role: formData.role });
+            successCount++;
+          } catch (error: any) {
+            console.error('Error updating shop permission:', error);
+            errorCount++;
+          }
+        }
+      }
+
+      // Remove unselected shop permissions
+      for (const role of shopsToRemove) {
+        try {
+          await userShopRoleApi.delete(role.id);
+          successCount++;
+        } catch (error: any) {
+          console.error('Error removing shop permission:', error);
+          errorCount++;
+        }
+      }
+
+      if (successCount > 0) {
+        setSuccess(`Cập nhật quyền thành công (${successCount} thay đổi)`);
+        setShowEditModal(false);
+        setSelectedRole(null);
+        await fetchUserRoles();
+      } else if (errorCount > 0) {
+        setError('Có lỗi xảy ra khi cập nhật quyền');
+      } else {
+        setSuccess('Không có thay đổi nào được thực hiện');
+        setShowEditModal(false);
+        setSelectedRole(null);
+      }
     } catch (error: any) {
-      setError(error.message);
+      setError(error.message || 'Có lỗi xảy ra khi cập nhật quyền');
     } finally {
       setLoading(false);
     }
