@@ -23,7 +23,14 @@ export async function GET(request: NextRequest) {
         status: "ACTIVE",
         app: { channel: 'TIKTOK' } // Only get TikTok shops
       },
-      include: {
+      select: {
+        id: true,
+        shopId: true,
+        shopName: true,
+        shopCipher: true,
+        channelData: true,
+        accessToken: true,
+        orgId: true,
         app: true,
       },
     });
@@ -80,7 +87,7 @@ export async function GET(request: NextRequest) {
         console.log(`Fetched ${allWithdrawals.length} withdrawals for shop ${shop.shopId}`);
 
         // Sync withdrawals in batches
-        const syncedCount = await syncWithdrawalsToDatabase(allWithdrawals, shop.id); // Use ObjectId instead of shopId
+        const syncedCount = await syncWithdrawalsToDatabase(allWithdrawals, shop.id, shop.orgId); // Pass orgId
         totalWithdrawalsSynced += syncedCount;
 
         shopResults.push({
@@ -177,7 +184,7 @@ async function fetchAllWithdrawals(client: any, credentials: any, statementTimeG
   return allWithdrawals;
 }
 
-async function syncWithdrawalsToDatabase(withdrawals: any[], shopObjectId: string) {
+async function syncWithdrawalsToDatabase(withdrawals: any[], shopObjectId: string, orgId: string) {
   const BATCH_SIZE = 100;
   let totalSynced = 0;
 
@@ -186,7 +193,7 @@ async function syncWithdrawalsToDatabase(withdrawals: any[], shopObjectId: strin
   // Process withdrawals in batches
   for (let i = 0; i < withdrawals.length; i += BATCH_SIZE) {
     const batch = withdrawals.slice(i, i + BATCH_SIZE);
-    const syncedCount = await processWithdrawalBatch(batch, shopObjectId);
+    const syncedCount = await processWithdrawalBatch(batch, shopObjectId, orgId);
     totalSynced += syncedCount;
     console.log(`Processed ${Math.min(i + BATCH_SIZE, withdrawals.length)} of ${withdrawals.length} withdrawals for shop ${shopObjectId}. Synced: ${syncedCount}`);
   }
@@ -195,50 +202,47 @@ async function syncWithdrawalsToDatabase(withdrawals: any[], shopObjectId: strin
   return totalSynced;
 }
 
-async function processWithdrawalBatch(withdrawals: any[], shopObjectId: string) {
+async function processWithdrawalBatch(withdrawals: any[], shopObjectId: string, orgId: string) {
   let syncedCount = 0;
 
   try {
-    await prisma.$transaction(async (tx) => {
-      // Get existing withdrawal IDs to avoid duplicates
-      const withdrawalIds = withdrawals.map(w => w.id).filter(Boolean);
-      const existingWithdrawals = await tx.withdrawal.findMany({
-        where: { withdrawalId: { in: withdrawalIds } },
-        select: { withdrawalId: true }
-      });
-      
-      const existingWithdrawalIds = new Set(existingWithdrawals.map(w => w.withdrawalId));
-
-      // Filter out existing withdrawals
-      const newWithdrawals = withdrawals.filter(withdrawal => 
-        withdrawal.id && !existingWithdrawalIds.has(withdrawal.id)
-      );
-
-      if (newWithdrawals.length > 0) {
-        // Prepare batch data
-        const withdrawalData = newWithdrawals.map(withdrawal => ({
-          withdrawalId: withdrawal.id!,
-          channel: Channel.TIKTOK, // Add channel field
-          createTime: withdrawal.createTime ?? 0,
-          status: withdrawal.status ?? "",
-          amount: parseFloat(withdrawal.amount ?? "0"),
-          currency: withdrawal.currency ?? "",
-          type: withdrawal.type ?? "",
-          channelData: JSON.stringify({}), // Store TikTok-specific data as JSON (empty for now)
-          shopId: shopObjectId, // Use ObjectId reference
-        }));
-
-        // Batch create withdrawals
-        await tx.withdrawal.createMany({
-          data: withdrawalData,
-        });
-
-        syncedCount = withdrawalData.length;
-      }
-    }, {
-      maxWait: 30000,
-      timeout: 60000,
+    // MongoDB operations - sequential instead of transaction
+    // Get existing withdrawal IDs to avoid duplicates
+    const withdrawalIds = withdrawals.map(w => w.id).filter(Boolean);
+    const existingWithdrawals = await prisma.withdrawal.findMany({
+      where: { withdrawalId: { in: withdrawalIds } },
+      select: { withdrawalId: true }
     });
+    
+    const existingWithdrawalIds = new Set(existingWithdrawals.map(w => w.withdrawalId));
+
+    // Filter out existing withdrawals
+    const newWithdrawals = withdrawals.filter(withdrawal => 
+      withdrawal.id && !existingWithdrawalIds.has(withdrawal.id)
+    );
+
+    if (newWithdrawals.length > 0) {
+      // Prepare batch data
+      const withdrawalData = newWithdrawals.map(withdrawal => ({
+        withdrawalId: withdrawal.id!,
+        channel: Channel.TIKTOK, // Add channel field
+        createTime: withdrawal.createTime ?? 0,
+        status: withdrawal.status ?? "",
+        amount: parseFloat(withdrawal.amount ?? "0"),
+        currency: withdrawal.currency ?? "",
+        type: withdrawal.type ?? "",
+        channelData: JSON.stringify({}), // Store TikTok-specific data as JSON (empty for now)
+        shopId: shopObjectId, // Use ObjectId reference
+        orgId: orgId, // Add orgId for multi-tenant support
+      }));
+
+      // Batch create withdrawals
+      await prisma.withdrawal.createMany({
+        data: withdrawalData,
+      });
+
+      syncedCount = withdrawalData.length;
+    }
 
   } catch (error) {
     console.error(`Error processing withdrawal batch for shop ${shopObjectId}:`, error);

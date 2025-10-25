@@ -292,10 +292,9 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
       return NextResponse.json({ error: 'Cannot delete a group with active shops' }, { status: 409 });
     }
 
-    await prisma.$transaction([
-      prisma.shopGroupMember.deleteMany({ where: { groupId: group.id } }),
-      prisma.shopGroup.delete({ where: { id: group.id } }),
-    ]);
+    // MongoDB operations - sequential instead of transaction
+    await prisma.shopGroupMember.deleteMany({ where: { groupId: group.id } });
+    await prisma.shopGroup.delete({ where: { id: group.id } });
 
     return NextResponse.json({ success: true });
   } catch (error: any) {

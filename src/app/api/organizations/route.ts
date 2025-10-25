@@ -85,15 +85,13 @@ export async function POST(req: NextRequest) {
     const baseSlug = slugify(name);
     const slug = await ensureUniqueSlug(baseSlug);
 
-    // Create org + membership in transaction
-    const result = await prisma.$transaction(async tx => {
-      const org = await tx.organization.create({ data: { name, slug } });
-      await tx.organizationMember.create({ data: { orgId: org.id, userId: user.id, role: 'OWNER' } });
-      // Set as active for user's sessions
-      await tx.session.updateMany({ where: { userId: user.id }, data: { activeOrgId: org.id } });
-      await audit(tx as any, { orgId: org.id, userId: user.id, action: 'ORG_CREATE', metadata: { name, slug } });
-      return org;
-    });
+    // MongoDB operations - sequential instead of transaction
+    const org = await prisma.organization.create({ data: { name, slug } });
+    await prisma.organizationMember.create({ data: { orgId: org.id, userId: user.id, role: 'OWNER' } });
+    // Set as active for user's sessions
+    await prisma.session.updateMany({ where: { userId: user.id }, data: { activeOrgId: org.id } });
+    await audit(prisma as any, { orgId: org.id, userId: user.id, action: 'ORG_CREATE', metadata: { name, slug } });
+    const result = org;
 
     return NextResponse.json({ data: { id: result.id, slug: result.slug } });
   } catch (e: any) {

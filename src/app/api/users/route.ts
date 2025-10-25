@@ -352,35 +352,34 @@ export async function POST(request: NextRequest) {
       }
     };
 
-    const newUser = await prisma.$transaction(async (tx) => {
-      const createdUser = await tx.user.create({
+    // MongoDB operations - sequential instead of transaction
+    const createdUser = await prisma.user.create({
+      data: {
+        name,
+        username,
+        role,
+        password: hashedPassword,
+        createdBy: currentUser.id,
+      },
+      select: {
+        id: true,
+        name: true,
+        role: true,
+      },
+    });
+
+    if (targetOrgId) {
+      await prisma.organizationMember.create({
         data: {
-          name,
-          username,
-          role,
-          password: hashedPassword,
-          createdBy: currentUser.id,
-        },
-        select: {
-          id: true,
-          name: true,
-          role: true,
+          orgId: targetOrgId,
+          userId: createdUser.id,
+          role: mapUserRoleToOrgRole(createdUser.role),
+          inviteStatus: "ACCEPTED",
         },
       });
+    }
 
-      if (targetOrgId) {
-        await tx.organizationMember.create({
-          data: {
-            orgId: targetOrgId,
-            userId: createdUser.id,
-            role: mapUserRoleToOrgRole(createdUser.role),
-            inviteStatus: "ACCEPTED",
-          },
-        });
-      }
-
-      return createdUser;
-    });
+    const newUser = createdUser;
 
     return NextResponse.json({ user: newUser }, { status: 201 });
   } catch (error) {
